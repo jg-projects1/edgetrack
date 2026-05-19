@@ -194,7 +194,7 @@ textarea{background:var(--bg3);border:1px solid var(--border);border-radius:8px;
 <div class="app">
   <div class="topbar">
     <div class="logo">edge<span>track</span></div>
-    <div class="sync-indicator"><div class="sync-dot" id="sync-dot"></div><span id="sync-label">Synced</span></div>
+    <div class="sync-indicator"><div class="sync-dot" id="sync-dot"></div><span id="sync-label">Loading…</span></div>
   </div>
   <div class="profile-bar">
     <span class="profile-label">View</span>
@@ -222,75 +222,79 @@ textarea{background:var(--bg3);border:1px solid var(--border);border-radius:8px;
 <div id="modal-root"></div>
 
 <script>
-const SUPABASE_URL='https://rqvrhnjfobzvnzolwywy.supabase.co';
-const SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJndnJobmpmb2J6dm56b2x3eXd5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkxMjE1NjksImV4cCI6MjA5NDY5NzU2OX0.H6a7h0GKZGM0hFKpVKeQmEfoXFwleTrjUa2YZEmb2oc';
-
+// ── VERCEL KV SYNC (via serverless functions) ─────────────────────────────────
+// All API calls go to /api/load and /api/save on your own Vercel domain.
+// Starlink never sees any third-party requests.
 let syncTimeout=null;
-let dataLoadedFromServer=false; // guard: only save once we've loaded or user has added data
+
 function setSyncStatus(s){
   const dot=document.getElementById('sync-dot'),label=document.getElementById('sync-label');
   if(!dot||!label)return;
   dot.className='sync-dot'+(s==='syncing'?' syncing':s==='error'?' error':'');
   label.textContent=s==='syncing'?'Syncing…':s==='error'?'Offline':'Synced';
 }
-async function loadFromSupabase(){
+
+async function loadData(){
   try{
-    const res=await fetch(`${SUPABASE_URL}/rest/v1/edgetrack_data?id=eq.main&select=data`,{headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY}});
+    const res=await fetch('/api/load');
     if(!res.ok)throw new Error('HTTP '+res.status);
-    const rows=await res.json();
-    if(rows&&rows.length>0&&rows[0].data){
-      const loaded=rows[0].data;
-      // Only use loaded data if it has actual profile data, not just {}
-      const hasData=PROFILES.some(p=>loaded[p]&&(
-        Object.keys(loaded[p].bookies||{}).length>0||
-        (loaded[p].transactions||[]).length>0||
-        loaded[p].bank!==0
+    const json=await res.json();
+    if(json.ok&&json.data){
+      const saved=json.data;
+      const hasData=PROFILES.some(p=>saved[p]&&(
+        (saved[p].transactions||[]).length>0||
+        saved[p].bank!==0||
+        Object.values(saved[p].bookies||{}).some(b=>(b.bal||0)!==0)
       ));
       if(hasData){
-        Object.assign(state,loaded);
-        migrateLegacy();
-        dataLoadedFromServer=true;
+        Object.assign(state,saved);
+        // Cache locally
+        try{localStorage.setItem('edgetrack_cache',JSON.stringify(saved));}catch(le){}
       }
     }
     setSyncStatus('synced');
   }catch(e){
     console.error('Load error:',e);
-    setSyncStatus('error');
-    // Try localStorage backup
+    // Fall back to local cache
     try{
-      const backup=localStorage.getItem('edgetrack_backup');
-      if(backup){const b=JSON.parse(backup);Object.assign(state,b);migrateLegacy();dataLoadedFromServer=true;}
+      const cache=localStorage.getItem('edgetrack_cache');
+      if(cache){
+        const saved=JSON.parse(cache);
+        const hasData=PROFILES.some(p=>saved[p]&&((saved[p].transactions||[]).length>0||saved[p].bank!==0));
+        if(hasData)Object.assign(state,saved);
+      }
     }catch(le){}
+    setSyncStatus('error');
   }
 }
-async function saveToSupabase(){
-  // Never save if no meaningful data exists — prevents wiping server data with empty state
-  const hasData=PROFILES.some(p=>state[p]&&(
-    (state[p].transactions||[]).length>0||
-    state[p].bank!==0||
-    Object.values(state[p].bookies||{}).some(b=>(b.bal||0)!==0)
-  ));
-  if(!hasData&&!dataLoadedFromServer){
-    console.log('Skipping save — no data to write');
-    setSyncStatus('synced');
-    return;
-  }
+
+async function saveData(){
   setSyncStatus('syncing');
   try{
-    const res=await fetch(`${SUPABASE_URL}/rest/v1/edgetrack_data?id=eq.main`,{method:'PATCH',headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify({data:state,updated_at:new Date().toISOString()})});
+    const res=await fetch('/api/save',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(state)
+    });
     if(!res.ok)throw new Error('HTTP '+res.status);
     setSyncStatus('synced');
-    // Always keep a local backup
-    try{localStorage.setItem('edgetrack_backup',JSON.stringify(state));}catch(le){}
+    try{localStorage.setItem('edgetrack_cache',JSON.stringify(state));}catch(le){}
   }catch(e){
     console.error('Save error:',e);
     setSyncStatus('error');
-    try{localStorage.setItem('edgetrack_backup',JSON.stringify(state));}catch(le){}
+    try{localStorage.setItem('edgetrack_cache',JSON.stringify(state));}catch(le){}
   }
 }
-function debouncedSave(){if(syncTimeout)clearTimeout(syncTimeout);setSyncStatus('syncing');syncTimeout=setTimeout(saveToSupabase,800);}
+
+function debouncedSave(){
+  if(syncTimeout)clearTimeout(syncTimeout);
+  setSyncStatus('syncing');
+  syncTimeout=setTimeout(saveData,1000);
+}
 function save(){debouncedSave();}
 
+
+// ── APP STATE ─────────────────────────────────────────────────────────────────
 const PROFILES=['me','wife','bp','rq'];
 const PROFILE_LABELS={me:'Me',wife:'Wife',bp:'BP',rq:'RQ'};
 const PROFILE_COLORS={me:'var(--blue)',wife:'var(--purple)',bp:'var(--orange)',rq:'var(--lime)'};
@@ -298,7 +302,6 @@ const BET_TYPES=['Qualifier','Free Bet','Boost','Mug','Extra Place','2Up','MBAL'
 const BOOKIE_TRANSFER=['Deposit','Withdrawal'];
 const EXCHANGE_TRANSFER=['Exchange Deposit','Exchange Withdrawal'];
 const BET_ONLY=['Qualifier','Free Bet','Boost','Mug','Extra Place','2Up','MBAL','Cash Back','Cash Out','Arb'];
-// Free bet types: stake NOT deducted from bookie at log time, NOT returned on win
 const FREE_BET_TYPES=['Free Bet'];
 const EXCHANGES=['Betfair','Smarkets','Matchbook','Betdaq'];
 const BOOKIE_STATUSES=['Active','Restricted','Gubbed','Closed'];
@@ -357,77 +360,29 @@ function profileLabel(p){return PROFILE_LABELS[p]||p;}
 function statusBadge(s){const cls={Active:'status-active',Restricted:'status-restricted',Gubbed:'status-gubbed',Closed:'status-closed'}[s]||'status-active';return`<span class="${cls}">${s}</span>`;}
 function isFreeBetType(type){return FREE_BET_TYPES.includes(type);}
 
-// ── BALANCE LOGIC — single source of truth ────────────────────────────────────
-//
-// NORMAL BET (Qualifier, Boost, Mug, etc.):
-//   Pending:  bookie -= stake (money at risk)
-//   Won:      bookie += stake + pnl  (stake back + profit)
-//   Lost:     bookie already reduced; exchange += pnl (lay profit lands on exchange)
-//
-// FREE BET (stake not returned):
-//   Pending:  bookie unchanged (it's not your money)
-//   Won:      bookie += bodds * bstake  (winnings only, no stake returned)
-//   Lost:     bookie unchanged; exchange += pnl (guaranteed profit goes to exchange)
-//
-// The P&L field is what the user enters manually — their calculated guaranteed profit.
-// On a free bet won: bookie gets the full bookie return (bodds * bstake).
-// On a free bet lost: exchange gets the pnl (the lay profit).
-
-function applyBalanceAtLog(tx, p){
-  // Called when a bet is first logged
-  const isFB = isFreeBetType(tx.type);
-  const result = tx.result;
-  if(result === 'Pending'){
-    if(!isFB && tx.bookie && p.bookies[tx.bookie]){
-      // Normal bet: deduct stake from bookie
-      p.bookies[tx.bookie].bal = (p.bookies[tx.bookie].bal||0) - (tx.bstake||0);
+function applyBalanceAtLog(tx,p){
+  const isFB=isFreeBetType(tx.type);
+  if(tx.result==='Pending'){
+    if(!isFB&&tx.bookie&&p.bookies[tx.bookie]){
+      p.bookies[tx.bookie].bal=(p.bookies[tx.bookie].bal||0)-(tx.bstake||0);
     }
-    // Free bet: bookie unchanged
-    // Exchange liability already captured separately — we don't track lay fields
-    // so no exchange change at log time
-  } else {
-    // Settled immediately at log time
-    applyBalanceOnSettle(tx, p, result);
+  }else{
+    applyBalanceOnSettle(tx,p,tx.result);
   }
 }
 
-function applyBalanceOnSettle(tx, p, result){
-  const isFB = isFreeBetType(tx.type);
-  const bstake = tx.bstake || 0;
-  const bodds = tx.bodds || 0;
-  const pnl = tx.pnl || 0;
-  const exchange = tx.exchange;
-
-  if(result === 'Won'){
+function applyBalanceOnSettle(tx,p,result){
+  const isFB=isFreeBetType(tx.type);
+  const bstake=tx.bstake||0,bodds=tx.bodds||0,pnl=tx.pnl||0,exchange=tx.exchange;
+  if(result==='Won'){
     if(isFB){
-      // Free bet won: bookie pays winnings only (no stake returned)
-      // Return = back odds × stake (but stake not returned, so winnings = (odds-1)*stake... 
-      // However user enters bodds as decimal odds, so total return = bodds * bstake)
-      if(tx.bookie && p.bookies[tx.bookie]){
-        p.bookies[tx.bookie].bal = (p.bookies[tx.bookie].bal||0) + (bodds * bstake);
-      }
-      // Exchange: we already deducted nothing extra; lay liability was held and now paid out
-      // No exchange change needed (net effect captured in pnl)
-    } else {
-      // Normal bet won: bookie returns stake + profit
-      if(tx.bookie && p.bookies[tx.bookie]){
-        p.bookies[tx.bookie].bal = (p.bookies[tx.bookie].bal||0) + bstake + pnl;
-      }
-      // (stake was deducted at log time, so net bookie effect = +pnl)
+      if(tx.bookie&&p.bookies[tx.bookie])p.bookies[tx.bookie].bal=(p.bookies[tx.bookie].bal||0)+(bodds*bstake);
+    }else{
+      if(tx.bookie&&p.bookies[tx.bookie])p.bookies[tx.bookie].bal=(p.bookies[tx.bookie].bal||0)+bstake+pnl;
     }
-  } else if(result === 'Lost'){
-    if(isFB){
-      // Free bet lost: bookie unchanged (stake was never deducted)
-      // Guaranteed profit goes to the exchange
-      if(exchange && state.exchanges[exchange] !== undefined){
-        state.exchanges[exchange] = (state.exchanges[exchange]||0) + pnl;
-      }
-    } else {
-      // Normal bet lost: bookie already had stake deducted at log time
-      // Lay profit lands on the exchange
-      if(exchange && state.exchanges[exchange] !== undefined){
-        state.exchanges[exchange] = (state.exchanges[exchange]||0) + pnl;
-      }
+  }else if(result==='Lost'){
+    if(exchange&&state.exchanges[exchange]!==undefined){
+      state.exchanges[exchange]=(state.exchanges[exchange]||0)+pnl;
     }
   }
 }
@@ -499,25 +454,16 @@ function renderPending(){
     <div class="stat-card"><div class="stat-label">Expected P&L</div><div class="stat-value pos" style="font-size:16px">${fmtS(pending.reduce((a,t)=>a+(t.pnl||0),0))}</div></div>
   </div>
   <div class="settle-wrap"><div class="settle-header"><span class="panel-title">Pending bets</span><span class="settle-badge">${pending.length}</span></div>
-    ${pending.map(t=>{
-      const pnlCol=(t.pnl||0)>=0?'var(--green)':'var(--red)';
-      const isFB=isFreeBetType(t.type);
+    ${pending.map(t=>{const pnlCol=(t.pnl||0)>=0?'var(--green)':'var(--red)';const isFB=isFreeBetType(t.type);
       return`<div class="pending-card" id="pcard-${t.id}"><div class="pending-top"><div style="flex:1;min-width:0"><div class="pending-event">${t.event||'Unnamed event'}</div><div class="pending-meta"><span class="${pillClass(t.type)}">${t.type}</span>${acctPill(t._acct)}<span style="font-size:11px;color:var(--text3)">${t.date}</span><span style="font-size:11px;color:var(--text2);font-weight:600">${t.bookie||'—'}</span></div></div></div>
-      <div class="settle-preview" style="margin-bottom:10px">
-        ${t.bstake?`<div class="spi"><span class="spl">Back</span><span class="spv">£${t.bstake}@${t.bodds}</span></div>`:''}
-        ${isFB?`<div class="spi"><span class="spl">Type</span><span class="spv" style="color:var(--green);font-size:10px">SNR Free Bet</span></div>`:''}
-        <div class="spi"><span class="spl">P&L</span><span class="spv" style="color:${pnlCol};font-size:14px">${fmtS(t.pnl||0)}</span></div>
-        <button class="btn-sm btn-edit" onclick="editPnl('${t._acct}',${t.id})" style="margin-left:auto">Edit P&L</button>
-      </div>
+      <div class="settle-preview" style="margin-bottom:10px">${t.bstake?`<div class="spi"><span class="spl">Back</span><span class="spv">£${t.bstake}@${t.bodds}</span></div>`:''}<div class="spi"><span class="spl">P&L</span><span class="spv" style="color:${pnlCol};font-size:14px">${fmtS(t.pnl||0)}</span></div>${isFB?`<div class="spi"><span class="spl" style="color:var(--green)">SNR</span></div>`:''}<button class="btn-sm btn-edit" onclick="editPnl('${t._acct}',${t.id})" style="margin-left:auto">Edit P&L</button></div>
       <div style="display:flex;gap:8px"><button class="btn-won" style="flex:1" onclick="settleBet('${t._acct}',${t.id},'Won')">✓ Won</button><button class="btn-lost" style="flex:1" onclick="settleBet('${t._acct}',${t.id},'Lost')">✗ Lost</button></div></div>`;
     }).join('')}
   </div>`;
 }
 
 function settleBet(acct,id,result){
-  const p=state[acct];
-  const tx=(p.transactions||[]).find(t=>t.id===id);
-  if(!tx||tx.result!=='Pending')return;
+  const p=state[acct];const tx=(p.transactions||[]).find(t=>t.id===id);if(!tx||tx.result!=='Pending')return;
   tx.result=result;
   applyBalanceOnSettle(tx,p,result);
   save();
@@ -536,12 +482,8 @@ function confirmPnlEdit(acct,id){
   const newPnl=parseFloat(document.getElementById('modal-pnl')?.value);if(isNaN(newPnl))return;
   const p=state[acct];const tx=p.transactions.find(t=>t.id===id);if(!tx)return;
   const diff=newPnl-(tx.pnl||0);tx.pnl=newPnl;
-  // Adjust settled balances by the difference
-  if(tx.result==='Won'&&tx.bookie&&p.bookies[tx.bookie]){
-    p.bookies[tx.bookie].bal=(p.bookies[tx.bookie].bal||0)+diff;
-  } else if(tx.result==='Lost'&&tx.exchange&&state.exchanges[tx.exchange]!==undefined){
-    state.exchanges[tx.exchange]=(state.exchanges[tx.exchange]||0)+diff;
-  }
+  if(tx.result==='Won'&&tx.bookie&&p.bookies[tx.bookie])p.bookies[tx.bookie].bal=(p.bookies[tx.bookie].bal||0)+diff;
+  else if(tx.result==='Lost'&&tx.exchange&&state.exchanges[tx.exchange]!==undefined)state.exchanges[tx.exchange]=(state.exchanges[tx.exchange]||0)+diff;
   save();closeModal();showToast(`P&L → ${fmtS(newPnl)}`,'info');render();
 }
 function closeModal(){document.getElementById('modal-root').innerHTML='';}
@@ -624,7 +566,6 @@ function submitTx(){
   if(!selectedBetType){msg.style.color='var(--red)';msg.textContent='Please select a transaction type.';return;}
   const isBookieT=BOOKIE_TRANSFER.includes(selectedBetType),isExchT=EXCHANGE_TRANSFER.includes(selectedBetType),isBet=BET_ONLY.includes(selectedBetType),isAmend=selectedBetType==='Balance Amendment';
   const date=document.getElementById('f-date').value||todayStr(),notes=document.getElementById('f-notes')?.value||'';
-
   if(isAmend){
     const target=document.getElementById('f-amend-target')?.value,newValStr=document.getElementById('f-amend-new')?.value,reason=document.getElementById('f-amend-reason')?.value||'Balance Amendment';
     if(!target){msg.style.color='var(--red)';msg.textContent='Select what to amend.';return;}
@@ -637,11 +578,9 @@ function submitTx(){
     p.transactions.push({id:Date.now(),date,type:'Balance Amendment',target:targetLabel,oldVal,newVal,diff,pnl:diff,notes:reason,result:'—',_acct:formAccount});
     save();showToast(`${targetLabel} → ${fmt(newVal)} (${fmtS(diff)})`,'info');msg.style.color='var(--green)';msg.textContent='✓ Saved!';setTimeout(()=>msg.textContent='',2000);resetForm();setTimeout(render,100);return;
   }
-
   const bookie=document.getElementById('f-bookie')?.value,exchange=document.getElementById('f-exchange')?.value,event=document.getElementById('f-event')?.value||'';
   const bstake=parseFloat(document.getElementById('f-bstake')?.value)||0,bodds=parseFloat(document.getElementById('f-bodds')?.value)||0,comm=parseFloat(document.getElementById('f-comm')?.value)||0;
   const result=document.getElementById('f-result')?.value||'Pending',pnl=parseFloat(document.getElementById('f-pnl')?.value)||0,amount=parseFloat(document.getElementById('f-amount')?.value)||0;
-
   if(isBookieT){
     if(!bookie){msg.style.color='var(--red)';msg.textContent='Select a bookmaker.';return;}
     if(!amount){msg.style.color='var(--red)';msg.textContent='Enter an amount.';return;}
@@ -651,7 +590,6 @@ function submitTx(){
     else{p.bookies[bookie].bal=(p.bookies[bookie].bal||0)-amount;p.bank+=amount;}
     if(!p.transactions)p.transactions=[];
     p.transactions.push({id:Date.now(),date,type:selectedBetType,bookie,amount,pnl:0,notes,result:'—',_acct:formAccount});
-
   }else if(isExchT){
     if(!exchange){msg.style.color='var(--red)';msg.textContent='Select an exchange.';return;}
     if(!amount){msg.style.color='var(--red)';msg.textContent='Enter an amount.';return;}
@@ -660,7 +598,6 @@ function submitTx(){
     else{state.exchanges[exchange]=(state.exchanges[exchange]||0)-amount;ba.bank+=amount;}
     if(!ba.transactions)ba.transactions=[];
     ba.transactions.push({id:Date.now(),date,type:selectedBetType,exchange,amount,pnl:0,notes,result:'—',_acct:exchTransferBank});
-
   }else if(isBet){
     if(!bookie){msg.style.color='var(--red)';msg.textContent='Select a bookmaker.';return;}
     if(!bstake||!bodds){msg.style.color='var(--red)';msg.textContent='Enter back stake and odds.';return;}
@@ -669,10 +606,8 @@ function submitTx(){
     if(!p.transactions)p.transactions=[];
     const tx={id:Date.now(),date,type:selectedBetType,bookie,exchange,event,bstake,bodds,comm,result,pnl,notes,_acct:formAccount};
     p.transactions.push(tx);
-    // Apply balance changes using central logic
     applyBalanceAtLog(tx,p);
   }
-
   save();showToast('Saved!');msg.style.color='var(--green)';msg.textContent='✓ Saved!';setTimeout(()=>msg.textContent='',2000);resetForm();setTimeout(render,100);
 }
 
@@ -736,7 +671,7 @@ function exportCSV(){
 
 function renderReports(){
   const allMap=monthlyPnl(allTxs());
-  const bookiePnl={};allTxs().forEach(t=>{if(!t.bookie||!t.pnl)return;bookiePnl[t.bookie]=(bookiePnl[t.bookie]||0)+t.pnl;});
+  const bookiePnl={};allTxs().forEach(t=>{if(!t.bookie||!t.pnl||t.type==='Balance Amendment')return;bookiePnl[t.bookie]=(bookiePnl[t.bookie]||0)+t.pnl;});
   const topBookies=Object.entries(bookiePnl).sort((a,b)=>b[1]-a[1]).slice(0,10);
   const typePnl={};allTxs().forEach(t=>{if(!t.type||!t.pnl||t.type==='Balance Amendment')return;typePnl[t.type]=(typePnl[t.type]||0)+t.pnl;});
   return`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><div style="font-size:16px;font-weight:800">Reports</div><button class="btn-sm btn-primary" onclick="exportCSV()">⬇ CSV</button></div>
@@ -815,7 +750,7 @@ function addBookie(acct){
 }
 
 async function init(){
-  await loadFromSupabase();
+  await loadData();
   migrateLegacy();
   switchProfile('me');
   render();
