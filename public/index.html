@@ -605,10 +605,16 @@ function renderAdd(prefill){
       <div id="form-fields">
         <div class="form-row" style="grid-template-columns:110px 1fr 1fr;margin-bottom:8px">
           <div class="form-group"><div class="form-label">Date</div><input type="text" id="f-date" placeholder="DD/MM/YYYY" value="${todayStr()}" style="font-size:12px;padding:7px 9px"/></div>
-          <div class="form-group" id="fg-bookie"><div class="form-label">Bookmaker</div><select id="f-bookie"><option value="">— select —</option>${bookieOpts}</select></div>
+          <div class="form-group" id="fg-bookie"><div class="form-label">Bookmaker</div>
+            <div style="position:relative">
+              <input type="text" id="f-bookie-search" placeholder="Search bookmaker…" autocomplete="off" oninput="filterBookieDropdown(this.value)" onfocus="showBookieDropdown()" value="${pf.bookie||''}" style="padding-right:28px"/>
+              <input type="hidden" id="f-bookie" value="${pf.bookie||''}"/>
+              <div id="bookie-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:50;background:#252629;border:0.5px solid rgba(255,255,255,0.15);border-radius:8px;margin-top:3px;max-height:200px;overflow-y:auto;-webkit-overflow-scrolling:touch"></div>
+            </div>
+          </div>
           <div class="form-group" id="fg-exchange"><div class="form-label">Exchange</div><select id="f-exchange"><option value="">— select —</option>${exchOpts}</select></div>
         </div>
-        <div class="form-row single" id="fg-event"><div class="form-group"><div class="form-label">Event / market</div><input type="text" id="f-event" placeholder="e.g. Arsenal vs Chelsea" value="${pf.event||''}"/></div></div>
+        <div class="form-row single" id="fg-event"><div class="form-group"><div class="form-label" style="color:#444441">Event <span style="font-size:9px;color:#444441;text-transform:none;letter-spacing:0">(optional)</span></div><input type="text" id="f-event" placeholder="e.g. Arsenal vs Chelsea" value="${pf.event||''}" style="font-size:12px;padding:7px 10px;background:#1f2024;border-color:rgba(255,255,255,0.07)"/></div></div>
         <div class="form-row" id="fg-stake-odds" style="grid-template-columns:1fr 1fr 80px">
           <div class="form-group" id="fg-bstake"><div class="form-label">Back stake (£)</div><input type="number" id="f-bstake" placeholder="0.00" step="0.01" inputmode="decimal" value="${pf.bstake||''}"/></div>
           <div class="form-group" id="fg-bodds"><div class="form-label">Back odds</div><input type="number" id="f-bodds" placeholder="2.00" step="0.01" inputmode="decimal" value="${pf.bodds||''}"/></div>
@@ -640,8 +646,10 @@ function setFormAccount(a){
   formAccount=a;
   PROFILES.forEach(pr=>{const b=document.getElementById('facc-'+pr);if(b)b.className='acct-sel-btn'+(a===pr?' active-'+pr:'');});
   const dot=document.getElementById('form-dot');if(dot)dot.style.background=profileColor(a);
-  const bs=document.getElementById('f-bookie');
-  if(bs){const prev=bs.value;bs.innerHTML='<option value="">— select —</option>'+Object.keys(state[a].bookies||{}).map(b=>`<option${b===prev?' selected':''}>${b}</option>`).join('');}
+  // Clear bookie search when account changes
+  const bsearch=document.getElementById('f-bookie-search');
+  if(bsearch){bsearch.value='';const bh=document.getElementById('f-bookie');if(bh)bh.value='';}
+  const dd=document.getElementById('bookie-dropdown');if(dd)dd.style.display='none';
 }
 function setExchBank(b){exchTransferBank=b;PROFILES.forEach(pr=>{const el=document.getElementById('ebank-'+pr);if(el)el.className='dest-btn'+(b===pr?' active':'');});updateFlowPreview();}
 function selectBetType(t){
@@ -704,7 +712,7 @@ function submitTx(){
     p.transactions.push({id:Date.now(),date,type:'Balance Amendment',target:targetLabel,oldVal,newVal,diff,pnl:diff,notes:reason,result:'—',_acct:formAccount});
     save();showToast(`${targetLabel} → ${fmt(newVal)}`);msg.textContent='';resetForm();setTimeout(render,100);return;
   }
-  const bookie=document.getElementById('f-bookie')?.value,exchange=document.getElementById('f-exchange')?.value,event=document.getElementById('f-event')?.value||'';
+  const bookie=document.getElementById('f-bookie')?.value||(document.getElementById('f-bookie-search')?.value||''),exchange=document.getElementById('f-exchange')?.value,event=document.getElementById('f-event')?.value||'';
   const bstake=parseFloat(document.getElementById('f-bstake')?.value)||0,bodds=parseFloat(document.getElementById('f-bodds')?.value)||0,comm=parseFloat(document.getElementById('f-comm')?.value)||0;
   const result=document.getElementById('f-result')?.value||'Pending',pnl=parseFloat(document.getElementById('f-pnl')?.value)||0,amount=parseFloat(document.getElementById('f-amount')?.value)||0;
   if(isBookieT){
@@ -733,7 +741,20 @@ function submitTx(){
     const tx={id:Date.now(),date,type:selectedBetType,bookie,exchange,event,bstake,bodds,comm,result,pnl,notes,_acct:formAccount};
     p.transactions.push(tx);applyBalanceAtLog(tx,p);
   }
-  save();showToast('Saved!');msg.textContent='';resetForm();setTimeout(render,100);
+  save();showToast('Saved!');msg.textContent='';
+  // Stay on form — just reset the variable fields, keep account + type + bookie + exchange
+  const keepBookie=document.getElementById('f-bookie-search')?.value||'';
+  const keepBookieVal=document.getElementById('f-bookie')?.value||'';
+  const keepExchange=document.getElementById('f-exchange')?.value||'';
+  const keepType=selectedBetType;
+  resetForm();
+  // Re-apply kept values
+  setTimeout(()=>{
+    if(keepType)selectBetType(keepType);
+    if(keepBookie){const bs=document.getElementById('f-bookie-search');if(bs)bs.value=keepBookie;}
+    const bh=document.getElementById('f-bookie');if(bh)bh.value=keepBookieVal;
+    const fe=document.getElementById('f-exchange');if(fe&&keepExchange)fe.value=keepExchange;
+  },50);
 }
 
 function duplicateTrade(acct,id){
@@ -951,6 +972,51 @@ function addBookie(acct){
   if(!state[acct].bookies)state[acct].bookies={};
   if(state[acct].bookies[name]){showToast('Already exists','error');return;}
   state[acct].bookies[name]={bal:0,status:'Active',notes:''};save();inp.value='';render();
+}
+
+// ── BOOKIE SEARCH ────────────────────────────────────────────────────────────
+function getBookieList(){
+  return Object.keys(state[formAccount].bookies||{}).sort();
+}
+
+function renderBookieDropdownItems(items){
+  const dd=document.getElementById('bookie-dropdown');if(!dd)return;
+  if(!items.length){dd.innerHTML='<div style="padding:10px 12px;font-size:12px;color:#5F5E5A">No results</div>';return;}
+  dd.innerHTML=items.slice(0,20).map(b=>`<div onclick="selectBookie('${b.replace(/'/g,"\\'")}') " style="padding:10px 12px;font-size:13px;color:#e8e8e4;cursor:pointer;border-bottom:0.5px solid rgba(255,255,255,0.05)" onmouseenter="this.style.background='#2e2f33'" onmouseleave="this.style.background=''">${b}</div>`).join('');
+}
+
+function showBookieDropdown(){
+  const dd=document.getElementById('bookie-dropdown');if(!dd)return;
+  const q=document.getElementById('f-bookie-search')?.value||'';
+  const list=getBookieList();
+  const filtered=q?list.filter(b=>b.toLowerCase().includes(q.toLowerCase())):list;
+  renderBookieDropdownItems(filtered);
+  dd.style.display='block';
+  // Close on outside click
+  setTimeout(()=>document.addEventListener('click',closeBookieDropdownOutside,{once:true}),10);
+}
+
+function closeBookieDropdownOutside(e){
+  const dd=document.getElementById('bookie-dropdown');
+  const inp=document.getElementById('f-bookie-search');
+  if(dd&&!dd.contains(e.target)&&e.target!==inp){dd.style.display='none';}
+  else if(dd&&dd.style.display!=='none'){document.addEventListener('click',closeBookieDropdownOutside,{once:true});}
+}
+
+function filterBookieDropdown(q){
+  const dd=document.getElementById('bookie-dropdown');if(!dd)return;
+  const list=getBookieList();
+  const filtered=q?list.filter(b=>b.toLowerCase().includes(q.toLowerCase())):list;
+  renderBookieDropdownItems(filtered);
+  dd.style.display='block';
+  // Clear the hidden value if user is typing a new search
+  const bh=document.getElementById('f-bookie');if(bh)bh.value='';
+}
+
+function selectBookie(name){
+  const inp=document.getElementById('f-bookie-search');if(inp)inp.value=name;
+  const bh=document.getElementById('f-bookie');if(bh)bh.value=name;
+  const dd=document.getElementById('bookie-dropdown');if(dd)dd.style.display='none';
 }
 
 async function init(){
