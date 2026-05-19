@@ -339,6 +339,10 @@ function migrateLegacy(){
 }
 
 let currentProfile='me',currentTab='dashboard',formAccount='me',selectedBetType='',exchTransferBank='me';
+let recentBookies=[]; // tracks last 8 used bookies
+let lastExchange=''; // tracks last used exchange
+let showMoreTypes=false; // toggle for extra bet types
+let showComm=false; // toggle for commission field
 
 function fmt(v){const n=parseFloat(v)||0;return(n<0?'-':'')+'£'+Math.abs(n).toFixed(2);}
 function fmtS(v){const n=parseFloat(v)||0;return(n>=0?'+':'-')+'£'+Math.abs(n).toFixed(2);}
@@ -353,6 +357,17 @@ function todayStr(){const d=new Date();return[String(d.getDate()).padStart(2,'0'
 function profileColor(p){return PROFILE_COLORS[p]||'#888780';}
 function profileLabel(p){return PROFILE_LABELS[p]||p;}
 function isFreeBet(type){return FREE_BET_TYPES.includes(type);}
+
+function getTypeColor(t){
+  const map={'Qualifier':'#0C447C','Free Bet':'#27500A','Boost':'#633806','Mug':'#042C53'};
+  return map[t]||'#252629';
+}
+function getTypeTextColor(t){
+  const map={'Qualifier':'#85B7EB','Free Bet':'#97C459','Boost':'#EF9F27','Mug':'#85B7EB'};
+  return map[t]||'#888780';
+}
+function toggleMoreTypes(){showMoreTypes=!showMoreTypes;const el=document.getElementById('main-content');if(el)el.innerHTML=renderAdd();}
+function toggleComm(){showComm=!showComm;const el=document.getElementById('main-content');if(el)el.innerHTML=renderAdd();}
 
 function statusBadge(s){
   const cls={Active:'badge-active',Restricted:'badge-restricted',Gubbed:'badge-gubbed',Closed:'badge-closed'}[s]||'badge-active';
@@ -570,61 +585,76 @@ function closeModal(){document.getElementById('modal-root').innerHTML='';}
 // ── ADD FORM ─────────────────────────────────────────────────────────────────
 function renderAdd(prefill){
   const p=state[formAccount];const pf=prefill||{};
-  const bookieOpts=Object.keys(p.bookies||{}).map(b=>`<option${pf.bookie===b?' selected':''}>${b}</option>`).join('');
-  const exchOpts=EXCHANGES.map(e=>`<option${pf.exchange===e?' selected':''}>${e}</option>`).join('');
+  const exchOpts=EXCHANGES.map(e=>`<option${(pf.exchange||lastExchange)===e?' selected':''}>${e}</option>`).join('');
+  const topTypes=['Qualifier','Free Bet','Boost'];
+  const moreTypes=['Mug','Extra Place','2Up','MBAL','Cash Back','Cash Out','Arb'];
+  const isMoreSel=moreTypes.includes(selectedBetType);
   return`
   <div class="card">
     <div class="card-header">
       <div style="display:flex;align-items:center;gap:8px">
         <div id="form-dot" style="width:8px;height:8px;border-radius:50%;background:${profileColor(formAccount)}"></div>
-        <span class="card-title">Log new trade${prefill?' · duplicated':''}</span>
+        <span class="card-title">Log trade${prefill?' · duplicated':''}</span>
       </div>
     </div>
-    <div class="card-body">
+    <div class="card-body" style="padding-bottom:80px">
+
       <div class="form-section">
         <div class="form-label">Account</div>
         <div class="acct-selector">${PROFILES.map(pr=>`<button class="acct-sel-btn ${formAccount===pr?'active-'+pr:''}" id="facc-${pr}" onclick="setFormAccount('${pr}')">${profileLabel(pr)}</button>`).join('')}</div>
       </div>
+
       <div class="form-section">
-        <div class="form-label">Transaction type</div>
-        <div class="type-groups" id="type-grid">
-          <div>
-            <div class="type-group-label">Bets</div>
-            <div class="type-pills">${['Qualifier','Free Bet','Boost','Mug','Extra Place','2Up','MBAL','Cash Back','Cash Out','Arb'].map(t=>`<div class="type-pill${selectedBetType===t?' sel sel-'+t.toLowerCase().replace(/\s/g,''):''}" data-type="${t}" onclick="selectBetType('${t}')">${t}</div>`).join('')}</div>
-          </div>
-          <div>
-            <div class="type-group-label">Transfers</div>
-            <div class="type-pills">${['Deposit','Withdrawal','Exchange Deposit','Exchange Withdrawal'].map(t=>`<div class="type-pill${selectedBetType===t?' sel sel-'+t.toLowerCase().replace(/\s/g,''):''}" data-type="${t}" onclick="selectBetType('${t}')">${t}</div>`).join('')}</div>
-          </div>
-          <div>
-            <div class="type-group-label">Other</div>
-            <div class="type-pills">${['Balance Amendment'].map(t=>`<div class="type-pill${selectedBetType===t?' sel sel-'+t.toLowerCase().replace(/\s/g,''):''}" data-type="${t}" onclick="selectBetType('${t}')">${t}</div>`).join('')}</div>
-          </div>
+        <div class="form-label">Type</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">
+          ${topTypes.map(t=>`<button onclick="selectBetType('${t}')" style="flex:1;padding:10px 6px;border-radius:8px;border:0.5px solid ${selectedBetType===t?'transparent':'rgba(255,255,255,0.1)'};background:${selectedBetType===t?getTypeColor(t):'#252629'};color:${selectedBetType===t?getTypeTextColor(t):'#888780'};font-family:system-ui,-apple-system,sans-serif;font-size:13px;font-weight:500;cursor:pointer;transition:all .15s">${t}</button>`).join('')}
+        </div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center">
+          ${(showMoreTypes||isMoreSel)?moreTypes.map(t=>`<div class="type-pill${selectedBetType===t?' sel sel-'+t.toLowerCase().replace(/\s/g,''):''}" data-type="${t}" onclick="selectBetType('${t}')">${t}</div>`).join(''):''}
+          <div class="type-pill${showMoreTypes&&!isMoreSel?' sel':''}" onclick="toggleMoreTypes()" style="${showMoreTypes?'background:#2e2f33;color:#B4B2A9;border-color:#444441':''}">${showMoreTypes?'Less ▲':'More ▼'}</div>
+          ${['Deposit','Withdrawal','Exchange Deposit','Exchange Withdrawal','Balance Amendment'].map(t=>`<div class="type-pill${selectedBetType===t?' sel sel-'+t.toLowerCase().replace(/\s/g,''):''}" data-type="${t}" onclick="selectBetType('${t}')">${t}</div>`).join('')}
         </div>
       </div>
+
       <div id="form-fields">
-        <div class="form-row" style="grid-template-columns:110px 1fr 1fr;margin-bottom:8px">
+        <div style="display:grid;grid-template-columns:100px 1fr 1fr;gap:8px;margin-bottom:8px">
           <div class="form-group"><div class="form-label">Date</div><input type="text" id="f-date" placeholder="DD/MM/YYYY" value="${todayStr()}" style="font-size:12px;padding:7px 9px"/></div>
           <div class="form-group" id="fg-bookie"><div class="form-label">Bookmaker</div>
             <div style="position:relative">
-              <input type="text" id="f-bookie-search" placeholder="Search bookmaker…" autocomplete="off" oninput="filterBookieDropdown(this.value)" onfocus="showBookieDropdown()" value="${pf.bookie||''}" style="padding-right:28px"/>
+              <input type="text" id="f-bookie-search" placeholder="Search…" autocomplete="off" oninput="filterBookieDropdown(this.value)" onfocus="showBookieDropdown()" value="${pf.bookie||''}" style="padding-right:10px"/>
               <input type="hidden" id="f-bookie" value="${pf.bookie||''}"/>
               <div id="bookie-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:50;background:#252629;border:0.5px solid rgba(255,255,255,0.15);border-radius:8px;margin-top:3px;max-height:200px;overflow-y:auto;-webkit-overflow-scrolling:touch"></div>
             </div>
           </div>
-          <div class="form-group" id="fg-exchange"><div class="form-label">Exchange</div><select id="f-exchange"><option value="">— select —</option>${exchOpts}</select></div>
+          <div class="form-group" id="fg-exchange"><div class="form-label">Exchange</div><select id="f-exchange"><option value="">—</option>${exchOpts}</select></div>
         </div>
-        <div class="form-row single" id="fg-event"><div class="form-group"><div class="form-label" style="color:#444441">Event <span style="font-size:9px;color:#444441;text-transform:none;letter-spacing:0">(optional)</span></div><input type="text" id="f-event" placeholder="e.g. Arsenal vs Chelsea" value="${pf.event||''}" style="font-size:12px;padding:7px 10px;background:#1f2024;border-color:rgba(255,255,255,0.07)"/></div></div>
-        <div class="form-row" id="fg-stake-odds" style="grid-template-columns:1fr 1fr 80px">
+
+        ${recentBookies.length?`<div id="fg-recent-bookies" style="margin-bottom:8px">
+          <div class="form-label">Recent</div>
+          <div style="display:flex;gap:5px;flex-wrap:wrap">${recentBookies.map(b=>`<button onclick="selectBookie('${b.replace(/'/g,"\\'")}');document.getElementById('f-bookie-search').value='${b.replace(/'/g,"\\'")}'" style="padding:4px 10px;border-radius:20px;border:0.5px solid rgba(255,255,255,0.12);background:#252629;color:#B4B2A9;font-family:system-ui,-apple-system,sans-serif;font-size:11px;cursor:pointer;white-space:nowrap">${b}</button>`).join('')}</div>
+        </div>`:''}
+
+        <div class="form-row single" id="fg-event"><div class="form-group"><div class="form-label" style="color:#444441">Event <span style="font-size:9px;text-transform:none;letter-spacing:0">(optional)</span></div><input type="text" id="f-event" placeholder="e.g. Arsenal vs Chelsea" value="${pf.event||''}" style="font-size:12px;padding:7px 10px;background:#1f2024;border-color:rgba(255,255,255,0.07)"/></div></div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px" id="fg-stake-odds">
           <div class="form-group" id="fg-bstake"><div class="form-label">Back stake (£)</div><input type="number" id="f-bstake" placeholder="0.00" step="0.01" inputmode="decimal" value="${pf.bstake||''}"/></div>
           <div class="form-group" id="fg-bodds"><div class="form-label">Back odds</div><input type="number" id="f-bodds" placeholder="2.00" step="0.01" inputmode="decimal" value="${pf.bodds||''}"/></div>
-          <div class="form-group" id="fg-comm"><div class="form-label">Comm %</div><input type="number" id="f-comm" placeholder="0" step="0.1" inputmode="decimal" value="${pf.comm!==undefined?pf.comm:0}"/></div>
         </div>
-        <div class="form-row">
+
+        <div style="margin-bottom:8px" id="fg-comm-toggle">
+          ${showComm?`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:end">
+            <div class="form-group"><div class="form-label">Commission (%)</div><input type="number" id="f-comm" placeholder="0" step="0.1" inputmode="decimal" value="${pf.comm||0}"/></div>
+            <button onclick="toggleComm()" style="padding:9px 12px;border-radius:8px;border:0.5px solid rgba(255,255,255,0.1);background:#252629;color:#5F5E5A;font-family:system-ui,-apple-system,sans-serif;font-size:11px;cursor:pointer;margin-bottom:1px">Remove</button>
+          </div>`
+          :`<button onclick="toggleComm()" style="padding:6px 12px;border-radius:20px;border:0.5px solid rgba(255,255,255,0.1);background:transparent;color:#5F5E5A;font-family:system-ui,-apple-system,sans-serif;font-size:11px;cursor:pointer"><input type="hidden" id="f-comm" value="0"/>+ Add commission</button>`}
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px" id="fg-result-pnl">
           <div class="form-group" id="fg-result"><div class="form-label">Result</div><select id="f-result"><option value="Pending">Pending</option><option value="Won">Won</option><option value="Lost">Lost</option></select></div>
-          <div class="form-group" id="fg-pnl"><div class="form-label">P&L (£) <span style="color:#1D9E75;font-size:10px">your figure</span></div><input type="number" id="f-pnl" placeholder="e.g. 3.20" step="0.01" inputmode="decimal" value="${pf.pnl||''}"/></div>
+          <div class="form-group" id="fg-pnl"><div class="form-label">P&L (£) <span style="color:#1D9E75;font-size:10px">your figure</span></div><input type="number" id="f-pnl" placeholder="0.00" step="0.01" inputmode="decimal" value="${pf.pnl||''}"/></div>
         </div>
-        <div class="form-row single" id="fg-amount"><div class="form-group"><div class="form-label">Amount (£)</div><input type="number" id="f-amount" placeholder="0.00" step="0.01" inputmode="decimal" oninput="updateFlowPreview()"/></div></div>
+
+        <div class="form-row single" id="fg-amount" style="display:none"><div class="form-group"><div class="form-label">Amount (£)</div><input type="number" id="f-amount" placeholder="0.00" step="0.01" inputmode="decimal" oninput="updateFlowPreview()"/></div></div>
         <div class="form-row single" id="fg-exchbank" style="display:none"><div class="form-group"><div class="form-label">Linked bank</div><div class="dest-selector">${PROFILES.map(pr=>`<button class="dest-btn ${exchTransferBank===pr?'active':''}" id="ebank-${pr}" onclick="setExchBank('${pr}')">${profileLabel(pr)}</button>`).join('')}</div></div></div>
         <div class="form-row single" id="fg-amend-target" style="display:none"><div class="form-group"><div class="form-label">Amend</div><select id="f-amend-target" onchange="updateAmendCurrent()"><option value="">— select —</option><option value="bank">Bank account</option><optgroup label="Bookmakers">${Object.keys(p.bookies||{}).map(b=>`<option value="bookie:${b}">${b}</option>`).join('')}</optgroup></select></div></div>
         <div class="form-row" id="fg-amend-bal">
@@ -632,13 +662,16 @@ function renderAdd(prefill){
           <div class="form-group" id="fg-amend-new" style="display:none"><div class="form-label">New balance (£)</div><input type="number" id="f-amend-new" placeholder="0.00" step="0.01" inputmode="decimal"/></div>
         </div>
         <div class="form-row single" id="fg-amend-reason" style="display:none"><div class="form-group"><div class="form-label">Reason</div><input type="text" id="f-amend-reason" placeholder="e.g. Casino offer, correction…"/></div></div>
-        <div class="form-row single" id="fg-notes"><div class="form-group"><div class="form-label">Notes (optional)</div><input type="text" id="f-notes" placeholder="Any extra details…" value="${pf.notes||''}"/></div></div>
+        <div class="form-row single" id="fg-notes"><div class="form-group"><div class="form-label" style="color:#444441">Notes <span style="font-size:9px;text-transform:none;letter-spacing:0">(optional)</span></div><input type="text" id="f-notes" placeholder="Any extra details…" value="${pf.notes||''}" style="font-size:12px;padding:7px 10px;background:#1f2024;border-color:rgba(255,255,255,0.07)"/></div></div>
       </div>
+
       <div id="flow-preview" style="display:none" class="flow-preview"><i class="ti ti-arrows-exchange" aria-hidden="true"></i><span id="flow-text"></span></div>
-      <button class="btn btn-primary btn-full" onclick="submitTx()" style="margin-top:4px">Save transaction</button>
-      <button class="btn btn-ghost btn-full" onclick="resetForm()" style="margin-top:8px">Clear</button>
-      <div id="form-msg" style="margin-top:8px;font-size:12px;text-align:center;color:#E24B4A"></div>
+      <div id="form-msg" style="margin-bottom:6px;font-size:12px;text-align:center;color:#E24B4A"></div>
     </div>
+  </div>
+  <div style="position:fixed;bottom:calc(58px + env(safe-area-inset-bottom));left:0;right:0;padding:10px 16px;background:#0f1012;border-top:0.5px solid rgba(255,255,255,0.06);display:flex;gap:8px;z-index:90;max-width:680px;margin:0 auto">
+    <button class="btn btn-ghost" onclick="resetForm()" style="width:72px;flex-shrink:0">Clear</button>
+    <button class="btn btn-primary btn-full" onclick="submitTx()"><i class="ti ti-check" aria-hidden="true"></i> Save trade</button>
   </div>`;
 }
 
@@ -654,16 +687,38 @@ function setFormAccount(a){
 function setExchBank(b){exchTransferBank=b;PROFILES.forEach(pr=>{const el=document.getElementById('ebank-'+pr);if(el)el.className='dest-btn'+(b===pr?' active':'');});updateFlowPreview();}
 function selectBetType(t){
   selectedBetType=t;
-  document.querySelectorAll('.type-pill').forEach(el=>{el.className='type-pill';if(el.dataset.type===t)el.classList.add('sel','sel-'+t.toLowerCase().replace(/\s/g,''));});
-  updateFormFields();
+  // Re-render form so top-type buttons update
+  const mc=document.getElementById('main-content');
+  if(mc&&currentTab==='add'){
+    const keepBookie=document.getElementById('f-bookie-search')?.value||'';
+    const keepBookieVal=document.getElementById('f-bookie')?.value||'';
+    const keepExchange=document.getElementById('f-exchange')?.value||'';
+    const keepEvent=document.getElementById('f-event')?.value||'';
+    const keepStake=document.getElementById('f-bstake')?.value||'';
+    const keepOdds=document.getElementById('f-bodds')?.value||'';
+    const keepPnl=document.getElementById('f-pnl')?.value||'';
+    mc.innerHTML=renderAdd();
+    setTimeout(()=>{
+      const bs=document.getElementById('f-bookie-search');if(bs)bs.value=keepBookie;
+      const bh=document.getElementById('f-bookie');if(bh)bh.value=keepBookieVal;
+      const fe=document.getElementById('f-exchange');if(fe&&keepExchange)fe.value=keepExchange;
+      const fev=document.getElementById('f-event');if(fev)fev.value=keepEvent;
+      const fst=document.getElementById('f-bstake');if(fst)fst.value=keepStake;
+      const fod=document.getElementById('f-bodds');if(fod)fod.value=keepOdds;
+      const fp=document.getElementById('f-pnl');if(fp)fp.value=keepPnl;
+      updateFormFields();bindFormEvents();
+    },10);
+  }else{
+    document.querySelectorAll('.type-pill').forEach(el=>{el.className='type-pill';if(el.dataset.type===t)el.classList.add('sel','sel-'+t.toLowerCase().replace(/\s/g,''));});
+    updateFormFields();
+  }
 }
 function updateFormFields(){
   const isBookieT=BOOKIE_TRANSFER.includes(selectedBetType),isExchT=EXCHANGE_TRANSFER.includes(selectedBetType),isBet=BET_ONLY.includes(selectedBetType),isAmend=selectedBetType==='Balance Amendment';
-  // Show/hide individual groups
   sh('fg-bookie',isBet||isBookieT);sh('fg-exchange',isBet||isExchT);
   sh('fg-exchbank',isExchT);sh('fg-event',isBet);
-  sh('fg-stake-odds',isBet);sh('fg-bstake',isBet);sh('fg-bodds',isBet);sh('fg-comm',isBet);
-  sh('fg-result',isBet);sh('fg-pnl',isBet);
+  sh('fg-stake-odds',isBet);sh('fg-bstake',isBet);sh('fg-bodds',isBet);
+  sh('fg-comm-toggle',isBet);sh('fg-result-pnl',isBet);sh('fg-result',isBet);sh('fg-pnl',isBet);
   sh('fg-amount',isBookieT||isExchT);
   sh('fg-amend-target',isAmend);sh('fg-amend-bal',isAmend);
   sh('fg-amend-current',isAmend);sh('fg-amend-new',isAmend);sh('fg-amend-reason',isAmend);
@@ -686,13 +741,11 @@ function updateFlowPreview(){
 }
 function bindFormEvents(){const exchSel=document.getElementById('f-exchange');if(exchSel)exchSel.addEventListener('change',updateFlowPreview);}
 function resetForm(){
-  selectedBetType='';exchTransferBank='me';
-  document.querySelectorAll('.type-pill').forEach(el=>el.className='type-pill');
-  ['f-bookie','f-exchange','f-event','f-bstake','f-bodds','f-amount','f-notes','f-pnl','f-amend-target','f-amend-current','f-amend-new','f-amend-reason'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
-  const fc=document.getElementById('f-comm');if(fc)fc.value='0';
-  const fr=document.getElementById('f-result');if(fr)fr.value='Pending';
-  const fp=document.getElementById('flow-preview');if(fp)fp.style.display='none';
-  updateFormFields();
+  selectedBetType='';exchTransferBank='me';showMoreTypes=false;showComm=false;
+  // Re-render the form completely for a clean slate
+  const mc=document.getElementById('main-content');
+  if(mc&&currentTab==='add')mc.innerHTML=renderAdd();
+  updateFormFields();bindFormEvents();
 }
 
 function submitTx(){
@@ -741,20 +794,27 @@ function submitTx(){
     const tx={id:Date.now(),date,type:selectedBetType,bookie,exchange,event,bstake,bodds,comm,result,pnl,notes,_acct:formAccount};
     p.transactions.push(tx);applyBalanceAtLog(tx,p);
   }
+  // Track recent bookies and last exchange
+  const usedBookie=document.getElementById('f-bookie')?.value||(document.getElementById('f-bookie-search')?.value||'');
+  const usedExchange=document.getElementById('f-exchange')?.value||'';
+  if(usedBookie){recentBookies=([usedBookie,...recentBookies.filter(b=>b!==usedBookie)]).slice(0,8);}
+  if(usedExchange)lastExchange=usedExchange;
   save();showToast('Saved!');msg.textContent='';
-  // Stay on form — just reset the variable fields, keep account + type + bookie + exchange
+  // Stay on form — keep type, bookie, exchange; clear event/stake/odds/pnl
   const keepBookie=document.getElementById('f-bookie-search')?.value||'';
   const keepBookieVal=document.getElementById('f-bookie')?.value||'';
   const keepExchange=document.getElementById('f-exchange')?.value||'';
-  const keepType=selectedBetType;
-  resetForm();
-  // Re-apply kept values
-  setTimeout(()=>{
-    if(keepType)selectBetType(keepType);
-    if(keepBookie){const bs=document.getElementById('f-bookie-search');if(bs)bs.value=keepBookie;}
-    const bh=document.getElementById('f-bookie');if(bh)bh.value=keepBookieVal;
-    const fe=document.getElementById('f-exchange');if(fe&&keepExchange)fe.value=keepExchange;
-  },50);
+  // Re-render keeping context
+  const mc=document.getElementById('main-content');
+  if(mc&&currentTab==='add'){
+    mc.innerHTML=renderAdd();
+    setTimeout(()=>{
+      if(keepBookie){const bs=document.getElementById('f-bookie-search');if(bs)bs.value=keepBookie;}
+      const bh=document.getElementById('f-bookie');if(bh)bh.value=keepBookieVal;
+      const fe=document.getElementById('f-exchange');if(fe&&keepExchange)fe.value=keepExchange;
+      updateFormFields();bindFormEvents();
+    },10);
+  }
 }
 
 function duplicateTrade(acct,id){
