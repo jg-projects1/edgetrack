@@ -476,7 +476,7 @@ function renderDashboard(){
 // ── PENDING ──────────────────────────────────────────────────────────────────
 function renderPending(){
   const pending=pendingAll();
-  if(!pending.length)return`<div style="text-align:center;padding:60px 20px"><i class="ti ti-circle-check" style="font-size:48px;color:#1D9E75" aria-hidden="true"></i><div style="font-size:15px;font-weight:500;margin-top:12px;color:#1a1a18">All settled</div></div>`;
+  if(!pending.length)return`<div style="text-align:center;padding:60px 20px"><i class="ti ti-circle-check" style="font-size:48px;color:#1D9E75" aria-hidden="true"></i><div style="font-size:15px;font-weight:500;margin-top:12px;color:#e8e8e4">All settled</div></div>`;
   return`
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
     <div class="metric-card"><div class="metric-label">Pending</div><div class="metric-value warn">${pending.length}</div></div>
@@ -807,7 +807,7 @@ function renderReports(){
   const typePnl={};allTxs().forEach(t=>{if(!t.type||!t.pnl||t.type==='Balance Amendment')return;typePnl[t.type]=(typePnl[t.type]||0)+t.pnl;});
   return`
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-    <div style="font-size:16px;font-weight:500;color:#1a1a18">Reports</div>
+    <div style="font-size:16px;font-weight:500;color:#e8e8e4">Reports</div>
     <button class="btn-sm" onclick="exportCSV()"><i class="ti ti-download" aria-hidden="true"></i> Export CSV</button>
   </div>
   <div class="card"><div class="card-header"><span class="card-title">Monthly P&L — all accounts</span></div><div style="padding:12px;overflow-x:auto">${renderMonthBars(allMap,100)}</div></div>
@@ -828,7 +828,7 @@ function renderAccounts(){
   return`
   <div style="margin-bottom:14px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-      <div style="font-size:13px;font-weight:500;color:#1a1a18">Bookmakers — <span style="color:${profileColor(acct)}">${profileLabel(acct)}</span> <span style="color:#888780;font-weight:400">(${Object.keys(p.bookies||{}).length})</span></div>
+      <div style="font-size:13px;font-weight:500;color:#e8e8e4">Bookmakers — <span style="color:${profileColor(acct)}">${profileLabel(acct)}</span> <span style="color:#888780;font-weight:400">(${Object.keys(p.bookies||{}).length})</span></div>
       <select class="filter-select" id="status-filter" onchange="render()"><option value="">All</option>${BOOKIE_STATUSES.map(s=>`<option>${s}</option>`).join('')}</select>
     </div>
     <div class="card">
@@ -840,7 +840,7 @@ function renderAccounts(){
       <button class="btn btn-primary" style="padding:10px 16px;font-size:13px" onclick="addBookie('${acct}')">Add</button>
     </div>
   </div>
-  <div style="font-size:13px;font-weight:500;color:#1a1a18;margin-bottom:10px">Bank accounts</div>
+  <div style="font-size:13px;font-weight:500;color:#e8e8e4;margin-bottom:10px">Bank accounts</div>
   <div class="card" style="margin-bottom:14px">
     ${PROFILES.map(pr=>`<div class="list-row">
       <div class="list-row-left"><div class="list-row-title" style="display:flex;align-items:center;gap:7px"><div class="acct-dot dot-${pr}"></div>${profileLabel(pr)}'s bank</div></div>
@@ -850,7 +850,7 @@ function renderAccounts(){
       </div>
     </div>`).join('')}
   </div>
-  <div style="font-size:13px;font-weight:500;color:#1a1a18;margin-bottom:10px">Exchanges (shared)</div>
+  <div style="font-size:13px;font-weight:500;color:#e8e8e4;margin-bottom:10px">Exchanges (shared)</div>
   <div class="card">
     ${EXCHANGES.map(e=>`<div class="list-row">
       <div class="list-row-left"><div class="list-row-title">${e}</div></div>
@@ -872,7 +872,7 @@ function renderBookieList(acct,search,statusFilter){
       <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
         <div>
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-            <span style="font-size:13px;font-weight:500;color:#1a1a18">${b}</span>
+            <span style="font-size:13px;font-weight:500;color:#e8e8e4">${b}</span>
             ${statusBadge(bk.status||'Active')}
           </div>
           ${bk.notes?`<div style="font-size:11px;color:#888780;margin-top:2px">${bk.notes}</div>`:''}
