@@ -306,7 +306,7 @@ let currentProfile='me',currentTab='dashboard',formAccount='me',selectedBetType=
 function fmt(v){const n=parseFloat(v)||0;return(n<0?'-':'')+'£'+Math.abs(n).toFixed(2);}
 function fmtS(v){const n=parseFloat(v)||0;return(n>=0?'+':'-')+'£'+Math.abs(n).toFixed(2);}
 function totalBookie(p){return Object.values(state[p].bookies||{}).reduce((a,b)=>a+(b.bal||0),0);}
-function totalPnl(p){return(state[p].transactions||[]).reduce((a,t)=>a+(t.pnl||0),0);}
+function totalPnl(p){return(state[p].transactions||[]).filter(t=>t.type!=='Balance Amendment').reduce((a,t)=>a+(t.pnl||0),0);}
 function pendingAll(){return PROFILES.flatMap(p=>(state[p].transactions||[]).filter(t=>t.result==='Pending').map(t=>({...t,_acct:p})));}
 function allTxs(){return PROFILES.flatMap(p=>(state[p].transactions||[]).map(t=>({...t,_acct:p}))).sort((a,b)=>b.id-a.id);}
 function profileTxs(p){return p==='both'?allTxs():(state[p].transactions||[]).map(t=>({...t,_acct:p})).sort((a,b)=>b.id-a.id);}
@@ -421,7 +421,7 @@ function render(){
 
 function monthlyPnl(txs){
   const map={};
-  txs.forEach(t=>{if(!t.date||!t.pnl)return;const parts=t.date.split('/');if(parts.length<3)return;const key=`${parts[2]}-${parts[1]}`;map[key]=(map[key]||0)+(t.pnl||0);});
+  txs.forEach(t=>{if(!t.date||!t.pnl||t.type==='Balance Amendment')return;const parts=t.date.split('/');if(parts.length<3)return;const key=`${parts[2]}-${parts[1]}`;map[key]=(map[key]||0)+(t.pnl||0);});
   return map;
 }
 function renderMonthBars(map,height=100){
@@ -699,7 +699,7 @@ function renderReports(){
   const allMap=monthlyPnl(allTxs());
   const bookiePnl={};allTxs().forEach(t=>{if(!t.bookie||!t.pnl)return;bookiePnl[t.bookie]=(bookiePnl[t.bookie]||0)+t.pnl;});
   const topBookies=Object.entries(bookiePnl).sort((a,b)=>b[1]-a[1]).slice(0,10);
-  const typePnl={};allTxs().forEach(t=>{if(!t.type||!t.pnl)return;typePnl[t.type]=(typePnl[t.type]||0)+t.pnl;});
+  const typePnl={};allTxs().forEach(t=>{if(!t.type||!t.pnl||t.type==='Balance Amendment')return;typePnl[t.type]=(typePnl[t.type]||0)+t.pnl;});
   return`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><div style="font-size:16px;font-weight:800">Reports</div><button class="btn-sm btn-primary" onclick="exportCSV()">⬇ CSV</button></div>
   <div class="panel"><div class="panel-header"><span class="panel-title">Monthly P&L — all accounts</span></div><div style="padding:12px;overflow-x:auto">${renderMonthBars(allMap,110)}</div></div>
   ${PROFILES.map(p=>`<div class="panel"><div class="panel-header"><span class="panel-title" style="color:${profileColor(p)}">${profileLabel(p)} monthly P&L</span></div><div style="padding:10px;overflow-x:auto">${renderMonthBars(monthlyPnl(state[p].transactions||[]),80)}</div></div>`).join('')}
