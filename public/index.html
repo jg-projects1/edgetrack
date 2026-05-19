@@ -1085,55 +1085,77 @@ function selectBookie(name){
 function calcBookieRisk(acct, bookieName){
   const txs=(state[acct].transactions||[]).filter(t=>t.bookie===bookieName&&BET_ONLY.includes(t.type));
   const settled=txs.filter(t=>t.result==='Won'||t.result==='Lost');
-  if(settled.length<2)return null; // not enough data
+  if(settled.length<2)return null;
 
-  const won=settled.filter(t=>t.result==='Won').length;
-  const winRate=won/settled.length;
-
-  const avgOdds=txs.filter(t=>t.bodds).reduce((a,t,_,arr)=>a+(t.bodds/arr.length),0);
-
+  // Mug bets — low odds bets to appear as normal punter
   const mugBets=txs.filter(t=>t.type==='Mug').length;
   const mugRatio=txs.length>0?mugBets/txs.length:0;
 
+  // Free bet ratio — using every offer looks automated
   const freeBets=txs.filter(t=>t.type==='Free Bet').length;
   const freeBetRatio=txs.length>0?freeBets/txs.length:0;
 
-  // Bets per week
+  // Average back odds — always betting high odds looks like a sharp
+  const oddsArr=txs.filter(t=>t.bodds>0).map(t=>t.bodds);
+  const avgOdds=oddsArr.length?oddsArr.reduce((a,b)=>a+b,0)/oddsArr.length:0;
+  const hasLowOddsBets=oddsArr.some(o=>o<=2.0);
+  const allHighOdds=oddsArr.length>4&&!hasLowOddsBets;
+
+  // Bets per week — very high frequency looks automated
   const dates=txs.map(t=>{const p=t.date?.split('/');return p?.length===3?new Date(+p[2],+p[1]-1,+p[0]):null;}).filter(Boolean);
   let betsPerWeek=0;
   if(dates.length>1){
-    const span=(Math.max(...dates)-Math.min(...dates))/(1000*60*60*24*7)||1;
-    betsPerWeek=txs.length/span;
+    const spanWeeks=Math.max((Math.max(...dates)-Math.min(...dates))/(1000*60*60*24*7),0.1);
+    betsPerWeek=txs.length/spanWeeks;
   }
 
+  // Total P&L — very profitable accounts get restricted faster
   const totalPnl=settled.reduce((a,t)=>a+(t.pnl||0),0);
 
   // Score: 0 (safe) to 100 (high risk)
   let score=0;
   const flags=[];
 
-  // Win rate risk
-  if(winRate>0.7){score+=35;flags.push(`High win rate (${Math.round(winRate*100)}%)`)}
-  else if(winRate>0.55){score+=20;flags.push(`Above average win rate (${Math.round(winRate*100)}%)`)}
+  // 1. Mug bet ratio — biggest factor
+  if(mugRatio===0&&txs.length>4){
+    score+=40;flags.push('No mug bets logged on this bookie');
+  } else if(mugRatio<0.1&&txs.length>4){
+    score+=25;flags.push(`Very low mug bet ratio (${Math.round(mugRatio*100)}%)`);
+  } else if(mugRatio<0.2&&txs.length>6){
+    score+=12;flags.push(`Low mug bet ratio (${Math.round(mugRatio*100)}%)`);
+  }
 
-  // Mug ratio risk
-  if(mugRatio<0.05&&txs.length>5){score+=25;flags.push('Very few mug bets logged')}
-  else if(mugRatio<0.15&&txs.length>5){score+=12;flags.push('Low mug bet ratio')}
+  // 2. Always high odds — no low-odds bets ever placed
+  if(allHighOdds){
+    score+=25;flags.push(`Always high odds — avg ${avgOdds.toFixed(2)}, no bets under 2.0`);
+  } else if(avgOdds>3.5&&txs.length>5){
+    score+=12;flags.push(`High average odds (${avgOdds.toFixed(2)}) — add some low-odds bets`);
+  }
 
-  // Free bet ratio risk
-  if(freeBetRatio>0.6){score+=20;flags.push(`Mostly free bets (${Math.round(freeBetRatio*100)}%)`)}
-  else if(freeBetRatio>0.4){score+=10;flags.push('High free bet ratio')}
+  // 3. High free bet ratio — looks like pure bonus hunting
+  if(freeBetRatio>0.65&&txs.length>4){
+    score+=20;flags.push(`Mostly free bets (${Math.round(freeBetRatio*100)}%) — mix in qualifiers`);
+  } else if(freeBetRatio>0.45&&txs.length>4){
+    score+=10;flags.push(`High free bet ratio (${Math.round(freeBetRatio*100)}%)`);
+  }
 
-  // High P&L risk
-  if(totalPnl>500){score+=15;flags.push(`High total profit (£${totalPnl.toFixed(0)})`)}
-  else if(totalPnl>200){score+=8;flags.push(`Good profit (£${totalPnl.toFixed(0)})`)}
+  // 4. High P&L — very profitable accounts attract attention
+  if(totalPnl>500){
+    score+=15;flags.push(`High profit on this bookie (£${totalPnl.toFixed(0)})`);
+  } else if(totalPnl>250){
+    score+=8;flags.push(`Good profit (£${totalPnl.toFixed(0)}) — monitor`);
+  }
 
-  // Odds risk — always betting high odds
-  if(avgOdds>4&&settled.length>5){score+=10;flags.push(`High avg odds (${avgOdds.toFixed(2)})`)}
+  // 5. Very high bet frequency
+  if(betsPerWeek>20){
+    score+=10;flags.push(`Very high frequency (${betsPerWeek.toFixed(1)} bets/week)`);
+  } else if(betsPerWeek>10){
+    score+=5;flags.push(`High frequency (${betsPerWeek.toFixed(1)} bets/week)`);
+  }
 
   score=Math.min(score,100);
-  const level=score>=60?'red':score>=30?'amber':'green';
-  return{score,level,flags,txCount:txs.length,settled:settled.length,winRate,mugRatio,freeBetRatio,avgOdds,betsPerWeek,totalPnl};
+  const level=score>=55?'red':score>=25?'amber':'green';
+  return{score,level,flags,txCount:txs.length,settled:settled.length,mugRatio,freeBetRatio,avgOdds,hasLowOddsBets,betsPerWeek,totalPnl};
 }
 
 function renderRisk(){
@@ -1206,9 +1228,10 @@ function renderRiskCard(r){
           ${acctPill(acct)}
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <span style="font-size:11px;color:#5F5E5A">${risk.txCount} bets · ${risk.settled} settled</span>
-          <span style="font-size:11px;color:#5F5E5A">${Math.round(risk.winRate*100)}% win rate</span>
-          ${risk.mugRatio>0?`<span style="font-size:11px;color:#5F5E5A">${Math.round(risk.mugRatio*100)}% mugged</span>`:''}
+          <span style="font-size:11px;color:#5F5E5A">${risk.txCount} bets</span>
+          <span style="font-size:11px;color:#5F5E5A">${Math.round(risk.mugRatio*100)}% mugged</span>
+          ${risk.avgOdds>0?`<span style="font-size:11px;color:#5F5E5A">avg odds ${risk.avgOdds.toFixed(2)}</span>`:''}
+          <span style="font-size:11px;color:#5F5E5A">£${risk.totalPnl.toFixed(0)} profit</span>
         </div>
       </div>
       <span style="background:${levelColors.bg};color:${levelColors.text};border:0.5px solid ${levelColors.border};padding:3px 10px;border-radius:20px;font-size:11px;font-weight:500;flex-shrink:0">${levelLabel}</span>
@@ -1231,12 +1254,12 @@ function renderRiskCard(r){
 
 function getRiskAdvice(risk){
   const tips=[];
-  if(risk.winRate>0.65)tips.push('Place some losing mug bets to bring win rate down');
-  if(risk.mugRatio<0.15)tips.push('Increase mug bet frequency on this bookie');
-  if(risk.freeBetRatio>0.5)tips.push('Mix in more qualifying bets alongside free bet usage');
-  if(risk.avgOdds>4)tips.push('Place some bets at lower odds (1.5–2.5) to look more natural');
-  if(risk.totalPnl>300)tips.push('Consider withdrawing some profit gradually');
-  return tips.length?tips.join(' · '):'Monitor and increase mug bet frequency';
+  if(risk.mugRatio<0.2)tips.push('Log more mug bets on this bookie — aim for 1 mug per 3–4 matched bets');
+  if(!risk.hasLowOddsBets||risk.avgOdds>3.5)tips.push('Place some bets at lower odds (1.3–2.0) to look like a normal punter');
+  if(risk.freeBetRatio>0.5)tips.push('Mix in more qualifying and mug bets alongside free bet usage');
+  if(risk.totalPnl>300)tips.push('Consider a gradual withdrawal to avoid drawing attention');
+  if(risk.betsPerWeek>15)tips.push('Reduce bet frequency — spread bets across more days');
+  return tips.length?tips.join(' · '):'Keep logging mug bets regularly to maintain a natural pattern';
 }
 
 async function init(){
