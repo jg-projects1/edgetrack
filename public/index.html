@@ -196,7 +196,7 @@ textarea{background:var(--bg3);border:1px solid var(--border);border-radius:8px;
     <div class="logo">MB<span>Empire</span></div>
     <div class="sync-indicator"><div class="sync-dot" id="sync-dot"></div><span id="sync-label">Loading…</span></div>
   </div>
-  <div class="profile-bar">
+  <div class="profile-bar" id="profile-bar">
     <span class="profile-label">View</span>
     <div class="profile-toggle">
       <button class="profile-btn active-me" id="pbtn-me" onclick="switchProfile('me')"><span class="ind ind-me"></span>JG</button>
@@ -393,7 +393,11 @@ function showToast(msg,type='success'){
   t.style.color=type==='success'?'var(--green)':type==='error'?'var(--red)':'var(--amber)';
   t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2800);
 }
-function switchTab(t){currentTab=t;document.querySelectorAll('.tab').forEach(el=>el.classList.remove('active'));const el=document.getElementById('tab-'+t);if(el)el.classList.add('active');render();window.scrollTo(0,0);}
+function switchTab(t){currentTab=t;document.querySelectorAll('.tab').forEach(el=>el.classList.remove('active'));const el=document.getElementById('tab-'+t);if(el)el.classList.add('active');
+  // Hide profile bar on dashboard, show on all other tabs
+  const pb=document.getElementById('profile-bar');
+  if(pb)pb.style.display=t==='dashboard'?'none':'flex';
+  render();window.scrollTo(0,0);}
 function switchProfile(p){
   currentProfile=p;
   PROFILES.forEach(x=>{const b=document.getElementById('pbtn-'+x);if(b){b.className='profile-btn';if(x===p)b.classList.add('active-'+x);}});
@@ -752,6 +756,9 @@ function addBookie(acct){
 async function init(){
   await loadData();
   migrateLegacy();
+  // Hide profile bar on dashboard (default tab)
+  const pb=document.getElementById('profile-bar');
+  if(pb)pb.style.display='none';
   switchProfile('me');
   render();
 }
