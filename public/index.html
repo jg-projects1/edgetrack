@@ -14,227 +14,202 @@
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{height:100%;-webkit-text-size-adjust:100%}
-body{font-family:system-ui,-apple-system,sans-serif;background:#f5f5f3;min-height:100%;font-size:14px;color:#1a1a18;-webkit-tap-highlight-color:transparent}
+body{font-family:system-ui,-apple-system,sans-serif;background:#0f1012;min-height:100%;font-size:14px;color:#e8e8e4;-webkit-tap-highlight-color:transparent}
 .app{display:flex;flex-direction:column;min-height:100svh}
 
-/* Topbar */
-.topbar{background:#fff;border-bottom:0.5px solid rgba(0,0,0,0.1);padding:14px 16px;padding-top:calc(14px + env(safe-area-inset-top));display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
-.logo{font-size:17px;font-weight:500;letter-spacing:-.3px;color:#1a1a18}
+.topbar{background:#1a1b1e;border-bottom:0.5px solid rgba(255,255,255,0.08);padding:14px 16px;padding-top:calc(14px + env(safe-area-inset-top));display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+.logo{font-size:17px;font-weight:500;letter-spacing:-.3px;color:#e8e8e4}
 .logo span{color:#1D9E75}
-.sync-badge{display:flex;align-items:center;gap:5px;font-size:11px;color:#888780;background:#f5f5f3;padding:4px 10px;border-radius:20px;border:0.5px solid rgba(0,0,0,0.08)}
+.sync-badge{display:flex;align-items:center;gap:5px;font-size:11px;color:#888780;background:#252629;padding:4px 10px;border-radius:20px;border:0.5px solid rgba(255,255,255,0.06)}
 .sync-dot{width:5px;height:5px;border-radius:50%;background:#1D9E75;flex-shrink:0}
 .sync-dot.syncing{background:#BA7517;animation:pulse 1s infinite}
 .sync-dot.error{background:#E24B4A}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 
-/* Profile bar */
-.profile-bar{background:#fff;border-bottom:0.5px solid rgba(0,0,0,0.08);padding:8px 16px;display:flex;align-items:center;gap:10px}
-.profile-label{font-size:11px;color:#888780;flex-shrink:0}
+.profile-bar{background:#1a1b1e;border-bottom:0.5px solid rgba(255,255,255,0.06);padding:8px 16px;display:flex;align-items:center;gap:10px}
+.profile-label{font-size:11px;color:#5F5E5A;flex-shrink:0}
 .profile-toggle{display:flex;gap:4px}
-.profile-btn{padding:5px 12px;border-radius:20px;cursor:pointer;font-size:12px;font-weight:500;color:#5F5E5A;border:0.5px solid rgba(0,0,0,0.12);background:#fff;transition:all .15s;white-space:nowrap}
-.profile-btn.active-me{background:#E6F1FB;color:#185FA5;border-color:#B5D4F4}
-.profile-btn.active-wife{background:#EEEDFE;color:#534AB7;border-color:#CECBF6}
-.profile-btn.active-bp{background:#FAEEDA;color:#854F0B;border-color:#FAC775}
-.profile-btn.active-rq{background:#EAF3DE;color:#3B6D11;border-color:#C0DD97}
-.profile-btn.active-both{background:#f5f5f3;color:#1a1a18;border-color:rgba(0,0,0,0.2)}
+.profile-btn{padding:5px 12px;border-radius:20px;cursor:pointer;font-size:12px;font-weight:500;color:#888780;border:0.5px solid rgba(255,255,255,0.1);background:transparent;transition:all .15s;white-space:nowrap}
+.profile-btn.active-me{background:#0C447C;color:#85B7EB;border-color:#185FA5}
+.profile-btn.active-wife{background:#3C3489;color:#AFA9EC;border-color:#534AB7}
+.profile-btn.active-bp{background:#633806;color:#EF9F27;border-color:#854F0B}
+.profile-btn.active-rq{background:#27500A;color:#97C459;border-color:#3B6D11}
+.profile-btn.active-both{background:#252629;color:#e8e8e4;border-color:rgba(255,255,255,0.15)}
 
-/* Content */
 .content{flex:1;padding:14px 16px;padding-bottom:calc(72px + env(safe-area-inset-bottom));max-width:680px;margin:0 auto;width:100%}
 
-/* Tab bar */
-.tab-bar{background:#fff;border-top:0.5px solid rgba(0,0,0,0.1);padding:6px 4px;padding-bottom:calc(6px + env(safe-area-inset-bottom));display:flex;position:fixed;bottom:0;left:0;right:0;z-index:100}
-.tab{flex:1;padding:5px 2px;cursor:pointer;font-size:9px;font-weight:500;color:#888780;border:none;background:none;text-align:center;display:flex;flex-direction:column;align-items:center;gap:3px;min-width:0;transition:color .15s;-webkit-tap-highlight-color:transparent}
+.tab-bar{background:#1a1b1e;border-top:0.5px solid rgba(255,255,255,0.08);padding:6px 4px;padding-bottom:calc(6px + env(safe-area-inset-bottom));display:flex;position:fixed;bottom:0;left:0;right:0;z-index:100}
+.tab{flex:1;padding:5px 2px;cursor:pointer;font-size:9px;font-weight:500;color:#5F5E5A;border:none;background:none;text-align:center;display:flex;flex-direction:column;align-items:center;gap:3px;min-width:0;transition:color .15s}
 .tab i{font-size:20px;line-height:1}
 .tab.active{color:#1D9E75}
 .tab-label{font-size:9px;font-weight:500;white-space:nowrap}
 
-/* Cards */
-.card{background:#fff;border:0.5px solid rgba(0,0,0,0.08);border-radius:12px;overflow:hidden;margin-bottom:12px}
-.card-header{padding:12px 16px;border-bottom:0.5px solid rgba(0,0,0,0.06);display:flex;align-items:center;justify-content:space-between}
-.card-title{font-size:11px;font-weight:500;color:#888780;letter-spacing:.3px;text-transform:uppercase}
+.card{background:#1a1b1e;border:0.5px solid rgba(255,255,255,0.08);border-radius:12px;overflow:hidden;margin-bottom:12px}
+.card-header{padding:12px 16px;border-bottom:0.5px solid rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:space-between}
+.card-title{font-size:11px;font-weight:500;color:#5F5E5A;letter-spacing:.3px;text-transform:uppercase}
 .card-body{padding:14px 16px}
 
-/* Metric cards */
-.metric-card{background:#f5f5f3;border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:3px}
+.metric-card{background:#252629;border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:3px}
 .metric-label{font-size:11px;color:#888780;font-weight:500;display:flex;align-items:center;gap:4px}
 .metric-label i{font-size:14px}
-.metric-value{font-size:26px;font-weight:500;letter-spacing:-1px;color:#1a1a18;line-height:1.1}
+.metric-value{font-size:26px;font-weight:500;letter-spacing:-1px;color:#e8e8e4;line-height:1.1}
 .metric-value.pos{color:#1D9E75}.metric-value.neg{color:#E24B4A}.metric-value.warn{color:#BA7517}
-.metric-sub{font-size:11px;color:#888780}
+.metric-sub{font-size:11px;color:#5F5E5A}
 
-/* Account cards */
 .acct-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
-.acct-card{background:#fff;border:0.5px solid rgba(0,0,0,0.08);border-radius:12px;padding:14px}
+.acct-card{background:#1a1b1e;border:0.5px solid rgba(255,255,255,0.08);border-radius:12px;padding:14px}
 .acct-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
-.acct-name{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:500;color:#1a1a18}
+.acct-name{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:500;color:#e8e8e4}
 .acct-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
 .dot-me{background:#378ADD}.dot-wife{background:#7F77DD}.dot-bp{background:#BA7517}.dot-rq{background:#639922}
 .acct-pnl{font-size:12px;font-weight:500}
 .acct-pnl.pos{color:#1D9E75}.acct-pnl.neg{color:#E24B4A}
-.acct-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-top:0.5px solid rgba(0,0,0,0.06)}
-.acct-row-label{font-size:11px;color:#888780;display:flex;align-items:center;gap:4px}
+.acct-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-top:0.5px solid rgba(255,255,255,0.06)}
+.acct-row-label{font-size:11px;color:#5F5E5A;display:flex;align-items:center;gap:4px}
 .acct-row-label i{font-size:13px}
-.acct-row-val{font-size:12px;font-weight:500;color:#1a1a18}
+.acct-row-val{font-size:12px;font-weight:500;color:#e8e8e4}
 
-/* List rows */
-.list-row{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:0.5px solid rgba(0,0,0,0.06);transition:background .1s}
+.list-row{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:0.5px solid rgba(255,255,255,0.05);transition:background .1s}
 .list-row:last-child{border-bottom:none}
 .list-row-left{display:flex;flex-direction:column;gap:3px;flex:1;min-width:0;margin-right:10px}
-.list-row-title{font-size:13px;font-weight:500;color:#1a1a18;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.list-row-title{font-size:13px;font-weight:500;color:#e8e8e4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .list-row-meta{display:flex;gap:5px;align-items:center;flex-wrap:wrap}
 .list-row-right{font-size:13px;font-weight:500;flex-shrink:0}
 .list-row-right.pos{color:#1D9E75}.list-row-right.neg{color:#E24B4A}.list-row-right.warn{color:#BA7517}
 
-/* Pills */
 .pill{display:inline-flex;align-items:center;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:500;white-space:nowrap;border:0.5px solid transparent}
-.pill-me{background:#E6F1FB;color:#185FA5;border-color:#B5D4F4}
-.pill-wife{background:#EEEDFE;color:#534AB7;border-color:#CECBF6}
-.pill-bp{background:#FAEEDA;color:#854F0B;border-color:#FAC775}
-.pill-rq{background:#EAF3DE;color:#3B6D11;border-color:#C0DD97}
-.pill-qualifier{background:#E6F1FB;color:#185FA5}
-.pill-freebet{background:#EAF3DE;color:#3B6D11}
-.pill-boost{background:#FAEEDA;color:#854F0B}
-.pill-mug{background:#E6F1FB;color:#0C447C}
-.pill-extraplace{background:#EEEDFE;color:#534AB7}
-.pill-2up{background:#E1F5EE;color:#0F6E56}
-.pill-mbal{background:#FBEAF0;color:#993556}
-.pill-cashback{background:#EAF3DE;color:#3B6D11}
-.pill-cashout{background:#FCEBEB;color:#A32D2D}
-.pill-arb{background:#FAEEDA;color:#854F0B}
-.pill-deposit,.pill-withdrawal{background:#F1EFE8;color:#5F5E5A}
-.pill-exchangedeposit,.pill-exchangewithdrawal{background:#E1F5EE;color:#0F6E56}
-.pill-balanceamendment{background:#F1EFE8;color:#5F5E5A}
+.pill-me{background:#0C447C;color:#85B7EB;border-color:#185FA5}
+.pill-wife{background:#3C3489;color:#AFA9EC;border-color:#534AB7}
+.pill-bp{background:#633806;color:#EF9F27;border-color:#854F0B}
+.pill-rq{background:#27500A;color:#97C459;border-color:#3B6D11}
+.pill-qualifier{background:#0C447C;color:#85B7EB}
+.pill-freebet{background:#27500A;color:#97C459}
+.pill-boost{background:#633806;color:#EF9F27}
+.pill-mug{background:#042C53;color:#85B7EB}
+.pill-extraplace{background:#3C3489;color:#AFA9EC}
+.pill-2up{background:#085041;color:#5DCAA5}
+.pill-mbal{background:#72243E;color:#ED93B1}
+.pill-cashback{background:#27500A;color:#97C459}
+.pill-cashout{background:#791F1F;color:#F09595}
+.pill-arb{background:#633806;color:#EF9F27}
+.pill-deposit,.pill-withdrawal{background:#252629;color:#888780}
+.pill-exchangedeposit,.pill-exchangewithdrawal{background:#085041;color:#5DCAA5}
+.pill-balanceamendment{background:#252629;color:#888780}
 
-/* Badges / status */
 .badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:500}
-.badge-active{background:#EAF3DE;color:#3B6D11}
-.badge-restricted{background:#FAEEDA;color:#854F0B}
-.badge-gubbed{background:#FCEBEB;color:#A32D2D}
-.badge-closed{background:#F1EFE8;color:#5F5E5A}
+.badge-active{background:#27500A;color:#97C459}
+.badge-restricted{background:#633806;color:#EF9F27}
+.badge-gubbed{background:#791F1F;color:#F09595}
+.badge-closed{background:#252629;color:#5F5E5A}
 
-/* Forms */
+/* ── FORM ── */
 .form-section{margin-bottom:14px}
-.form-label{font-size:11px;font-weight:500;color:#888780;letter-spacing:.3px;text-transform:uppercase;display:block;margin-bottom:6px}
-.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.form-grid.wide{grid-template-columns:1fr}
-.form-group{display:flex;flex-direction:column;gap:5px}
+.form-label{font-size:10px;font-weight:500;color:#5F5E5A;letter-spacing:.3px;text-transform:uppercase;display:block;margin-bottom:5px}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
+.form-row.single{grid-template-columns:1fr}
+.form-row.triple{grid-template-columns:1fr 1fr 1fr}
+.form-group{display:flex;flex-direction:column;gap:4px}
 .form-group.span2{grid-column:1/-1}
-input[type=text],input[type=number],select,textarea{width:100%;background:#f5f5f3;border:0.5px solid rgba(0,0,0,0.12);border-radius:8px;padding:10px 12px;font-family:system-ui,-apple-system,sans-serif;font-size:14px;color:#1a1a18;outline:none;-webkit-appearance:none;appearance:none;transition:border-color .15s}
-input:focus,select:focus,textarea:focus{border-color:rgba(0,0,0,0.3);background:#fff}
-input#f-pnl{border-color:#1D9E75;font-size:16px;font-weight:500;background:#f0faf5}
-input#f-pnl:focus{background:#fff}
-textarea{resize:vertical;min-height:70px}
-select option{background:#fff}
+input[type=text],input[type=number],select,textarea{width:100%;background:#252629;border:0.5px solid rgba(255,255,255,0.1);border-radius:8px;padding:9px 11px;font-family:system-ui,-apple-system,sans-serif;font-size:13px;color:#e8e8e4;outline:none;-webkit-appearance:none;appearance:none;transition:border-color .15s}
+input:focus,select:focus,textarea:focus{border-color:rgba(255,255,255,0.25);background:#2e2f33}
+input#f-pnl{border-color:#1D9E75;font-size:15px;font-weight:500;background:#0d1f19}
+input#f-pnl:focus{background:#0f2a20}
+input#f-date{font-size:12px;padding:7px 10px}
+textarea{resize:vertical;min-height:60px}
+select option{background:#252629;color:#e8e8e4}
 
-/* Type pills selector */
-.type-grid{display:flex;flex-wrap:wrap;gap:6px}
-.type-pill{padding:6px 14px;border-radius:20px;font-size:12px;font-weight:500;cursor:pointer;border:0.5px solid rgba(0,0,0,0.12);background:#fff;color:#5F5E5A;transition:all .15s;-webkit-tap-highlight-color:transparent}
+/* ── TYPE GROUPS ── */
+.type-groups{display:flex;flex-direction:column;gap:8px}
+.type-group-label{font-size:10px;font-weight:500;color:#5F5E5A;letter-spacing:.3px;text-transform:uppercase;margin-bottom:5px}
+.type-pills{display:flex;flex-wrap:wrap;gap:5px}
+.type-pill{padding:5px 12px;border-radius:20px;font-size:12px;font-weight:500;cursor:pointer;border:0.5px solid rgba(255,255,255,0.1);background:#252629;color:#888780;transition:all .15s}
 .type-pill.sel{border-width:1px}
-.sel-qualifier{background:#E6F1FB;color:#185FA5;border-color:#85B7EB}
-.sel-freebet{background:#EAF3DE;color:#3B6D11;border-color:#97C459}
-.sel-boost{background:#FAEEDA;color:#854F0B;border-color:#EF9F27}
-.sel-mug{background:#E6F1FB;color:#0C447C;border-color:#85B7EB}
-.sel-extraplace{background:#EEEDFE;color:#534AB7;border-color:#AFA9EC}
-.sel-2up{background:#E1F5EE;color:#0F6E56;border-color:#5DCAA5}
-.sel-mbal{background:#FBEAF0;color:#993556;border-color:#ED93B1}
-.sel-cashback{background:#EAF3DE;color:#3B6D11;border-color:#97C459}
-.sel-cashout{background:#FCEBEB;color:#A32D2D;border-color:#F09595}
-.sel-arb{background:#FAEEDA;color:#854F0B;border-color:#EF9F27}
-.sel-deposit,.sel-withdrawal{background:#F1EFE8;color:#5F5E5A;border-color:#B4B2A9}
-.sel-exchangedeposit,.sel-exchangewithdrawal{background:#E1F5EE;color:#0F6E56;border-color:#5DCAA5}
-.sel-balanceamendment{background:#F1EFE8;color:#5F5E5A;border-color:#B4B2A9}
+.sel-qualifier{background:#0C447C;color:#85B7EB;border-color:#185FA5}
+.sel-freebet{background:#27500A;color:#97C459;border-color:#3B6D11}
+.sel-boost{background:#633806;color:#EF9F27;border-color:#854F0B}
+.sel-mug{background:#042C53;color:#85B7EB;border-color:#0C447C}
+.sel-extraplace{background:#3C3489;color:#AFA9EC;border-color:#534AB7}
+.sel-2up{background:#085041;color:#5DCAA5;border-color:#0F6E56}
+.sel-mbal{background:#72243E;color:#ED93B1;border-color:#993556}
+.sel-cashback{background:#27500A;color:#97C459;border-color:#3B6D11}
+.sel-cashout{background:#791F1F;color:#F09595;border-color:#A32D2D}
+.sel-arb{background:#633806;color:#EF9F27;border-color:#854F0B}
+.sel-deposit,.sel-withdrawal{background:#2e2f33;color:#B4B2A9;border-color:#444441}
+.sel-exchangedeposit,.sel-exchangewithdrawal{background:#085041;color:#5DCAA5;border-color:#0F6E56}
+.sel-balanceamendment{background:#2e2f33;color:#B4B2A9;border-color:#444441}
 
-/* Account selector */
-.acct-selector{display:flex;gap:6px;flex-wrap:wrap}
-.acct-sel-btn{flex:1;min-width:64px;padding:8px 6px;border-radius:8px;border:0.5px solid rgba(0,0,0,0.12);background:#fff;color:#5F5E5A;font-family:system-ui,-apple-system,sans-serif;font-size:12px;font-weight:500;cursor:pointer;text-align:center;transition:all .15s}
-.acct-sel-btn.active-me{background:#E6F1FB;color:#185FA5;border-color:#85B7EB}
-.acct-sel-btn.active-wife{background:#EEEDFE;color:#534AB7;border-color:#AFA9EC}
-.acct-sel-btn.active-bp{background:#FAEEDA;color:#854F0B;border-color:#EF9F27}
-.acct-sel-btn.active-rq{background:#EAF3DE;color:#3B6D11;border-color:#97C459}
+.acct-selector{display:flex;gap:5px;flex-wrap:wrap}
+.acct-sel-btn{flex:1;min-width:60px;padding:7px 5px;border-radius:8px;border:0.5px solid rgba(255,255,255,0.1);background:#252629;color:#888780;font-family:system-ui,-apple-system,sans-serif;font-size:12px;font-weight:500;cursor:pointer;text-align:center;transition:all .15s}
+.acct-sel-btn.active-me{background:#0C447C;color:#85B7EB;border-color:#185FA5}
+.acct-sel-btn.active-wife{background:#3C3489;color:#AFA9EC;border-color:#534AB7}
+.acct-sel-btn.active-bp{background:#633806;color:#EF9F27;border-color:#854F0B}
+.acct-sel-btn.active-rq{background:#27500A;color:#97C459;border-color:#3B6D11}
 
-/* Buttons */
-.btn{padding:11px 20px;border-radius:8px;font-family:system-ui,-apple-system,sans-serif;font-size:14px;font-weight:500;cursor:pointer;border:0.5px solid rgba(0,0,0,0.15);background:#fff;color:#1a1a18;transition:all .15s;-webkit-tap-highlight-color:transparent;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.btn{padding:11px 20px;border-radius:8px;font-family:system-ui,-apple-system,sans-serif;font-size:14px;font-weight:500;cursor:pointer;border:0.5px solid rgba(255,255,255,0.12);background:#252629;color:#e8e8e4;transition:all .15s;display:inline-flex;align-items:center;justify-content:center;gap:6px}
 .btn:active{transform:scale(0.98)}
 .btn-primary{background:#1D9E75;color:#fff;border-color:#1D9E75}
-.btn-primary:hover{background:#0F6E56}
+.btn-primary:hover{background:#0F6E56;border-color:#0F6E56}
 .btn-full{width:100%;padding:13px}
-.btn-danger{background:#FCEBEB;color:#A32D2D;border-color:#F09595}
-.btn-ghost{background:#f5f5f3;color:#5F5E5A;border-color:rgba(0,0,0,0.1)}
-.btn-sm{padding:5px 12px;font-size:11px;border-radius:6px;font-family:system-ui,-apple-system,sans-serif;font-weight:500;cursor:pointer;border:0.5px solid rgba(0,0,0,0.12);background:#fff;color:#5F5E5A;transition:all .15s}
-.btn-sm-edit{background:#FAEEDA;color:#854F0B;border-color:#FAC775}
-.btn-sm-dupe{background:#E6F1FB;color:#185FA5;border-color:#B5D4F4}
-.btn-sm-danger{background:#FCEBEB;color:#A32D2D;border-color:#F7C1C1}
-.btn-won{background:#EAF3DE;color:#3B6D11;border:0.5px solid #97C459;padding:9px 16px;border-radius:8px;font-family:system-ui,-apple-system,sans-serif;font-size:13px;font-weight:500;cursor:pointer;transition:all .15s;flex:1}
-.btn-lost{background:#FCEBEB;color:#A32D2D;border:0.5px solid #F09595;padding:9px 16px;border-radius:8px;font-family:system-ui,-apple-system,sans-serif;font-size:13px;font-weight:500;cursor:pointer;transition:all .15s;flex:1}
+.btn-danger{background:#791F1F;color:#F09595;border-color:#A32D2D}
+.btn-ghost{background:#252629;color:#888780;border-color:rgba(255,255,255,0.08)}
+.btn-sm{padding:4px 10px;font-size:11px;border-radius:6px;font-family:system-ui,-apple-system,sans-serif;font-weight:500;cursor:pointer;border:0.5px solid rgba(255,255,255,0.1);background:#252629;color:#888780;transition:all .15s}
+.btn-sm-edit{background:#633806;color:#EF9F27;border-color:#854F0B}
+.btn-sm-dupe{background:#0C447C;color:#85B7EB;border-color:#185FA5}
+.btn-sm-danger{background:#791F1F;color:#F09595;border-color:#A32D2D}
+.btn-won{background:#27500A;color:#97C459;border:0.5px solid #3B6D11;padding:9px 16px;border-radius:8px;font-family:system-ui,-apple-system,sans-serif;font-size:13px;font-weight:500;cursor:pointer;transition:all .15s;flex:1}
+.btn-lost{background:#791F1F;color:#F09595;border:0.5px solid #A32D2D;padding:9px 16px;border-radius:8px;font-family:system-ui,-apple-system,sans-serif;font-size:13px;font-weight:500;cursor:pointer;transition:all .15s;flex:1}
 
-/* Table */
-.table-wrap{overflow:auto;border-radius:12px;border:0.5px solid rgba(0,0,0,0.08);margin-bottom:12px;background:#fff;-webkit-overflow-scrolling:touch}
+.table-wrap{overflow:auto;border-radius:12px;border:0.5px solid rgba(255,255,255,0.08);margin-bottom:12px;background:#1a1b1e;-webkit-overflow-scrolling:touch}
 .data-table{width:100%;border-collapse:collapse;min-width:460px}
-.data-table th{padding:8px 12px;text-align:left;font-size:10px;font-weight:500;letter-spacing:.3px;text-transform:uppercase;color:#888780;border-bottom:0.5px solid rgba(0,0,0,0.08);background:#f5f5f3;white-space:nowrap;position:sticky;top:0}
-.data-table td{padding:9px 12px;font-size:12px;border-bottom:0.5px solid rgba(0,0,0,0.05);vertical-align:middle;color:#1a1a18}
+.data-table th{padding:8px 12px;text-align:left;font-size:10px;font-weight:500;letter-spacing:.3px;text-transform:uppercase;color:#5F5E5A;border-bottom:0.5px solid rgba(255,255,255,0.06);background:#252629;white-space:nowrap;position:sticky;top:0}
+.data-table td{padding:9px 12px;font-size:12px;border-bottom:0.5px solid rgba(255,255,255,0.04);vertical-align:middle;color:#e8e8e4}
 .data-table tr:last-child td{border-bottom:none}
-.data-table tr:hover td{background:#fafaf8}
-.pos{color:#1D9E75;font-weight:500}.neg{color:#E24B4A;font-weight:500}.muted{color:#888780}
+.data-table tr:hover td{background:#1f2024}
+.pos{color:#1D9E75;font-weight:500}.neg{color:#E24B4A;font-weight:500}.muted{color:#5F5E5A}
 
-/* Pending cards */
-.pending-card{background:#fff;border:0.5px solid rgba(0,0,0,0.08);border-radius:12px;padding:14px;margin-bottom:10px}
-.pending-event{font-size:14px;font-weight:500;color:#1a1a18;margin-bottom:6px}
+.pending-card{background:#1a1b1e;border:0.5px solid rgba(255,255,255,0.08);border-radius:12px;padding:14px;margin-bottom:10px}
+.pending-event{font-size:14px;font-weight:500;color:#e8e8e4;margin-bottom:6px}
 .pending-meta{display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
-.pending-info{background:#f5f5f3;border-radius:8px;padding:10px 12px;display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+.pending-info{background:#252629;border-radius:8px;padding:10px 12px;display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
 .pinfo-item{display:flex;flex-direction:column;gap:2px}
-.pinfo-label{font-size:10px;color:#888780;font-weight:500;text-transform:uppercase;letter-spacing:.3px}
-.pinfo-val{font-size:13px;font-weight:500;color:#1a1a18}
+.pinfo-label{font-size:10px;color:#5F5E5A;font-weight:500;text-transform:uppercase;letter-spacing:.3px}
+.pinfo-val{font-size:13px;font-weight:500;color:#e8e8e4}
 .pinfo-val.pos{color:#1D9E75}.pinfo-val.neg{color:#E24B4A}
 
-/* Month bars */
 .month-wrap{display:flex;align-items:flex-end;gap:6px;overflow-x:auto;padding:4px 2px}
 .month-col{display:flex;flex-direction:column;align-items:center;gap:3px;flex:0 0 auto;min-width:40px}
-.month-bar{width:32px;border-radius:3px 3px 0 0;min-height:2px;transition:height .3s}
+.month-bar{width:32px;border-radius:3px 3px 0 0;min-height:2px}
 .month-bar.pos{background:#1D9E75}.month-bar.neg{background:#E24B4A;border-radius:0 0 3px 3px}
-.month-lbl{font-size:9px;color:#888780;font-weight:500}
+.month-lbl{font-size:9px;color:#5F5E5A;font-weight:500}
 .month-val{font-size:9px;font-weight:500}
 .month-val.pos{color:#1D9E75}.month-val.neg{color:#E24B4A}
 
-/* Flow preview */
-.flow-preview{background:#E1F5EE;border:0.5px solid #5DCAA5;border-radius:8px;padding:9px 12px;font-size:12px;color:#0F6E56;display:flex;align-items:center;gap:8px;margin-bottom:12px}
+.flow-preview{background:#085041;border:0.5px solid#0F6E56;border-radius:8px;padding:9px 12px;font-size:12px;color:#5DCAA5;display:flex;align-items:center;gap:8px;margin-bottom:10px}
 
-/* Dest selector */
-.dest-selector{display:flex;gap:6px;flex-wrap:wrap}
-.dest-btn{flex:1;min-width:55px;padding:7px 5px;border-radius:8px;border:0.5px solid rgba(0,0,0,0.12);background:#fff;color:#5F5E5A;font-family:system-ui,-apple-system,sans-serif;font-size:11px;font-weight:500;cursor:pointer;text-align:center;transition:all .15s}
-.dest-btn.active{background:#E1F5EE;color:#0F6E56;border-color:#5DCAA5}
+.dest-selector{display:flex;gap:5px;flex-wrap:wrap}
+.dest-btn{flex:1;min-width:55px;padding:6px 5px;border-radius:8px;border:0.5px solid rgba(255,255,255,0.1);background:#252629;color:#888780;font-family:system-ui,-apple-system,sans-serif;font-size:11px;font-weight:500;cursor:pointer;text-align:center;transition:all .15s}
+.dest-btn.active{background:#085041;color:#5DCAA5;border-color:#0F6E56}
 
-/* Modal */
-.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:200;display:flex;align-items:flex-end;justify-content:center}
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;display:flex;align-items:flex-end;justify-content:center}
 @media(min-width:600px){.modal-bg{align-items:center}}
-.modal{background:#fff;border-radius:16px 16px 0 0;padding:20px;padding-bottom:calc(20px + env(safe-area-inset-bottom));width:100%;max-width:500px}
+.modal{background:#1a1b1e;border-radius:16px 16px 0 0;border:0.5px solid rgba(255,255,255,0.1);padding:20px;padding-bottom:calc(20px + env(safe-area-inset-bottom));width:100%;max-width:500px}
 @media(min-width:600px){.modal{border-radius:14px;padding:24px}}
-.modal-handle{width:32px;height:3px;background:rgba(0,0,0,0.12);border-radius:2px;margin:0 auto 16px}
-.modal-title{font-size:16px;font-weight:500;margin-bottom:4px;color:#1a1a18}
-.modal-sub{font-size:12px;color:#888780;margin-bottom:16px}
+.modal-handle{width:32px;height:3px;background:rgba(255,255,255,0.12);border-radius:2px;margin:0 auto 16px}
+.modal-title{font-size:16px;font-weight:500;margin-bottom:4px;color:#e8e8e4}
+.modal-sub{font-size:12px;color:#5F5E5A;margin-bottom:16px}
 .modal-actions{display:flex;gap:8px;margin-top:16px}
 
-/* Toast */
-.toast{position:fixed;bottom:calc(68px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%) translateY(16px);background:#1a1a18;border-radius:20px;padding:10px 18px;font-size:12px;font-weight:500;color:#fff;z-index:999;opacity:0;transition:all .25s;pointer-events:none;white-space:nowrap;max-width:90vw}
+.toast{position:fixed;bottom:calc(68px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%) translateY(16px);background:#e8e8e4;border-radius:20px;padding:10px 18px;font-size:12px;font-weight:500;color:#1a1b1e;z-index:999;opacity:0;transition:all .25s;pointer-events:none;white-space:nowrap;max-width:90vw}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 
-/* Loading */
-.loading{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:50vh;gap:12px;color:#888780;font-size:13px}
-.spinner{width:28px;height:28px;border:2px solid rgba(0,0,0,0.08);border-top-color:#1D9E75;border-radius:50%;animation:spin .7s linear infinite}
+.loading{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:50vh;gap:12px;color:#5F5E5A;font-size:13px}
+.spinner{width:28px;height:28px;border:2px solid rgba(255,255,255,0.08);border-top-color:#1D9E75;border-radius:50%;animation:spin .7s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
-
-/* Empty */
-.empty{padding:30px 20px;text-align:center;color:#888780;font-size:13px}
-
-/* Search */
-.search-input{width:100%;background:#f5f5f3;border:none;border-bottom:0.5px solid rgba(0,0,0,0.08);padding:10px 16px;font-family:system-ui,-apple-system,sans-serif;font-size:14px;color:#1a1a18;outline:none}
-.search-input::placeholder{color:#B4B2A9}
-
-/* Filter row */
+.empty{padding:30px 20px;text-align:center;color:#5F5E5A;font-size:13px}
+.search-input{width:100%;background:#252629;border:none;border-bottom:0.5px solid rgba(255,255,255,0.06);padding:10px 16px;font-family:system-ui,-apple-system,sans-serif;font-size:14px;color:#e8e8e4;outline:none}
+.search-input::placeholder{color:#444441}
 .filter-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
-.filter-select{background:#fff;border:0.5px solid rgba(0,0,0,0.12);border-radius:8px;padding:7px 10px;font-family:system-ui,-apple-system,sans-serif;font-size:12px;color:#1a1a18;outline:none;-webkit-appearance:none}
-
-/* Info banner */
-.info-banner{background:#FAEEDA;border:0.5px solid #FAC775;border-radius:8px;padding:10px 12px;font-size:12px;color:#854F0B;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.filter-select{background:#1a1b1e;border:0.5px solid rgba(255,255,255,0.1);border-radius:8px;padding:7px 10px;font-family:system-ui,-apple-system,sans-serif;font-size:12px;color:#e8e8e4;outline:none;-webkit-appearance:none}
 </style>
 </head>
 <body>
@@ -386,7 +361,7 @@ function statusBadge(s){
 
 function showToast(msg,type='success'){
   const t=document.getElementById('toast');t.textContent=msg;
-  t.style.background=type==='success'?'#1D9E75':type==='error'?'#E24B4A':'#1a1a18';
+  t.style.background=type==='success'?'#1D9E75':type==='error'?'#E24B4A':'#252629';
   t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);
 }
 
@@ -612,25 +587,46 @@ function renderAdd(prefill){
       </div>
       <div class="form-section">
         <div class="form-label">Transaction type</div>
-        <div class="type-grid" id="type-grid">${BET_TYPES.map(t=>`<div class="type-pill${selectedBetType===t?' sel sel-'+t.toLowerCase().replace(/\s/g,''):''}" data-type="${t}" onclick="selectBetType('${t}')">${t}</div>`).join('')}</div>
+        <div class="type-groups" id="type-grid">
+          <div>
+            <div class="type-group-label">Bets</div>
+            <div class="type-pills">${['Qualifier','Free Bet','Boost','Mug','Extra Place','2Up','MBAL','Cash Back','Cash Out','Arb'].map(t=>`<div class="type-pill${selectedBetType===t?' sel sel-'+t.toLowerCase().replace(/\s/g,''):''}" data-type="${t}" onclick="selectBetType('${t}')">${t}</div>`).join('')}</div>
+          </div>
+          <div>
+            <div class="type-group-label">Transfers</div>
+            <div class="type-pills">${['Deposit','Withdrawal','Exchange Deposit','Exchange Withdrawal'].map(t=>`<div class="type-pill${selectedBetType===t?' sel sel-'+t.toLowerCase().replace(/\s/g,''):''}" data-type="${t}" onclick="selectBetType('${t}')">${t}</div>`).join('')}</div>
+          </div>
+          <div>
+            <div class="type-group-label">Other</div>
+            <div class="type-pills">${['Balance Amendment'].map(t=>`<div class="type-pill${selectedBetType===t?' sel sel-'+t.toLowerCase().replace(/\s/g,''):''}" data-type="${t}" onclick="selectBetType('${t}')">${t}</div>`).join('')}</div>
+          </div>
+        </div>
       </div>
-      <div class="form-grid" id="form-fields">
-        <div class="form-group"><div class="form-label">Date</div><input type="text" id="f-date" placeholder="DD/MM/YYYY" value="${todayStr()}"/></div>
-        <div class="form-group" id="fg-bookie"><div class="form-label">Bookmaker</div><select id="f-bookie"><option value="">— select —</option>${bookieOpts}</select></div>
-        <div class="form-group" id="fg-exchange"><div class="form-label">Exchange</div><select id="f-exchange"><option value="">— select —</option>${exchOpts}</select></div>
-        <div class="form-group span2" id="fg-event"><div class="form-label">Event / market</div><input type="text" id="f-event" placeholder="e.g. Arsenal vs Chelsea" value="${pf.event||''}"/></div>
-        <div class="form-group" id="fg-bstake"><div class="form-label">Back stake (£)</div><input type="number" id="f-bstake" placeholder="0.00" step="0.01" inputmode="decimal" value="${pf.bstake||''}"/></div>
-        <div class="form-group" id="fg-bodds"><div class="form-label">Back odds</div><input type="number" id="f-bodds" placeholder="2.00" step="0.01" inputmode="decimal" value="${pf.bodds||''}"/></div>
-        <div class="form-group" id="fg-comm"><div class="form-label">Commission (%)</div><input type="number" id="f-comm" placeholder="0" step="0.1" inputmode="decimal" value="${pf.comm!==undefined?pf.comm:0}"/></div>
-        <div class="form-group" id="fg-result"><div class="form-label">Result</div><select id="f-result"><option value="Pending">Pending</option><option value="Won">Won</option><option value="Lost">Lost</option></select></div>
-        <div class="form-group span2" id="fg-pnl"><div class="form-label">P&L (£) <span style="color:#1D9E75;font-size:10px">your figure</span></div><input type="number" id="f-pnl" placeholder="e.g. 3.20" step="0.01" inputmode="decimal" value="${pf.pnl||''}"/></div>
-        <div class="form-group span2" id="fg-amount"><div class="form-label">Amount (£)</div><input type="number" id="f-amount" placeholder="0.00" step="0.01" inputmode="decimal" oninput="updateFlowPreview()"/></div>
-        <div class="form-group span2" id="fg-exchbank" style="display:none"><div class="form-label">Linked bank</div><div class="dest-selector">${PROFILES.map(pr=>`<button class="dest-btn ${exchTransferBank===pr?'active':''}" id="ebank-${pr}" onclick="setExchBank('${pr}')">${profileLabel(pr)}</button>`).join('')}</div></div>
-        <div class="form-group span2" id="fg-amend-target" style="display:none"><div class="form-label">Amend</div><select id="f-amend-target" onchange="updateAmendCurrent()"><option value="">— select —</option><option value="bank">Bank account</option><optgroup label="Bookmakers">${Object.keys(p.bookies||{}).map(b=>`<option value="bookie:${b}">${b}</option>`).join('')}</optgroup></select></div>
-        <div class="form-group" id="fg-amend-current" style="display:none"><div class="form-label">Current balance</div><input type="text" id="f-amend-current" readonly style="color:#888780"/></div>
-        <div class="form-group" id="fg-amend-new" style="display:none"><div class="form-label">New balance (£)</div><input type="number" id="f-amend-new" placeholder="0.00" step="0.01" inputmode="decimal"/></div>
-        <div class="form-group span2" id="fg-amend-reason" style="display:none"><div class="form-label">Reason</div><input type="text" id="f-amend-reason" placeholder="e.g. Casino offer, correction…"/></div>
-        <div class="form-group span2" id="fg-notes"><div class="form-label">Notes (optional)</div><input type="text" id="f-notes" placeholder="Any extra details…" value="${pf.notes||''}"/></div>
+      <div id="form-fields">
+        <div class="form-row" style="grid-template-columns:110px 1fr 1fr;margin-bottom:8px">
+          <div class="form-group"><div class="form-label">Date</div><input type="text" id="f-date" placeholder="DD/MM/YYYY" value="${todayStr()}" style="font-size:12px;padding:7px 9px"/></div>
+          <div class="form-group" id="fg-bookie"><div class="form-label">Bookmaker</div><select id="f-bookie"><option value="">— select —</option>${bookieOpts}</select></div>
+          <div class="form-group" id="fg-exchange"><div class="form-label">Exchange</div><select id="f-exchange"><option value="">— select —</option>${exchOpts}</select></div>
+        </div>
+        <div class="form-row single" id="fg-event"><div class="form-group"><div class="form-label">Event / market</div><input type="text" id="f-event" placeholder="e.g. Arsenal vs Chelsea" value="${pf.event||''}"/></div></div>
+        <div class="form-row" id="fg-stake-odds" style="grid-template-columns:1fr 1fr 80px">
+          <div class="form-group" id="fg-bstake"><div class="form-label">Back stake (£)</div><input type="number" id="f-bstake" placeholder="0.00" step="0.01" inputmode="decimal" value="${pf.bstake||''}"/></div>
+          <div class="form-group" id="fg-bodds"><div class="form-label">Back odds</div><input type="number" id="f-bodds" placeholder="2.00" step="0.01" inputmode="decimal" value="${pf.bodds||''}"/></div>
+          <div class="form-group" id="fg-comm"><div class="form-label">Comm %</div><input type="number" id="f-comm" placeholder="0" step="0.1" inputmode="decimal" value="${pf.comm!==undefined?pf.comm:0}"/></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group" id="fg-result"><div class="form-label">Result</div><select id="f-result"><option value="Pending">Pending</option><option value="Won">Won</option><option value="Lost">Lost</option></select></div>
+          <div class="form-group" id="fg-pnl"><div class="form-label">P&L (£) <span style="color:#1D9E75;font-size:10px">your figure</span></div><input type="number" id="f-pnl" placeholder="e.g. 3.20" step="0.01" inputmode="decimal" value="${pf.pnl||''}"/></div>
+        </div>
+        <div class="form-row single" id="fg-amount"><div class="form-group"><div class="form-label">Amount (£)</div><input type="number" id="f-amount" placeholder="0.00" step="0.01" inputmode="decimal" oninput="updateFlowPreview()"/></div></div>
+        <div class="form-row single" id="fg-exchbank" style="display:none"><div class="form-group"><div class="form-label">Linked bank</div><div class="dest-selector">${PROFILES.map(pr=>`<button class="dest-btn ${exchTransferBank===pr?'active':''}" id="ebank-${pr}" onclick="setExchBank('${pr}')">${profileLabel(pr)}</button>`).join('')}</div></div></div>
+        <div class="form-row single" id="fg-amend-target" style="display:none"><div class="form-group"><div class="form-label">Amend</div><select id="f-amend-target" onchange="updateAmendCurrent()"><option value="">— select —</option><option value="bank">Bank account</option><optgroup label="Bookmakers">${Object.keys(p.bookies||{}).map(b=>`<option value="bookie:${b}">${b}</option>`).join('')}</optgroup></select></div></div>
+        <div class="form-row" id="fg-amend-bal">
+          <div class="form-group" id="fg-amend-current" style="display:none"><div class="form-label">Current balance</div><input type="text" id="f-amend-current" readonly style="color:#5F5E5A"/></div>
+          <div class="form-group" id="fg-amend-new" style="display:none"><div class="form-label">New balance (£)</div><input type="number" id="f-amend-new" placeholder="0.00" step="0.01" inputmode="decimal"/></div>
+        </div>
+        <div class="form-row single" id="fg-amend-reason" style="display:none"><div class="form-group"><div class="form-label">Reason</div><input type="text" id="f-amend-reason" placeholder="e.g. Casino offer, correction…"/></div></div>
+        <div class="form-row single" id="fg-notes"><div class="form-group"><div class="form-label">Notes (optional)</div><input type="text" id="f-notes" placeholder="Any extra details…" value="${pf.notes||''}"/></div></div>
       </div>
       <div id="flow-preview" style="display:none" class="flow-preview"><i class="ti ti-arrows-exchange" aria-hidden="true"></i><span id="flow-text"></span></div>
       <button class="btn btn-primary btn-full" onclick="submitTx()" style="margin-top:4px">Save transaction</button>
@@ -655,13 +651,19 @@ function selectBetType(t){
 }
 function updateFormFields(){
   const isBookieT=BOOKIE_TRANSFER.includes(selectedBetType),isExchT=EXCHANGE_TRANSFER.includes(selectedBetType),isBet=BET_ONLY.includes(selectedBetType),isAmend=selectedBetType==='Balance Amendment';
-  sh('fg-bookie',isBet||isBookieT);sh('fg-exchange',isBet||isExchT);sh('fg-exchbank',isExchT);
-  sh('fg-event',isBet);sh('fg-bstake',isBet);sh('fg-bodds',isBet);sh('fg-comm',isBet);sh('fg-result',isBet);sh('fg-pnl',isBet);
-  sh('fg-amount',isBookieT||isExchT);sh('fg-amend-target',isAmend);sh('fg-amend-current',isAmend);sh('fg-amend-new',isAmend);sh('fg-amend-reason',isAmend);sh('fg-notes',!isAmend);
+  // Show/hide individual groups
+  sh('fg-bookie',isBet||isBookieT);sh('fg-exchange',isBet||isExchT);
+  sh('fg-exchbank',isExchT);sh('fg-event',isBet);
+  sh('fg-stake-odds',isBet);sh('fg-bstake',isBet);sh('fg-bodds',isBet);sh('fg-comm',isBet);
+  sh('fg-result',isBet);sh('fg-pnl',isBet);
+  sh('fg-amount',isBookieT||isExchT);
+  sh('fg-amend-target',isAmend);sh('fg-amend-bal',isAmend);
+  sh('fg-amend-current',isAmend);sh('fg-amend-new',isAmend);sh('fg-amend-reason',isAmend);
+  sh('fg-notes',!isAmend);
   const fp=document.getElementById('flow-preview');if(fp)fp.style.display=isExchT?'flex':'none';
   if(isExchT)updateFlowPreview();
 }
-function sh(id,v){const el=document.getElementById(id);if(el)el.style.display=v?'flex':'none';}
+function sh(id,v){const el=document.getElementById(id);if(el)el.style.display=v?(el.classList.contains('form-row')||el.classList.contains('form-group')?'flex':'flex'):'none';}
 function updateAmendCurrent(){
   const target=document.getElementById('f-amend-target')?.value,ac=document.getElementById('f-amend-current');if(!ac)return;
   const p=state[formAccount];
