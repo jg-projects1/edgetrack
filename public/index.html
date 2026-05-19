@@ -226,6 +226,7 @@ const SUPABASE_URL='https://rqvrhnjfobzvnzolwywy.supabase.co';
 const SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJndnJobmpmb2J6dm56b2x3eXd5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkxMjE1NjksImV4cCI6MjA5NDY5NzU2OX0.H6a7h0GKZGM0hFKpVKeQmEfoXFwleTrjUa2YZEmb2oc';
 
 let syncTimeout=null;
+let dataLoadedFromServer=false; // guard: only save once we've loaded or user has added data
 function setSyncStatus(s){
   const dot=document.getElementById('sync-dot'),label=document.getElementById('sync-label');
   if(!dot||!label)return;
@@ -235,19 +236,57 @@ function setSyncStatus(s){
 async function loadFromSupabase(){
   try{
     const res=await fetch(`${SUPABASE_URL}/rest/v1/edgetrack_data?id=eq.main&select=data`,{headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY}});
-    if(!res.ok)throw new Error();
+    if(!res.ok)throw new Error('HTTP '+res.status);
     const rows=await res.json();
-    if(rows&&rows[0]&&rows[0].data&&Object.keys(rows[0].data).length>0){Object.assign(state,rows[0].data);migrateLegacy();}
+    if(rows&&rows.length>0&&rows[0].data){
+      const loaded=rows[0].data;
+      // Only use loaded data if it has actual profile data, not just {}
+      const hasData=PROFILES.some(p=>loaded[p]&&(
+        Object.keys(loaded[p].bookies||{}).length>0||
+        (loaded[p].transactions||[]).length>0||
+        loaded[p].bank!==0
+      ));
+      if(hasData){
+        Object.assign(state,loaded);
+        migrateLegacy();
+        dataLoadedFromServer=true;
+      }
+    }
     setSyncStatus('synced');
-  }catch(e){setSyncStatus('error');}
+  }catch(e){
+    console.error('Load error:',e);
+    setSyncStatus('error');
+    // Try localStorage backup
+    try{
+      const backup=localStorage.getItem('edgetrack_backup');
+      if(backup){const b=JSON.parse(backup);Object.assign(state,b);migrateLegacy();dataLoadedFromServer=true;}
+    }catch(le){}
+  }
 }
 async function saveToSupabase(){
+  // Never save if no meaningful data exists — prevents wiping server data with empty state
+  const hasData=PROFILES.some(p=>state[p]&&(
+    (state[p].transactions||[]).length>0||
+    state[p].bank!==0||
+    Object.values(state[p].bookies||{}).some(b=>(b.bal||0)!==0)
+  ));
+  if(!hasData&&!dataLoadedFromServer){
+    console.log('Skipping save — no data to write');
+    setSyncStatus('synced');
+    return;
+  }
   setSyncStatus('syncing');
   try{
     const res=await fetch(`${SUPABASE_URL}/rest/v1/edgetrack_data?id=eq.main`,{method:'PATCH',headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify({data:state,updated_at:new Date().toISOString()})});
-    if(!res.ok)throw new Error();
+    if(!res.ok)throw new Error('HTTP '+res.status);
     setSyncStatus('synced');
-  }catch(e){setSyncStatus('error');try{localStorage.setItem('edgetrack_backup',JSON.stringify(state));}catch(le){}}
+    // Always keep a local backup
+    try{localStorage.setItem('edgetrack_backup',JSON.stringify(state));}catch(le){}
+  }catch(e){
+    console.error('Save error:',e);
+    setSyncStatus('error');
+    try{localStorage.setItem('edgetrack_backup',JSON.stringify(state));}catch(le){}
+  }
 }
 function debouncedSave(){if(syncTimeout)clearTimeout(syncTimeout);setSyncStatus('syncing');syncTimeout=setTimeout(saveToSupabase,800);}
 function save(){debouncedSave();}
