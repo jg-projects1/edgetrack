@@ -5,11 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
-<meta name="apple-mobile-web-app-title" content="EdgeTrack"/>
+<meta name="apple-mobile-web-app-title" content="MBEmpire"/>
 <meta name="theme-color" content="#0e0f11"/>
 <link rel="manifest" href="/manifest.json"/>
 <link rel="apple-touch-icon" href="/icon-192.png"/>
-<title>EdgeTrack</title>
+<title>MBEmpire</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet"/>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -193,14 +193,14 @@ textarea{background:var(--bg3);border:1px solid var(--border);border-radius:8px;
 <body>
 <div class="app">
   <div class="topbar">
-    <div class="logo">edge<span>track</span></div>
+    <div class="logo">MB<span>Empire</span></div>
     <div class="sync-indicator"><div class="sync-dot" id="sync-dot"></div><span id="sync-label">Loading…</span></div>
   </div>
   <div class="profile-bar">
     <span class="profile-label">View</span>
     <div class="profile-toggle">
-      <button class="profile-btn active-me" id="pbtn-me" onclick="switchProfile('me')"><span class="ind ind-me"></span>Me</button>
-      <button class="profile-btn" id="pbtn-wife" onclick="switchProfile('wife')"><span class="ind ind-wife"></span>Wife</button>
+      <button class="profile-btn active-me" id="pbtn-me" onclick="switchProfile('me')"><span class="ind ind-me"></span>JG</button>
+      <button class="profile-btn" id="pbtn-wife" onclick="switchProfile('wife')"><span class="ind ind-wife"></span>HG</button>
       <button class="profile-btn" id="pbtn-bp" onclick="switchProfile('bp')"><span class="ind ind-bp"></span>BP</button>
       <button class="profile-btn" id="pbtn-rq" onclick="switchProfile('rq')"><span class="ind ind-rq"></span>RQ</button>
       <button class="profile-btn" id="pbtn-both" onclick="switchProfile('both')">All</button>
@@ -296,7 +296,7 @@ function save(){debouncedSave();}
 
 // ── APP STATE ─────────────────────────────────────────────────────────────────
 const PROFILES=['me','wife','bp','rq'];
-const PROFILE_LABELS={me:'Me',wife:'Wife',bp:'BP',rq:'RQ'};
+const PROFILE_LABELS={me:'JG',wife:'HG',bp:'BP',rq:'RQ'};
 const PROFILE_COLORS={me:'var(--blue)',wife:'var(--purple)',bp:'var(--orange)',rq:'var(--lime)'};
 const BET_TYPES=['Qualifier','Free Bet','Boost','Mug','Extra Place','2Up','MBAL','Cash Back','Cash Out','Arb','Deposit','Withdrawal','Exchange Deposit','Exchange Withdrawal','Balance Amendment'];
 const BOOKIE_TRANSFER=['Deposit','Withdrawal'];
