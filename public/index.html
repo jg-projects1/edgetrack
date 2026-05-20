@@ -1256,11 +1256,21 @@ function getRiskAdvice(risk){
 }
 
 async function init(){
-  await loadData();
-  migrateLegacy();
-  const pb=document.getElementById('profile-bar');if(pb)pb.style.display='none';
-  switchProfile('me');
-  render();
+  try{
+    await loadData();
+    migrateLegacy();
+    const pb=document.getElementById('profile-bar');if(pb)pb.style.display='none';
+    switchProfile('me');
+    render();
+  }catch(e){
+    console.error('Init error:',e);
+    const mc=document.getElementById('main-content');
+    if(mc)mc.innerHTML=`<div style="padding:30px 16px;text-align:center;color:#E24B4A;font-size:13px">
+      <div style="margin-bottom:8px">⚠ App error: ${e.message}</div>
+      <div style="font-size:11px;color:#5F5E5A;word-break:break-all">${e.stack||''}</div>
+      <button onclick="location.reload()" style="margin-top:16px;padding:10px 20px;background:#252629;color:#e8e8e4;border:0.5px solid rgba(255,255,255,0.1);border-radius:8px;font-family:system-ui;font-size:13px;cursor:pointer">Retry</button>
+    </div>`;
+  }
 }
 
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});
