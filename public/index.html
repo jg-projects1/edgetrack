@@ -213,6 +213,21 @@ select option{background:#252629;color:#e8e8e4}
 </style>
 </head>
 <body>
+<div id="pin-screen" style="display:none;position:fixed;inset:0;background:#0f1012;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 20px">
+  <div style="font-size:22px;font-weight:500;color:#e8e8e4;margin-bottom:6px">MB<span style="color:#1D9E75">Empire</span></div>
+  <div style="font-size:13px;color:#5F5E5A;margin-bottom:40px">Enter PIN to continue</div>
+  <div style="display:flex;gap:12px;margin-bottom:32px" id="pin-dots">
+    <div style="width:14px;height:14px;border-radius:50%;border:1.5px solid #2e2f33;background:#1a1b1e" id="dot-0"></div>
+    <div style="width:14px;height:14px;border-radius:50%;border:1.5px solid #2e2f33;background:#1a1b1e" id="dot-1"></div>
+    <div style="width:14px;height:14px;border-radius:50%;border:1.5px solid #2e2f33;background:#1a1b1e" id="dot-2"></div>
+    <div style="width:14px;height:14px;border-radius:50%;border:1.5px solid #2e2f33;background:#1a1b1e" id="dot-3"></div>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(3,72px);gap:12px">
+    ${[1,2,3,4,5,6,7,8,9,'',0,'⌫'].map(k=>`<button onclick="pinKey('${k}')" style="height:72px;border-radius:16px;background:${k===''?'transparent':'#1a1b1e'};border:${k===''?'none':'0.5px solid rgba(255,255,255,0.08)'};color:#e8e8e4;font-size:${k==='⌫'?'20':'22'}px;font-weight:500;font-family:system-ui,-apple-system,sans-serif;cursor:${k===''?'default':'pointer'};transition:background .1s" ${k===''?'disabled':''}>${k}</button>`).join('')}
+  </div>
+  <div id="pin-error" style="margin-top:20px;font-size:13px;color:#E24B4A;opacity:0;transition:opacity .3s">Incorrect PIN</div>
+</div>
+<div id="app-content" style="display:none">
 <div class="app">
   <div class="topbar">
     <div class="logo">MB<span>Empire</span></div>
@@ -1562,26 +1577,83 @@ function selectCasinoBookie(name){
   const dd=document.getElementById('casino-bookie-dropdown');if(dd)dd.style.display='none';
 }
 
-async function init(){
-  try{
-    await loadData();
-    migrateLegacy();
-    const pb=document.getElementById('profile-bar');if(pb)pb.style.display='none';
-    switchProfile('me');
-    render();
-  }catch(e){
-    console.error('Init error:',e);
-    const mc=document.getElementById('main-content');
-    if(mc)mc.innerHTML=`<div style="padding:30px 16px;text-align:center;color:#E24B4A;font-size:13px">
-      <div style="margin-bottom:8px">⚠ App error: ${e.message}</div>
-      <div style="font-size:11px;color:#5F5E5A;word-break:break-all">${e.stack||''}</div>
-      <button onclick="location.reload()" style="margin-top:16px;padding:10px 20px;background:#252629;color:#e8e8e4;border:0.5px solid rgba(255,255,255,0.1);border-radius:8px;font-family:system-ui;font-size:13px;cursor:pointer">Retry</button>
-    </div>`;
+// ── PIN LOCK ──────────────────────────────────────────────────────────────────
+const CORRECT_PIN='0069';
+let pinEntry='';
+
+function pinKey(k){
+  if(k===''){return;}
+  if(k==='⌫'){
+    pinEntry=pinEntry.slice(0,-1);
+    updatePinDots();
+    return;
   }
+  if(pinEntry.length>=4)return;
+  pinEntry+=String(k);
+  updatePinDots();
+  if(pinEntry.length===4){
+    setTimeout(()=>{
+      if(pinEntry===CORRECT_PIN){
+        sessionStorage.setItem('mbe_unlocked','1');
+        document.getElementById('pin-screen').style.display='none';
+        document.getElementById('app-content').style.display='block';
+        loadApp();
+      }else{
+        const err=document.getElementById('pin-error');
+        if(err){err.style.opacity='1';setTimeout(()=>err.style.opacity='0',1500);}
+        // Shake dots
+        const dots=document.getElementById('pin-dots');
+        if(dots){dots.style.transform='translateX(-6px)';setTimeout(()=>{dots.style.transform='translateX(6px)';setTimeout(()=>dots.style.transform='',100);},100);}
+        pinEntry='';
+        updatePinDots();
+      }
+    },100);
+  }
+}
+
+function updatePinDots(){
+  for(let i=0;i<4;i++){
+    const dot=document.getElementById('dot-'+i);
+    if(dot){
+      dot.style.background=i<pinEntry.length?'#1D9E75':'#1a1b1e';
+      dot.style.borderColor=i<pinEntry.length?'#1D9E75':'#2e2f33';
+    }
+  }
+}
+
+function checkPin(){
+  if(sessionStorage.getItem('mbe_unlocked')==='1'){
+    document.getElementById('pin-screen').style.display='none';
+    document.getElementById('app-content').style.display='block';
+    loadApp();
+  }else{
+    // Build the PIN keypad dynamically
+    const ps=document.getElementById('pin-screen');
+    if(ps){
+      const grid=ps.querySelector('div[style*="grid-template-columns"]');
+      if(grid){
+        grid.innerHTML=[1,2,3,4,5,6,7,8,9,'',0,'⌫'].map(k=>`<button onclick="pinKey('${k}')" style="height:72px;border-radius:16px;background:${k===''?'transparent':'#1a1b1e'};border:${k===''?'none':'0.5px solid rgba(255,255,255,0.08)'};color:#e8e8e4;font-size:${k==='⌫'?'20':'22'}px;font-weight:500;font-family:system-ui,-apple-system,sans-serif;cursor:${k===''?'default':'pointer'}" ${k===''?'disabled':''}>${k}</button>`).join('');
+      }
+      ps.style.display='flex';
+    }
+  }
+}
+
+async function loadApp(){
+  await loadData();
+  migrateLegacy();
+  const pb=document.getElementById('profile-bar');if(pb)pb.style.display='none';
+  switchProfile('me');
+  render();
+}
+
+async function init(){async function init(){
+  checkPin();
 }
 
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});
 init();
 </script>
+</div>
 </body>
 </html>
