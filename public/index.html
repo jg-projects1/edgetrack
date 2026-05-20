@@ -1310,18 +1310,25 @@ let casinoView='log';
 let casinoOfferType='';
 let casinoPendingSpins=false;
 let casinoHasDeposit=false;
+let casinoOperator='JG';
 
 function renderCasino(){
   const allSessions=PROFILES.flatMap(p=>(state[p].casino||[]).map(s=>({...s,_acct:p}))).sort((a,b)=>b.id-a.id);
   const totalCasino=PROFILES.reduce((a,p)=>a+casinoPnl(p),0);
   const pending=allSessions.filter(s=>s.pending);
+  const jgPnl=allSessions.filter(s=>s.operator==='JG').reduce((a,s)=>a+(s.netProfit||0),0);
+  const jpPnl=allSessions.filter(s=>s.operator==='JP').reduce((a,s)=>a+(s.netProfit||0),0);
   return`
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
     <div class="metric-card" style="grid-column:span 2">
       <div class="metric-label"><i class="ti ti-cards" aria-hidden="true"></i>Casino P&L</div>
       <div class="metric-value ${totalCasino>=0?'pos':'neg'}">${fmtS(totalCasino)}</div>
-      <div class="metric-sub" style="display:flex;gap:8px;flex-wrap:wrap">
+      <div class="metric-sub" style="display:flex;gap:10px;flex-wrap:wrap">
         ${PROFILES.map(p=>`<span>${profileLabel(p)}: <span style="color:${casinoPnl(p)>=0?'#1D9E75':'#E24B4A'}">${fmtS(casinoPnl(p))}</span></span>`).join('')}
+      </div>
+      <div style="margin-top:6px;padding-top:6px;border-top:0.5px solid rgba(255,255,255,0.06);display:flex;gap:10px">
+        <span style="font-size:11px">JG: <span style="color:${jgPnl>=0?'#1D9E75':'#E24B4A'};font-weight:500">${fmtS(jgPnl)}</span></span>
+        <span style="font-size:11px">JP: <span style="color:${jpPnl>=0?'#1D9E75':'#E24B4A'};font-weight:500">${fmtS(jpPnl)}</span></span>
       </div>
     </div>
     ${pending.length?`<div class="metric-card" style="background:#633806;grid-column:span 2">
@@ -1350,6 +1357,13 @@ function renderCasinoForm(){
     <div class="form-section">
       <div class="form-label">Account</div>
       <div class="acct-selector">${PROFILES.map(pr=>`<button class="acct-sel-btn ${casinoFormAcct===pr?'active-'+pr:''}" onclick="casinoFormAcct='${pr}';document.getElementById('casino-view').innerHTML=renderCasinoForm()">${profileLabel(pr)}</button>`).join('')}</div>
+    </div>
+    <div style="margin-bottom:10px">
+      <div class="form-label">Operator</div>
+      <div style="display:flex;gap:6px">
+        <button onclick="casinoOperator='JG';document.getElementById('casino-view').innerHTML=renderCasinoForm()" style="flex:1;padding:9px;border-radius:8px;border:0.5px solid rgba(255,255,255,0.12);background:${casinoOperator==='JG'?'#0C447C':'#252629'};color:${casinoOperator==='JG'?'#85B7EB':'#888780'};font-family:system-ui,-apple-system,sans-serif;font-size:13px;font-weight:500;cursor:pointer">JG</button>
+        <button onclick="casinoOperator='JP';document.getElementById('casino-view').innerHTML=renderCasinoForm()" style="flex:1;padding:9px;border-radius:8px;border:0.5px solid rgba(255,255,255,0.12);background:${casinoOperator==='JP'?'#27500A':'#252629'};color:${casinoOperator==='JP'?'#97C459':'#888780'};font-family:system-ui,-apple-system,sans-serif;font-size:13px;font-weight:500;cursor:pointer">JP</button>
+      </div>
     </div>
     <div style="display:grid;grid-template-columns:100px 1fr 1fr;gap:8px;margin-bottom:8px">
       <div class="form-group"><div class="form-label">Date</div><input type="text" id="c-date" value="${todayStr()}" style="font-size:12px;padding:7px 9px"/></div>
@@ -1454,7 +1468,7 @@ function saveCasinoSession(){
 
 
 function resetCasinoForm(){
-  casinoPendingSpins=false;casinoHasDeposit=false;
+  casinoPendingSpins=false;casinoHasDeposit=false;casinoOperator='JG';
   ['c-casino','c-casino-search','c-deposit','c-wager','c-wager-pnl','c-bonus-win','c-notes'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   const d=document.getElementById('c-date');if(d)d.value=todayStr();
   const dd=document.getElementById('casino-bookie-dropdown');if(dd)dd.style.display='none';
