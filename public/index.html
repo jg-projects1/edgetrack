@@ -1663,6 +1663,13 @@ async function init(){
   checkPin();
 }
 
+// Prevent scroll wheel changing number inputs
+document.addEventListener('wheel', function(e){
+  if(document.activeElement&&document.activeElement.type==='number'){
+    document.activeElement.blur();
+  }
+}, {passive:false});
+
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});
 init();
 </script>
