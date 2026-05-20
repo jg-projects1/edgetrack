@@ -199,7 +199,7 @@ select option{background:#252629;color:#e8e8e4}
 .modal-sub{font-size:12px;color:#5F5E5A;margin-bottom:16px}
 .modal-actions{display:flex;gap:8px;margin-top:16px}
 
-.toast{position:fixed;bottom:calc(68px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%) translateY(16px);background:#e8e8e4;border-radius:20px;padding:10px 18px;font-size:12px;font-weight:500;color:#1a1b1e;z-index:999;opacity:0;transition:all .25s;pointer-events:none;white-space:nowrap;max-width:90vw}
+.toast{position:fixed;top:calc(70px + env(safe-area-inset-top));left:50%;transform:translateX(-50%) translateY(-16px);background:#1D9E75;border-radius:12px;padding:14px 24px;font-size:15px;font-weight:600;color:#fff;z-index:999;opacity:0;transition:all .3s cubic-bezier(.34,1.56,.64,1);pointer-events:none;white-space:nowrap;max-width:90vw;box-shadow:0 4px 24px rgba(0,0,0,0.4);display:flex;align-items:center;gap:8px}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 
 .loading{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:50vh;gap:12px;color:#5F5E5A;font-size:13px}
@@ -354,6 +354,7 @@ function migrateLegacy(){
 
 let currentProfile='me',currentTab='dashboard',formAccount='me',selectedBetType='',exchTransferBank='me';
 let recentBookies=[]; // tracks last 8 used bookies
+let lastSavedTrade=null; // for quick duplicate after save
 let lastExchange=''; // tracks last used exchange
 let showMoreTypes=false; // toggle for extra bet types
 let showComm=false; // toggle for commission field
@@ -392,9 +393,11 @@ function statusBadge(s){
 }
 
 function showToast(msg,type='success'){
-  const t=document.getElementById('toast');t.textContent=msg;
+  const t=document.getElementById('toast');
+  t.innerHTML=`<span style="font-size:18px">${type==='success'?'✓':type==='error'?'✗':'ℹ'}</span> ${msg}`;
   t.style.background=type==='success'?'#1D9E75':type==='error'?'#E24B4A':'#252629';
-  t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),3000);
 }
 
 function switchTab(t){
@@ -633,6 +636,14 @@ function renderAdd(prefill){
   const moreTypes=['Mug','Extra Place','2Up','MBAL','Cash Back','Cash Out','Arb'];
   const isMoreSel=moreTypes.includes(selectedBetType);
   return`
+  ${lastSavedTrade&&!prefill?`<div style="background:#1a1b1e;border:0.5px solid rgba(255,255,255,0.08);border-radius:12px;padding:12px 16px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:10px">
+    <div style="min-width:0">
+      <div style="font-size:10px;color:#5F5E5A;font-weight:500;text-transform:uppercase;letter-spacing:.3px;margin-bottom:3px">Last saved</div>
+      <div style="font-size:13px;font-weight:500;color:#e8e8e4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${lastSavedTrade.bookie}${lastSavedTrade.event?' · '+lastSavedTrade.event:''}</div>
+      <div style="font-size:11px;color:#5F5E5A;margin-top:2px">${lastSavedTrade.type} · ${PROFILE_LABELS[lastSavedTrade._acct]||lastSavedTrade._acct}</div>
+    </div>
+    <button onclick="duplicateTrade(lastSavedTrade._acct,null,lastSavedTrade)" style="flex-shrink:0;padding:8px 14px;border-radius:8px;border:0.5px solid #185FA5;background:#0C447C;color:#85B7EB;font-family:system-ui,-apple-system,sans-serif;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap"><i class="ti ti-copy"></i> Duplicate</button>
+  </div>`:''}
   <div class="card">
     <div class="card-header">
       <div style="display:flex;align-items:center;gap:8px">
@@ -841,7 +852,10 @@ function submitTx(){
   const usedExchange=document.getElementById('f-exchange')?.value||'';
   if(usedBookie){recentBookies=([usedBookie,...recentBookies.filter(b=>b!==usedBookie)]).slice(0,8);}
   if(usedExchange)lastExchange=usedExchange;
-  save();showToast('Saved!');msg.textContent='';
+  // Store last saved tx for quick duplicate
+  const lastTx={type:selectedBetType,bookie:document.getElementById('f-bookie')?.value||(document.getElementById('f-bookie-search')?.value||''),exchange:document.getElementById('f-exchange')?.value||'',event:document.getElementById('f-event')?.value||'',bstake:document.getElementById('f-bstake')?.value||'',bodds:document.getElementById('f-bodds')?.value||'',pnl:document.getElementById('f-pnl')?.value||'',_acct:formAccount};
+  lastSavedTrade=lastTx;
+  save();showToast('✓ Trade saved');msg.textContent='';
   // Stay on form — keep type, bookie, exchange; clear event/stake/odds/pnl
   const keepBookie=document.getElementById('f-bookie-search')?.value||'';
   const keepBookieVal=document.getElementById('f-bookie')?.value||'';
@@ -859,8 +873,8 @@ function submitTx(){
   }
 }
 
-function duplicateTrade(acct,id){
-  const tx=(state[acct].transactions||[]).find(t=>t.id===id);if(!tx)return;
+function duplicateTrade(acct,id,rawTx){
+  const tx=rawTx||(state[acct]?.transactions||[]).find(t=>t.id===id);if(!tx)return;
   formAccount=acct;selectedBetType=tx.type||'';
   currentTab='add';document.querySelectorAll('.tab').forEach(el=>el.classList.remove('active'));
   document.getElementById('tab-add')?.classList.add('active');
