@@ -396,7 +396,7 @@ function switchTab(t){
   document.querySelectorAll('.tab').forEach(el=>el.classList.remove('active'));
   const el=document.getElementById('tab-'+t);if(el)el.classList.add('active');
   const pb=document.getElementById('profile-bar');
-  if(pb)pb.style.display=(t==='dashboard'||t==='risk')?'none':'flex';
+  if(pb)pb.style.display=(t==='dashboard'||t==='risk'||t==='add')?'none':'flex';
   render();window.scrollTo(0,0);
 }
 
