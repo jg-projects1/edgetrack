@@ -239,7 +239,6 @@ select option{background:#252629;color:#e8e8e4}
     <button class="tab" id="tab-accounts" onclick="switchTab('accounts')"><i class="ti ti-building-bank" aria-hidden="true"></i><span class="tab-label">Accounts</span></button>
     <button class="tab" id="tab-reports" onclick="switchTab('reports')"><i class="ti ti-chart-bar" aria-hidden="true"></i><span class="tab-label">Reports</span></button>
     <button class="tab" id="tab-risk" onclick="switchTab('risk')"><i class="ti ti-shield" aria-hidden="true"></i><span class="tab-label">Risk</span></button>
-    <button class="tab" id="tab-casino" onclick="switchTab('casino')"><i class="ti ti-device-gamepad-2" aria-hidden="true"></i><span class="tab-label">Casino</span></button>
   </div>
 </div>
 <div class="toast" id="toast"></div>
@@ -321,7 +320,7 @@ const DEFAULT_BOOKIES=[
   'Unibet','Vbet','Video Slots','Virgin Bet','Virgin Games','William Hill'
 ];
 
-function makeProfile(){return{bookies:{},bank:0,transactions:[],casino:[]};}
+function makeProfile(){const b={};DEFAULT_BOOKIES.forEach(x=>b[x]={bal:0,status:'Active',notes:''});return{bookies:b,bank:0,transactions:[]};}
 
 let currentProfile='me',currentTab='dashboard',formAccount='me',selectedBetType='',exchTransferBank='me';
 let recentBookies=[]; // tracks last 8 used bookies
@@ -342,8 +341,7 @@ function todayStr(){const d=new Date();return[String(d.getDate()).padStart(2,'0'
 function profileColor(p){return PROFILE_COLORS[p]||'#888780';}
 function profileLabel(p){return PROFILE_LABELS[p]||p;}
 function isFreeBet(type){return FREE_BET_TYPES.includes(type);}
-function casinoPnl(p){return(state[p].casino||[]).reduce((a,s)=>a+(s.netProfit||0),0);}
-function sportsPnl(p){return(state[p].transactions||[]).filter(t=>t.type!=='Balance Amendment').reduce((a,t)=>a+(t.pnl||0),0);}
+function totalPnl(p){return(state[p].transactions||[]).filter(t=>t.type!=='Balance Amendment').reduce((a,t)=>a+(t.pnl||0),0);}
 
 function getTypeColor(t){
   const map={'Qualifier':'#0C447C','Free Bet':'#27500A','Boost':'#633806','Mug':'#042C53'};
@@ -372,7 +370,7 @@ function switchTab(t){
   document.querySelectorAll('.tab').forEach(el=>el.classList.remove('active'));
   const el=document.getElementById('tab-'+t);if(el)el.classList.add('active');
   const pb=document.getElementById('profile-bar');
-  if(pb)pb.style.display=(t==='dashboard'||t==='risk'||t==='casino')?'none':'flex';
+  if(pb)pb.style.display=(t==='dashboard'||t==='risk')?'none':'flex';
   render();window.scrollTo(0,0);
 }
 
@@ -398,7 +396,6 @@ function render(){
   else if(currentTab==='accounts')el.innerHTML=renderAccounts();
   else if(currentTab==='reports')el.innerHTML=renderReports();
   else if(currentTab==='risk')el.innerHTML=renderRisk();
-  else if(currentTab==='casino')el.innerHTML=renderCasino();
   updateBadge();
   if(currentTab==='add')bindFormEvents();
 }
@@ -425,18 +422,13 @@ function renderDashboard(){
   const combinedPnl=PROFILES.reduce((a,p)=>a+totalPnl(p),0);
   const allMap=monthlyPnl(allTxs());
   const totalTrades=PROFILES.reduce((a,p)=>a+(state[p].transactions||[]).length,0);
-  const combinedSports=PROFILES.reduce((a,p)=>a+sportsPnl(p),0);
-  const combinedCasino=PROFILES.reduce((a,p)=>a+casinoPnl(p),0);
-  const combinedTotal=combinedSports+combinedCasino;
+  const combinedPnl=PROFILES.reduce((a,p)=>a+totalPnl(p),0);
   return`
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
     <div class="metric-card" style="grid-column:span 2">
-      <div class="metric-label"><i class="ti ti-trending-up" aria-hidden="true"></i>Total P&L</div>
-      <div class="metric-value ${combinedTotal>=0?'pos':'neg'}">${fmtS(combinedTotal)}</div>
-      <div class="metric-sub" style="display:flex;gap:10px">
-        <span>Sports: <span style="color:${combinedSports>=0?'#1D9E75':'#E24B4A'}">${fmtS(combinedSports)}</span></span>
-        <span>Casino: <span style="color:${combinedCasino>=0?'#1D9E75':'#E24B4A'}">${fmtS(combinedCasino)}</span></span>
-      </div>
+      <div class="metric-label"><i class="ti ti-trending-up" aria-hidden="true"></i>Combined P&L</div>
+      <div class="metric-value ${combinedPnl>=0?'pos':'neg'}">${fmtS(combinedPnl)}</div>
+      <div class="metric-sub">All accounts · ${totalTrades} trades</div>
     </div>
     ${pending.length?`<div class="metric-card" style="background:#633806;grid-column:span 2;cursor:pointer" onclick="switchTab('pending')">
       <div class="metric-label" style="color:#EF9F27"><i class="ti ti-clock" aria-hidden="true"></i>Pending</div>
@@ -446,25 +438,19 @@ function renderDashboard(){
   </div>
   <div class="acct-grid">
     ${PROFILES.map(p=>{
-      const sports=sportsPnl(p);
-      const casino=casinoPnl(p);
-      const total=sports+casino;
+      const pnl=totalPnl(p);
       return`<div class="acct-card">
         <div class="acct-top">
           <div class="acct-name"><div class="acct-dot dot-${p}"></div>${profileLabel(p)}</div>
-          <div class="acct-pnl ${total>=0?'pos':'neg'}">${fmtS(total)}</div>
+          <div class="acct-pnl ${pnl>=0?'pos':'neg'}">${fmtS(pnl)}</div>
         </div>
         <div class="acct-row">
           <span class="acct-row-label"><i class="ti ti-building-bank" aria-hidden="true"></i>Bank</span>
           <span class="acct-row-val">${fmt(state[p].bank)}</span>
         </div>
         <div class="acct-row">
-          <span class="acct-row-label"><i class="ti ti-device-gamepad-2" aria-hidden="true"></i>Sports</span>
-          <span class="acct-row-val ${sports>=0?'pos':'neg'}">${fmtS(sports)}</span>
-        </div>
-        <div class="acct-row">
-          <span class="acct-row-label"><i class="ti ti-cards" aria-hidden="true"></i>Casino</span>
-          <span class="acct-row-val ${casino>=0?'pos':'neg'}">${fmtS(casino)}</span>
+          <span class="acct-row-label"><i class="ti ti-wallet" aria-hidden="true"></i>Bookies</span>
+          <span class="acct-row-val">${fmt(totalBookie(p))}</span>
         </div>
       </div>`;
     }).join('')}
@@ -1259,238 +1245,6 @@ function getRiskAdvice(risk){
   if(risk.totalPnl>300)tips.push('Consider a gradual withdrawal to avoid drawing attention');
   if(risk.betsPerWeek>15)tips.push('Reduce bet frequency — spread bets across more days');
   return tips.length?tips.join(' · '):'Keep logging mug bets regularly to maintain a natural pattern';
-}
-
-// ── CASINO ───────────────────────────────────────────────────────────────────
-const CASINO_OFFER_TYPES=['Reload','Welcome','Free Spins','Cashback','Other'];
-let casinoFormAcct='me';
-let casinoView='log'; // 'log' or 'history'
-
-function renderCasino(){
-  const allSessions=PROFILES.flatMap(p=>(state[p].casino||[]).map(s=>({...s,_acct:p}))).sort((a,b)=>b.id-a.id);
-  const totalCasino=PROFILES.reduce((a,p)=>a+casinoPnl(p),0);
-  const pending=allSessions.filter(s=>s.pending);
-  return`
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
-    <div class="metric-card" style="grid-column:span 2">
-      <div class="metric-label"><i class="ti ti-cards" aria-hidden="true"></i>Casino P&L</div>
-      <div class="metric-value ${totalCasino>=0?'pos':'neg'}">${fmtS(totalCasino)}</div>
-      <div class="metric-sub" style="display:flex;gap:10px">
-        ${PROFILES.map(p=>`<span>${profileLabel(p)}: <span style="color:${casinoPnl(p)>=0?'#1D9E75':'#E24B4A'}">${fmtS(casinoPnl(p))}</span></span>`).join('')}
-      </div>
-    </div>
-    ${pending.length?`<div class="metric-card" style="background:#633806;grid-column:span 2">
-      <div class="metric-label" style="color:#EF9F27"><i class="ti ti-clock" aria-hidden="true"></i>Pending free spins</div>
-      <div class="metric-value warn">${pending.length}</div>
-      <div class="metric-sub" style="color:#EF9F27">Sessions awaiting free spin results</div>
-    </div>`:''}
-  </div>
-
-  <div style="display:flex;gap:8px;margin-bottom:14px">
-    <button onclick="casinoView='log';renderCasinoView()" class="btn ${casinoView==='log'?'btn-primary':'btn-ghost'}" style="flex:1;padding:10px">Log session</button>
-    <button onclick="casinoView='history';renderCasinoView()" class="btn ${casinoView==='history'?'btn-primary':'btn-ghost'}" style="flex:1;padding:10px">History</button>
-  </div>
-
-  <div id="casino-view">${casinoView==='log'?renderCasinoForm():renderCasinoHistory(allSessions)}</div>`;
-}
-
-function renderCasinoView(){
-  const allSessions=PROFILES.flatMap(p=>(state[p].casino||[]).map(s=>({...s,_acct:p}))).sort((a,b)=>b.id-a.id);
-  const el=document.getElementById('casino-view');
-  if(el)el.innerHTML=casinoView==='log'?renderCasinoForm():renderCasinoHistory(allSessions);
-}
-
-function renderCasinoForm(){
-  return`<div class="card"><div class="card-header">
-    <div style="display:flex;align-items:center;gap:8px">
-      <div style="width:8px;height:8px;border-radius:50%;background:${profileColor(casinoFormAcct)}"></div>
-      <span class="card-title">Log casino session</span>
-    </div>
-  </div>
-  <div class="card-body" style="padding-bottom:80px">
-    <div class="form-section">
-      <div class="form-label">Account</div>
-      <div class="acct-selector">${PROFILES.map(pr=>`<button class="acct-sel-btn ${casinoFormAcct===pr?'active-'+pr:''}" onclick="casinoFormAcct='${pr}';renderCasinoView()">${profileLabel(pr)}</button>`).join('')}</div>
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
-      <div class="form-group"><div class="form-label">Date</div><input type="text" id="c-date" placeholder="DD/MM/YYYY" value="${todayStr()}" style="font-size:12px;padding:7px 9px"/></div>
-      <div class="form-group"><div class="form-label">Casino</div><input type="text" id="c-casino" placeholder="e.g. Casumo" autocomplete="off"/></div>
-    </div>
-    <div style="margin-bottom:8px">
-      <div class="form-label">Offer type</div>
-      <div style="display:flex;gap:5px;flex-wrap:wrap">${CASINO_OFFER_TYPES.map(t=>`<div class="type-pill" data-ctype="${t}" onclick="selectCasinoType('${t}')">${t}</div>`).join('')}</div>
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
-      <div class="form-group"><div class="form-label">Deposit (£) <span style="font-size:9px;color:#444441;text-transform:none">optional</span></div><input type="number" id="c-deposit" placeholder="0.00" step="0.01" inputmode="decimal"/></div>
-      <div class="form-group"><div class="form-label">Bonus cash (£) <span style="font-size:9px;color:#444441;text-transform:none">optional</span></div><input type="number" id="c-bonus" placeholder="0.00" step="0.01" inputmode="decimal"/></div>
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
-      <div class="form-group"><div class="form-label">Wager amount (£)</div><input type="number" id="c-wager" placeholder="0.00" step="0.01" inputmode="decimal"/></div>
-      <div class="form-group"><div class="form-label">Wager P&L (£)</div><input type="number" id="c-wager-pnl" placeholder="e.g. -8.50" step="0.01" inputmode="decimal" oninput="updateCasinoNet()"/></div>
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
-      <div class="form-group"><div class="form-label">Free spins (count) <span style="font-size:9px;color:#444441;text-transform:none">optional</span></div><input type="number" id="c-spins" placeholder="0" step="1" inputmode="numeric" oninput="updateCasinoNet()"/></div>
-      <div class="form-group"><div class="form-label">Free spins winnings (£)</div><input type="number" id="c-spins-win" placeholder="0.00" step="0.01" inputmode="decimal" oninput="updateCasinoNet()"/></div>
-    </div>
-    <div style="margin-bottom:8px">
-      <div class="form-label">Free spins pending?</div>
-      <div style="display:flex;gap:8px">
-        <button id="c-pending-no" onclick="setCasinoPending(false)" style="flex:1;padding:8px;border-radius:8px;border:0.5px solid rgba(255,255,255,0.1);background:#27500A;color:#97C459;font-family:system-ui,-apple-system,sans-serif;font-size:12px;font-weight:500;cursor:pointer">No — all done</button>
-        <button id="c-pending-yes" onclick="setCasinoPending(true)" style="flex:1;padding:8px;border-radius:8px;border:0.5px solid rgba(255,255,255,0.1);background:#252629;color:#888780;font-family:system-ui,-apple-system,sans-serif;font-size:12px;font-weight:500;cursor:pointer">Yes — spins pending</button>
-      </div>
-    </div>
-    <input type="hidden" id="c-pending-val" value="false"/>
-    <div style="background:#252629;border-radius:8px;padding:12px;margin-bottom:8px">
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <span style="font-size:12px;color:#888780">Net profit</span>
-        <span id="c-net-display" style="font-size:20px;font-weight:500;color:#1D9E75">+£0.00</span>
-      </div>
-      <div style="font-size:10px;color:#444441;margin-top:3px">Wager P&L + Bonus cash + Free spins winnings</div>
-    </div>
-    <div class="form-group" style="margin-bottom:8px"><div class="form-label">Notes <span style="font-size:9px;color:#444441;text-transform:none">optional</span></div><input type="text" id="c-notes" placeholder="e.g. 30x wagering, slots only"/></div>
-    <div id="c-msg" style="font-size:12px;color:#E24B4A;margin-bottom:6px;text-align:center"></div>
-  </div>
-  <div style="position:fixed;bottom:calc(58px + env(safe-area-inset-bottom));left:0;right:0;padding:10px 16px;background:#0f1012;border-top:0.5px solid rgba(255,255,255,0.06);display:flex;gap:8px;z-index:90;max-width:680px;margin:0 auto">
-    <button class="btn btn-ghost" onclick="resetCasinoForm()" style="width:72px;flex-shrink:0">Clear</button>
-    <button class="btn btn-primary btn-full" onclick="saveCasinoSession()"><i class="ti ti-check" aria-hidden="true"></i> Save session</button>
-  </div>
-  </div>`;
-}
-
-let casinoOfferType='';
-let casinoPendingSpins=false;
-
-function selectCasinoType(t){
-  casinoOfferType=t;
-  document.querySelectorAll('[data-ctype]').forEach(el=>{
-    el.className='type-pill';
-    if(el.dataset.ctype===t)el.classList.add('sel','sel-'+t.toLowerCase().replace(/\s/g,''));
-  });
-}
-
-function setCasinoPending(val){
-  casinoPendingSpins=val;
-  const pv=document.getElementById('c-pending-val');if(pv)pv.value=val;
-  const yes=document.getElementById('c-pending-yes'),no=document.getElementById('c-pending-no');
-  if(yes&&no){
-    yes.style.background=val?'#633806':'#252629';yes.style.color=val?'#EF9F27':'#888780';
-    no.style.background=!val?'#27500A':'#252629';no.style.color=!val?'#97C459':'#888780';
-  }
-}
-
-function updateCasinoNet(){
-  const wagerPnl=parseFloat(document.getElementById('c-wager-pnl')?.value)||0;
-  const bonus=parseFloat(document.getElementById('c-bonus')?.value)||0;
-  const spinsWin=parseFloat(document.getElementById('c-spins-win')?.value)||0;
-  const net=wagerPnl+bonus+spinsWin;
-  const el=document.getElementById('c-net-display');
-  if(el){el.textContent=fmtS(net);el.style.color=net>=0?'#1D9E75':'#E24B4A';}
-}
-
-function saveCasinoSession(){
-  const msg=document.getElementById('c-msg');
-  const casino=document.getElementById('c-casino')?.value?.trim();
-  if(!casino){msg.textContent='Enter a casino name.';return;}
-  const wagerPnl=parseFloat(document.getElementById('c-wager-pnl')?.value)||0;
-  const bonus=parseFloat(document.getElementById('c-bonus')?.value)||0;
-  const spinsWin=parseFloat(document.getElementById('c-spins-win')?.value)||0;
-  const net=wagerPnl+bonus+spinsWin;
-  const session={
-    id:Date.now(),
-    date:document.getElementById('c-date')?.value||todayStr(),
-    casino,
-    offerType:casinoOfferType||'Other',
-    deposit:parseFloat(document.getElementById('c-deposit')?.value)||0,
-    bonus,
-    wager:parseFloat(document.getElementById('c-wager')?.value)||0,
-    wagerPnl,
-    spins:parseInt(document.getElementById('c-spins')?.value)||0,
-    spinsWin,
-    netProfit:net,
-    pending:casinoPendingSpins,
-    notes:document.getElementById('c-notes')?.value||'',
-    _acct:casinoFormAcct,
-  };
-  // Update bank balance: deposit reduces bank
-  if(session.deposit>0)state[casinoFormAcct].bank-=session.deposit;
-  // Withdrawal (net positive) increases bank
-  if(net>0)state[casinoFormAcct].bank+=net;
-  if(!state[casinoFormAcct].casino)state[casinoFormAcct].casino=[];
-  state[casinoFormAcct].casino.push(session);
-  save();showToast('Casino session saved!');
-  resetCasinoForm();
-  renderCasinoView();
-}
-
-function resetCasinoForm(){
-  casinoOfferType='';casinoPendingSpins=false;
-  ['c-date','c-casino','c-deposit','c-bonus','c-wager','c-wager-pnl','c-spins','c-spins-win','c-notes'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
-  const d=document.getElementById('c-date');if(d)d.value=todayStr();
-  renderCasinoView();
-}
-
-function renderCasinoHistory(sessions){
-  if(!sessions.length)return`<div class="empty">No casino sessions yet</div>`;
-  return`<div class="card"><div class="card-header"><span class="card-title">Casino sessions</span><span style="font-size:11px;color:#5F5E5A">${sessions.length} sessions</span></div>
-  ${sessions.map(s=>{
-    const netCol=s.netProfit>=0?'pos':'neg';
-    return`<div class="list-row">
-      <div class="list-row-left">
-        <div class="list-row-title">${s.casino}${s.pending?' <span style="font-size:10px;color:#EF9F27">⏳ spins pending</span>':''}</div>
-        <div class="list-row-meta">
-          <span class="pill" style="background:#252629;color:#888780">${s.offerType}</span>
-          ${acctPill(s._acct)}
-          <span style="font-size:10px;color:#5F5E5A">${s.date}</span>
-          ${s.spins?`<span style="font-size:10px;color:#5F5E5A">${s.spins} spins</span>`:''}
-          ${s.wager?`<span style="font-size:10px;color:#5F5E5A">wagered £${s.wager}</span>`:''}
-        </div>
-      </div>
-      <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
-        <div class="list-row-right ${netCol}">${fmtS(s.netProfit)}</div>
-        ${s.pending?`<button class="btn-sm btn-sm-edit" onclick="settleCasinoSpins('${s._acct}',${s.id})">Add spins</button>`:''}
-        <button class="btn-sm btn-sm-danger" onclick="deleteCasinoSession('${s._acct}',${s.id})" style="padding:3px 7px"><i class="ti ti-trash" aria-hidden="true"></i></button>
-      </div>
-    </div>`;
-  }).join('')}</div>`;
-}
-
-function settleCasinoSpins(acct,id){
-  const session=(state[acct].casino||[]).find(s=>s.id===id);if(!session)return;
-  document.getElementById('modal-root').innerHTML=`
-  <div class="modal-bg" onclick="if(event.target===this)closeModal()">
-    <div class="modal">
-      <div class="modal-handle"></div>
-      <div class="modal-title">Add free spin results</div>
-      <div class="modal-sub">${session.casino} · ${session.date}</div>
-      <div style="margin-bottom:12px"><div class="form-label">Free spins winnings (£)</div><input type="number" id="modal-spins-win" step="0.01" placeholder="0.00" inputmode="decimal" style="font-size:20px;font-weight:500;border-color:#1D9E75;background:#0d1f19"/></div>
-      <div class="modal-actions">
-        <button class="btn btn-primary" style="flex:1" onclick="confirmCasinoSpins('${acct}',${id})">Save</button>
-        <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
-      </div>
-    </div>
-  </div>`;
-  setTimeout(()=>document.getElementById('modal-spins-win')?.focus(),50);
-}
-
-function confirmCasinoSpins(acct,id){
-  const win=parseFloat(document.getElementById('modal-spins-win')?.value)||0;
-  const session=(state[acct].casino||[]).find(s=>s.id===id);if(!session)return;
-  session.spinsWin=(session.spinsWin||0)+win;
-  session.netProfit=session.wagerPnl+session.bonus+session.spinsWin;
-  session.pending=false;
-  // Update bank with spin winnings
-  if(win>0)state[acct].bank+=win;
-  save();closeModal();showToast('Spin results added!');
-  const allSessions=PROFILES.flatMap(p=>(state[p].casino||[]).map(s=>({...s,_acct:p}))).sort((a,b)=>b.id-a.id);
-  const el=document.getElementById('casino-view');if(el)el.innerHTML=renderCasinoHistory(allSessions);
-}
-
-function deleteCasinoSession(acct,id){
-  if(!confirm('Delete session?'))return;
-  state[acct].casino=state[acct].casino.filter(s=>s.id!==id);
-  save();
-  const allSessions=PROFILES.flatMap(p=>(state[p].casino||[]).map(s=>({...s,_acct:p}))).sort((a,b)=>b.id-a.id);
-  const el=document.getElementById('casino-view');if(el)el.innerHTML=renderCasinoHistory(allSessions);
 }
 
 async function init(){
