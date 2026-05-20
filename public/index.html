@@ -213,31 +213,7 @@ select option{background:#252629;color:#e8e8e4}
 </style>
 </head>
 <body>
-<div id="pin-screen" style="display:none;position:fixed;inset:0;background:#0f1012;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 20px">
-  <div style="font-size:22px;font-weight:500;color:#e8e8e4;margin-bottom:6px">MB<span style="color:#1D9E75">Empire</span></div>
-  <div style="font-size:13px;color:#5F5E5A;margin-bottom:40px">Enter PIN to continue</div>
-  <div style="display:flex;gap:12px;margin-bottom:32px" id="pin-dots">
-    <div style="width:14px;height:14px;border-radius:50%;border:1.5px solid #2e2f33;background:#1a1b1e" id="dot-0"></div>
-    <div style="width:14px;height:14px;border-radius:50%;border:1.5px solid #2e2f33;background:#1a1b1e" id="dot-1"></div>
-    <div style="width:14px;height:14px;border-radius:50%;border:1.5px solid #2e2f33;background:#1a1b1e" id="dot-2"></div>
-    <div style="width:14px;height:14px;border-radius:50%;border:1.5px solid #2e2f33;background:#1a1b1e" id="dot-3"></div>
-  </div>
-  <div style="display:grid;grid-template-columns:repeat(3,72px);gap:12px">
-    <button onclick="pinKey('1')" style="height:72px;border-radius:16px;background:#1a1b1e;border:0.5px solid rgba(255,255,255,0.08);color:#e8e8e4;font-size:22px;font-weight:500;font-family:system-ui,-apple-system,sans-serif;cursor:pointer">1</button>
-    <button onclick="pinKey('2')" style="height:72px;border-radius:16px;background:#1a1b1e;border:0.5px solid rgba(255,255,255,0.08);color:#e8e8e4;font-size:22px;font-weight:500;font-family:system-ui,-apple-system,sans-serif;cursor:pointer">2</button>
-    <button onclick="pinKey('3')" style="height:72px;border-radius:16px;background:#1a1b1e;border:0.5px solid rgba(255,255,255,0.08);color:#e8e8e4;font-size:22px;font-weight:500;font-family:system-ui,-apple-system,sans-serif;cursor:pointer">3</button>
-    <button onclick="pinKey('4')" style="height:72px;border-radius:16px;background:#1a1b1e;border:0.5px solid rgba(255,255,255,0.08);color:#e8e8e4;font-size:22px;font-weight:500;font-family:system-ui,-apple-system,sans-serif;cursor:pointer">4</button>
-    <button onclick="pinKey('5')" style="height:72px;border-radius:16px;background:#1a1b1e;border:0.5px solid rgba(255,255,255,0.08);color:#e8e8e4;font-size:22px;font-weight:500;font-family:system-ui,-apple-system,sans-serif;cursor:pointer">5</button>
-    <button onclick="pinKey('6')" style="height:72px;border-radius:16px;background:#1a1b1e;border:0.5px solid rgba(255,255,255,0.08);color:#e8e8e4;font-size:22px;font-weight:500;font-family:system-ui,-apple-system,sans-serif;cursor:pointer">6</button>
-    <button onclick="pinKey('7')" style="height:72px;border-radius:16px;background:#1a1b1e;border:0.5px solid rgba(255,255,255,0.08);color:#e8e8e4;font-size:22px;font-weight:500;font-family:system-ui,-apple-system,sans-serif;cursor:pointer">7</button>
-    <button onclick="pinKey('8')" style="height:72px;border-radius:16px;background:#1a1b1e;border:0.5px solid rgba(255,255,255,0.08);color:#e8e8e4;font-size:22px;font-weight:500;font-family:system-ui,-apple-system,sans-serif;cursor:pointer">8</button>
-    <button onclick="pinKey('9')" style="height:72px;border-radius:16px;background:#1a1b1e;border:0.5px solid rgba(255,255,255,0.08);color:#e8e8e4;font-size:22px;font-weight:500;font-family:system-ui,-apple-system,sans-serif;cursor:pointer">9</button>
-    <div style="height:72px"></div>
-    <button onclick="pinKey('0')" style="height:72px;border-radius:16px;background:#1a1b1e;border:0.5px solid rgba(255,255,255,0.08);color:#e8e8e4;font-size:22px;font-weight:500;font-family:system-ui,-apple-system,sans-serif;cursor:pointer">0</button>
-    <button onclick="pinKey('x')" style="height:72px;border-radius:16px;background:#1a1b1e;border:0.5px solid rgba(255,255,255,0.08);color:#e8e8e4;font-size:20px;font-weight:500;font-family:system-ui,-apple-system,sans-serif;cursor:pointer">⌫</button>
-  </div>
-  <div id="pin-error" style="margin-top:20px;font-size:13px;color:#E24B4A;opacity:0;transition:opacity .3s">Incorrect PIN</div>
-</div>
+<div id="pin-screen" style="display:none"></div>
 <div id="app-content" style="display:none">
 <div class="app">
   <div class="topbar">
@@ -1637,17 +1613,28 @@ function checkPin(){
     document.getElementById('pin-screen').style.display='none';
     document.getElementById('app-content').style.display='block';
     loadApp();
-  }else{
-    // Build the PIN keypad dynamically
-    const ps=document.getElementById('pin-screen');
-    if(ps){
-      const grid=ps.querySelector('div[style*="grid-template-columns"]');
-      if(grid){
-        grid.innerHTML=[1,2,3,4,5,6,7,8,9,'',0,'⌫'].map(k=>`<button onclick="pinKey('${k}')" style="height:72px;border-radius:16px;background:${k===''?'transparent':'#1a1b1e'};border:${k===''?'none':'0.5px solid rgba(255,255,255,0.08)'};color:#e8e8e4;font-size:${k==='⌫'?'20':'22'}px;font-weight:500;font-family:system-ui,-apple-system,sans-serif;cursor:${k===''?'default':'pointer'}" ${k===''?'disabled':''}>${k}</button>`).join('');
-      }
-      ps.style.display='flex';
-    }
+    return;
   }
+  // Render PIN screen dynamically so pinKey is already defined
+  const ps=document.getElementById('pin-screen');
+  ps.style.cssText='display:flex;position:fixed;inset:0;background:#0f1012;z-index:9999;flex-direction:column;align-items:center;justify-content:center;padding:40px 20px';
+  ps.innerHTML=`
+    <div style="font-size:22px;font-weight:500;color:#e8e8e4;margin-bottom:6px">MB<span style="color:#1D9E75">Empire</span></div>
+    <div style="font-size:13px;color:#5F5E5A;margin-bottom:40px">Enter PIN to continue</div>
+    <div style="display:flex;gap:12px;margin-bottom:32px" id="pin-dots">
+      <div style="width:14px;height:14px;border-radius:50%;border:1.5px solid #2e2f33;background:#1a1b1e" id="dot-0"></div>
+      <div style="width:14px;height:14px;border-radius:50%;border:1.5px solid #2e2f33;background:#1a1b1e" id="dot-1"></div>
+      <div style="width:14px;height:14px;border-radius:50%;border:1.5px solid #2e2f33;background:#1a1b1e" id="dot-2"></div>
+      <div style="width:14px;height:14px;border-radius:50%;border:1.5px solid #2e2f33;background:#1a1b1e" id="dot-3"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,72px);gap:12px">
+      ${[1,2,3,4,5,6,7,8,9,'',0,'⌫'].map(k=>k===''
+        ?'<div style="height:72px"></div>'
+        :`<button onclick="pinKey('${k==='⌫'?'x':k}')" style="height:72px;border-radius:16px;background:#1a1b1e;border:0.5px solid rgba(255,255,255,0.08);color:#e8e8e4;font-size:${k==='⌫'?'20':'22'}px;font-weight:500;font-family:system-ui,-apple-system,sans-serif;cursor:pointer;-webkit-tap-highlight-color:transparent" ontouchstart="this.style.background='#252629'" ontouchend="this.style.background='#1a1b1e'">${k}</button>`
+      ).join('')}
+    </div>
+    <div id="pin-error" style="margin-top:20px;font-size:13px;color:#E24B4A;opacity:0;transition:opacity .3s">Incorrect PIN</div>
+  `;
 }
 
 async function loadApp(){
@@ -1658,7 +1645,7 @@ async function loadApp(){
   render();
 }
 
-async function init(){async function init(){
+async function init(){
   checkPin();
 }
 
