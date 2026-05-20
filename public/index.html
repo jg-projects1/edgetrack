@@ -239,6 +239,7 @@ select option{background:#252629;color:#e8e8e4}
     <button class="tab" id="tab-accounts" onclick="switchTab('accounts')"><i class="ti ti-building-bank" aria-hidden="true"></i><span class="tab-label">Accounts</span></button>
     <button class="tab" id="tab-reports" onclick="switchTab('reports')"><i class="ti ti-chart-bar" aria-hidden="true"></i><span class="tab-label">Reports</span></button>
     <button class="tab" id="tab-risk" onclick="switchTab('risk')"><i class="ti ti-shield" aria-hidden="true"></i><span class="tab-label">Risk</span></button>
+    <button class="tab" id="tab-casino" onclick="switchTab('casino')"><i class="ti ti-cards" aria-hidden="true"></i><span class="tab-label">Casino</span></button>
   </div>
 </div>
 <div class="toast" id="toast"></div>
@@ -346,6 +347,7 @@ function migrateLegacy(){
   });
   if(!state.exchanges){state.exchanges={};EXCHANGES.forEach(e=>state.exchanges[e]=0);}
   EXCHANGES.forEach(e=>{if(state.exchanges[e]===undefined)state.exchanges[e]=0;});
+  PROFILES.forEach(pr=>{if(!state[pr].casino)state[pr].casino=[];});
 }
 
 let currentProfile='me',currentTab='dashboard',formAccount='me',selectedBetType='',exchTransferBank='me';
@@ -367,7 +369,9 @@ function todayStr(){const d=new Date();return[String(d.getDate()).padStart(2,'0'
 function profileColor(p){return PROFILE_COLORS[p]||'#888780';}
 function profileLabel(p){return PROFILE_LABELS[p]||p;}
 function isFreeBet(type){return FREE_BET_TYPES.includes(type);}
-function totalPnl(p){return(state[p].transactions||[]).filter(t=>t.type!=='Balance Amendment').reduce((a,t)=>a+(t.pnl||0),0);}
+function casinoPnl(p){return(state[p].casino||[]).reduce((a,s)=>a+(s.netProfit||0),0);}
+function sportsPnl(p){return(state[p].transactions||[]).filter(t=>t.type!=='Balance Amendment').reduce((a,t)=>a+(t.pnl||0),0);}
+
 
 function getTypeColor(t){
   const map={'Qualifier':'#0C447C','Free Bet':'#27500A','Boost':'#633806','Mug':'#042C53'};
@@ -396,7 +400,7 @@ function switchTab(t){
   document.querySelectorAll('.tab').forEach(el=>el.classList.remove('active'));
   const el=document.getElementById('tab-'+t);if(el)el.classList.add('active');
   const pb=document.getElementById('profile-bar');
-  if(pb)pb.style.display=(t==='dashboard'||t==='risk'||t==='add')?'none':'flex';
+  if(pb)pb.style.display=(t==='dashboard'||t==='risk'||t==='add'||t==='casino')?'none':'flex';
   render();window.scrollTo(0,0);
 }
 
@@ -422,6 +426,7 @@ function render(){
   else if(currentTab==='accounts')el.innerHTML=renderAccounts();
   else if(currentTab==='reports')el.innerHTML=renderReports();
   else if(currentTab==='risk')el.innerHTML=renderRisk();
+  else if(currentTab==='casino')el.innerHTML=renderCasino();
   updateBadge();
   if(currentTab==='add')bindFormEvents();
 }
@@ -447,13 +452,19 @@ function renderDashboard(){
   const pending=pendingAll();
   const allMap=monthlyPnl(allTxs());
   const totalTrades=PROFILES.reduce((a,p)=>a+(state[p].transactions||[]).length,0);
-  const combinedPnl=PROFILES.reduce((a,p)=>a+totalPnl(p),0);
+  const combinedSports=PROFILES.reduce((a,p)=>a+sportsPnl(p),0);
+  const combinedCasino=PROFILES.reduce((a,p)=>a+casinoPnl(p),0);
+  const combinedPnl=combinedSports+combinedCasino;
   return`
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
     <div class="metric-card" style="grid-column:span 2">
       <div class="metric-label"><i class="ti ti-trending-up" aria-hidden="true"></i>Combined P&L</div>
       <div class="metric-value ${combinedPnl>=0?'pos':'neg'}">${fmtS(combinedPnl)}</div>
-      <div class="metric-sub">All accounts · ${totalTrades} trades</div>
+      <div class="metric-sub" style="display:flex;gap:10px;flex-wrap:wrap">
+        <span>All accounts · ${totalTrades} trades</span>
+        <span>Sports: <span style="color:${combinedSports>=0?'#1D9E75':'#E24B4A'}">${fmtS(combinedSports)}</span></span>
+        <span>Casino: <span style="color:${combinedCasino>=0?'#1D9E75':'#E24B4A'}">${fmtS(combinedCasino)}</span></span>
+      </div>
     </div>
     ${pending.length?`<div class="metric-card" style="background:#633806;grid-column:span 2;cursor:pointer" onclick="switchTab('pending')">
       <div class="metric-label" style="color:#EF9F27"><i class="ti ti-clock" aria-hidden="true"></i>Pending</div>
@@ -1287,6 +1298,256 @@ function getRiskAdvice(risk){
   if(risk.totalPnl>300)tips.push('Consider a gradual withdrawal to avoid drawing attention');
   if(risk.betsPerWeek>15)tips.push('Reduce bet frequency — spread bets across more days');
   return tips.length?tips.join(' · '):'Keep logging mug bets regularly to maintain a natural pattern';
+}
+
+
+// ── CASINO ───────────────────────────────────────────────────────────────────
+const CASINO_OFFER_TYPES=['Reload','Welcome','Free Spins','Cashback','Other'];
+let casinoFormAcct='me';
+let casinoView='log';
+let casinoOfferType='';
+let casinoPendingSpins=false;
+
+function renderCasino(){
+  const allSessions=PROFILES.flatMap(p=>(state[p].casino||[]).map(s=>({...s,_acct:p}))).sort((a,b)=>b.id-a.id);
+  const totalCasino=PROFILES.reduce((a,p)=>a+casinoPnl(p),0);
+  const pending=allSessions.filter(s=>s.pending);
+  return`
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+    <div class="metric-card" style="grid-column:span 2">
+      <div class="metric-label"><i class="ti ti-cards" aria-hidden="true"></i>Casino P&L</div>
+      <div class="metric-value ${totalCasino>=0?'pos':'neg'}">${fmtS(totalCasino)}</div>
+      <div class="metric-sub" style="display:flex;gap:8px;flex-wrap:wrap">
+        ${PROFILES.map(p=>`<span>${profileLabel(p)}: <span style="color:${casinoPnl(p)>=0?'#1D9E75':'#E24B4A'}">${fmtS(casinoPnl(p))}</span></span>`).join('')}
+      </div>
+    </div>
+    ${pending.length?`<div class="metric-card" style="background:#633806;grid-column:span 2">
+      <div class="metric-label" style="color:#EF9F27"><i class="ti ti-clock" aria-hidden="true"></i>Pending free spins</div>
+      <div class="metric-value warn">${pending.length}</div>
+      <div class="metric-sub" style="color:#EF9F27">Sessions awaiting free spin results</div>
+    </div>`:''}
+  </div>
+  <div style="display:flex;gap:8px;margin-bottom:14px">
+    <button onclick="casinoView='log';document.getElementById('casino-view').innerHTML=renderCasinoForm()" class="btn ${casinoView==='log'?'btn-primary':'btn-ghost'}" style="flex:1;padding:10px">Log session</button>
+    <button onclick="casinoView='history';document.getElementById('casino-view').innerHTML=renderCasinoHistory()" class="btn ${casinoView==='history'?'btn-primary':'btn-ghost'}" style="flex:1;padding:10px">History</button>
+  </div>
+  <div id="casino-view">${casinoView==='log'?renderCasinoForm():renderCasinoHistory()}</div>`;
+}
+
+function renderCasinoForm(){
+  const p=state[casinoFormAcct];
+  const bookieOpts=Object.keys(p.bookies||{}).sort().map(b=>`<option>${b}</option>`).join('');
+  return`<div class="card"><div class="card-header">
+    <div style="display:flex;align-items:center;gap:8px">
+      <div style="width:8px;height:8px;border-radius:50%;background:${profileColor(casinoFormAcct)}"></div>
+      <span class="card-title">Log casino session</span>
+    </div>
+  </div>
+  <div class="card-body" style="padding-bottom:80px">
+    <div class="form-section">
+      <div class="form-label">Account</div>
+      <div class="acct-selector">${PROFILES.map(pr=>`<button class="acct-sel-btn ${casinoFormAcct===pr?'active-'+pr:''}" onclick="casinoFormAcct='${pr}';document.getElementById('casino-view').innerHTML=renderCasinoForm()">${profileLabel(pr)}</button>`).join('')}</div>
+    </div>
+    <div style="display:grid;grid-template-columns:100px 1fr 1fr;gap:8px;margin-bottom:8px">
+      <div class="form-group"><div class="form-label">Date</div><input type="text" id="c-date" value="${todayStr()}" style="font-size:12px;padding:7px 9px"/></div>
+      <div class="form-group"><div class="form-label">Casino / Bookie</div>
+        <div style="position:relative">
+          <input type="text" id="c-casino-search" placeholder="Search…" autocomplete="off" oninput="filterCasinoBookies(this.value)" onfocus="showCasinoBookies()" style="padding-right:10px"/>
+          <input type="hidden" id="c-casino" value=""/>
+          <div id="casino-bookie-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:50;background:#252629;border:0.5px solid rgba(255,255,255,0.15);border-radius:8px;margin-top:3px;max-height:180px;overflow-y:auto"></div>
+        </div>
+      </div>
+      <div class="form-group"><div class="form-label">Offer type</div>
+        <select id="c-offer-type">${CASINO_OFFER_TYPES.map(t=>`<option>${t}</option>`).join('')}</select>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+      <div class="form-group"><div class="form-label">Wager amount (£)</div><input type="number" id="c-wager" placeholder="0.00" step="0.01" inputmode="decimal"/></div>
+      <div class="form-group"><div class="form-label">Wager P&L (£)</div><input type="number" id="c-wager-pnl" placeholder="e.g. -5.00" step="0.01" inputmode="decimal" oninput="updateCasinoNet()"/></div>
+    </div>
+    <div style="margin-bottom:8px">
+      <div class="form-group"><div class="form-label">Bonus win (£) <span style="font-size:9px;color:#444441;text-transform:none">free spins + bonus cash</span></div><input type="number" id="c-bonus-win" placeholder="0.00" step="0.01" inputmode="decimal" oninput="updateCasinoNet()"/></div>
+    </div>
+    <div style="margin-bottom:10px">
+      <div class="form-label">Bonus pending?</div>
+      <div style="display:flex;gap:8px">
+        <button id="c-btn-no" onclick="setCasinoPending(false)" style="flex:1;padding:8px;border-radius:8px;border:0.5px solid rgba(255,255,255,0.1);background:${!casinoPendingSpins?'#27500A':'#252629'};color:${!casinoPendingSpins?'#97C459':'#888780'};font-family:system-ui,-apple-system,sans-serif;font-size:12px;font-weight:500;cursor:pointer">No — all done</button>
+        <button id="c-btn-yes" onclick="setCasinoPending(true)" style="flex:1;padding:8px;border-radius:8px;border:0.5px solid rgba(255,255,255,0.1);background:${casinoPendingSpins?'#633806':'#252629'};color:${casinoPendingSpins?'#EF9F27':'#888780'};font-family:system-ui,-apple-system,sans-serif;font-size:12px;font-weight:500;cursor:pointer">Yes — bonus pending</button>
+      </div>
+    </div>
+    <div style="background:#252629;border-radius:8px;padding:12px;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:12px;color:#888780">Net profit</span>
+        <span id="c-net" style="font-size:20px;font-weight:500;color:#1D9E75">+£0.00</span>
+      </div>
+      <div style="font-size:10px;color:#444441;margin-top:3px">Wager P&L + Bonus win → updates bookie balance</div>
+    </div>
+    <div class="form-group" style="margin-bottom:4px"><div class="form-label">Notes <span style="font-size:9px;color:#444441;text-transform:none">optional</span></div><input type="text" id="c-notes" placeholder="e.g. 30x wagering, slots only"/></div>
+    <div id="c-msg" style="font-size:12px;color:#E24B4A;margin-top:6px;text-align:center"></div>
+  </div>
+  <div style="position:fixed;bottom:calc(58px + env(safe-area-inset-bottom));left:0;right:0;padding:10px 16px;background:#0f1012;border-top:0.5px solid rgba(255,255,255,0.06);display:flex;gap:8px;z-index:90;max-width:680px;margin:0 auto">
+    <button class="btn btn-ghost" onclick="resetCasinoForm()" style="width:72px;flex-shrink:0">Clear</button>
+    <button class="btn btn-primary btn-full" onclick="saveCasinoSession()"><i class="ti ti-check" aria-hidden="true"></i> Save session</button>
+  </div>
+  </div>`;
+}
+
+
+function setCasinoPending(val){
+  casinoPendingSpins=val;
+  const yes=document.getElementById('c-btn-yes'),no=document.getElementById('c-btn-no');
+  if(yes&&no){
+    yes.style.background=val?'#633806':'#252629';yes.style.color=val?'#EF9F27':'#888780';
+    no.style.background=!val?'#27500A':'#252629';no.style.color=!val?'#97C459':'#888780';
+  }
+}
+
+function updateCasinoNet(){
+  const wagerPnl=parseFloat(document.getElementById('c-wager-pnl')?.value)||0;
+  const bonusWin=parseFloat(document.getElementById('c-bonus-win')?.value)||0;
+  const net=wagerPnl+bonusWin;
+  const el=document.getElementById('c-net');
+  if(el){el.textContent=fmtS(net);el.style.color=net>=0?'#1D9E75':'#E24B4A';}
+}
+
+function saveCasinoSession(){
+  const msg=document.getElementById('c-msg');
+  const casino=document.getElementById('c-casino')?.value||(document.getElementById('c-casino-search')?.value?.trim()||'');
+  if(!casino){if(msg)msg.textContent='Select a casino / bookie.';return;}
+  const wagerPnl=parseFloat(document.getElementById('c-wager-pnl')?.value)||0;
+  const bonusWin=parseFloat(document.getElementById('c-bonus-win')?.value)||0;
+  const net=wagerPnl+bonusWin;
+  const p=state[casinoFormAcct];
+  // Ensure bookie exists
+  if(!p.bookies[casino])p.bookies[casino]={bal:0,status:'Active',notes:''};
+  // Update bookie balance by net profit
+  p.bookies[casino].bal=(p.bookies[casino].bal||0)+net;
+  if(!p.casino)p.casino=[];
+  p.casino.push({
+    id:Date.now(),
+    date:document.getElementById('c-date')?.value||todayStr(),
+    casino,
+    offerType:document.getElementById('c-offer-type')?.value||'Other',
+    wager:parseFloat(document.getElementById('c-wager')?.value)||0,
+    wagerPnl,bonusWin,netProfit:net,
+    pending:casinoPendingSpins,
+    notes:document.getElementById('c-notes')?.value||'',
+    _acct:casinoFormAcct,
+  });
+  save();showToast('Casino session saved!');
+  resetCasinoForm();
+}
+
+
+function resetCasinoForm(){
+  casinoPendingSpins=false;
+  ['c-casino','c-casino-search','c-wager','c-wager-pnl','c-bonus-win','c-notes'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  const d=document.getElementById('c-date');if(d)d.value=todayStr();
+  const dd=document.getElementById('casino-bookie-dropdown');if(dd)dd.style.display='none';
+  const cv=document.getElementById('casino-view');if(cv)cv.innerHTML=renderCasinoForm();
+}
+
+function renderCasinoHistory(){
+  const sessions=PROFILES.flatMap(p=>(state[p].casino||[]).map(s=>({...s,_acct:p}))).sort((a,b)=>b.id-a.id);
+  if(!sessions.length)return`<div class="empty">No casino sessions yet</div>`;
+  return`<div class="card"><div class="card-header"><span class="card-title">Casino sessions</span><span style="font-size:11px;color:#5F5E5A">${sessions.length} sessions</span></div>
+  ${sessions.map(s=>`<div class="list-row">
+    <div class="list-row-left">
+      <div class="list-row-title">${s.casino}${s.pending?' <span style="font-size:10px;color:#EF9F27">⏳ spins pending</span>':''}</div>
+      <div class="list-row-meta">
+        <span class="pill" style="background:#252629;color:#888780">${s.offerType}</span>
+        ${acctPill(s._acct)}
+        <span style="font-size:10px;color:#5F5E5A">${s.date}</span>
+        ${s.bonusWin?`<span style="font-size:10px;color:#5F5E5A">bonus win £${s.bonusWin.toFixed(2)}</span>`:''}
+        ${s.wager?`<span style="font-size:10px;color:#5F5E5A">wagered £${s.wager}</span>`:''}
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+      <div class="list-row-right ${s.netProfit>=0?'pos':'neg'}">${fmtS(s.netProfit)}</div>
+      ${s.pending?`<button class="btn-sm btn-sm-edit" onclick="addCasinoSpins('${s._acct}',${s.id})">Add spins</button>`:''}
+      <button class="btn-sm btn-sm-danger" onclick="deleteCasinoSession('${s._acct}',${s.id})" style="padding:3px 7px"><i class="ti ti-trash" aria-hidden="true"></i></button>
+    </div>
+  </div>`).join('')}</div>`;
+}
+
+function addCasinoSpins(acct,id){
+  const session=(state[acct].casino||[]).find(s=>s.id===id);if(!session)return;
+  document.getElementById('modal-root').innerHTML=`
+  <div class="modal-bg" onclick="if(event.target===this)closeModal()">
+    <div class="modal">
+      <div class="modal-handle"></div>
+      <div class="modal-title">Add free spin results</div>
+      <div class="modal-sub">${session.casino} · ${session.date}</div>
+      <div style="margin-bottom:12px"><div class="form-label">Free spins winnings (£)</div>
+        <input type="number" id="modal-spins-win" step="0.01" placeholder="0.00" inputmode="decimal" style="font-size:20px;font-weight:500;border-color:#1D9E75;background:#0d1f19"/>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-primary" style="flex:1" onclick="confirmCasinoSpins('${acct}',${id})">Save</button>
+        <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      </div>
+    </div>
+  </div>`;
+  setTimeout(()=>document.getElementById('modal-spins-win')?.focus(),50);
+}
+
+function confirmCasinoSpins(acct,id){
+  const win=parseFloat(document.getElementById('modal-spins-win')?.value)||0;
+  const session=(state[acct].casino||[]).find(s=>s.id===id);if(!session)return;
+  const oldNet=session.netProfit||0;
+  session.bonusWin=(session.bonusWin||0)+win;
+  session.netProfit=session.wagerPnl+session.bonusWin;
+  session.pending=false;
+  // Update bookie balance by the additional bonus win
+  const p=state[acct];
+  if(session.casino&&p.bookies[session.casino]){
+    p.bookies[session.casino].bal=(p.bookies[session.casino].bal||0)+win;
+  }
+  save();closeModal();showToast('Bonus win added!');
+  const cv=document.getElementById('casino-view');
+  if(cv)cv.innerHTML=renderCasinoHistory();
+}
+
+function deleteCasinoSession(acct,id){
+  if(!confirm('Delete session?'))return;
+  state[acct].casino=(state[acct].casino||[]).filter(s=>s.id!==id);
+  save();
+  const cv=document.getElementById('casino-view');
+  if(cv)cv.innerHTML=renderCasinoHistory();
+}
+
+// ── CASINO BOOKIE SEARCH ─────────────────────────────────────────────────────
+function showCasinoBookies(){
+  const dd=document.getElementById('casino-bookie-dropdown');if(!dd)return;
+  const q=document.getElementById('c-casino-search')?.value||'';
+  const list=Object.keys(state[casinoFormAcct].bookies||{}).sort();
+  const filtered=q?list.filter(b=>b.toLowerCase().includes(q.toLowerCase())):list;
+  renderCasinoBookieItems(filtered);
+  dd.style.display='block';
+  setTimeout(()=>document.addEventListener('click',closeCasinoDropdown,{once:true}),10);
+}
+function closeCasinoDropdown(e){
+  const dd=document.getElementById('casino-bookie-dropdown');
+  const inp=document.getElementById('c-casino-search');
+  if(dd&&!dd.contains(e.target)&&e.target!==inp)dd.style.display='none';
+  else if(dd&&dd.style.display!=='none')document.addEventListener('click',closeCasinoDropdown,{once:true});
+}
+function filterCasinoBookies(q){
+  const dd=document.getElementById('casino-bookie-dropdown');if(!dd)return;
+  const list=Object.keys(state[casinoFormAcct].bookies||{}).sort();
+  const filtered=q?list.filter(b=>b.toLowerCase().includes(q.toLowerCase())):list;
+  renderCasinoBookieItems(filtered);
+  dd.style.display='block';
+  document.getElementById('c-casino').value='';
+}
+function renderCasinoBookieItems(items){
+  const dd=document.getElementById('casino-bookie-dropdown');if(!dd)return;
+  if(!items.length){dd.innerHTML='<div style="padding:10px 12px;font-size:12px;color:#5F5E5A">No results</div>';return;}
+  dd.innerHTML=items.slice(0,20).map(b=>`<div onclick="selectCasinoBookie('${b.replace(/'/g,"\'")}')" style="padding:10px 12px;font-size:13px;color:#e8e8e4;cursor:pointer;border-bottom:0.5px solid rgba(255,255,255,0.05)" onmouseenter="this.style.background='#2e2f33'" onmouseleave="this.style.background=''">${b}</div>`).join('');
+}
+function selectCasinoBookie(name){
+  const inp=document.getElementById('c-casino-search');if(inp)inp.value=name;
+  const bh=document.getElementById('c-casino');if(bh)bh.value=name;
+  const dd=document.getElementById('casino-bookie-dropdown');if(dd)dd.style.display='none';
 }
 
 async function init(){
