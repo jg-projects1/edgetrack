@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-title" content="Casino — MBEmpire"/>
+<meta name="theme-color" content="#0f1012"/>
+<title>Casino — MBEmpire</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{height:100%;-webkit-text-size-adjust:100%}
+body{font-family:system-ui,-apple-system,sans-serif;background:#0f1012;min-height:100%;font-size:14px;color:#e8e8e4;-webkit-tap-highlight-color:transparent}
+.app{display:flex;flex-direction:column;min-height:100svh}
+.topbar{background:#1a1b1e;border-bottom:0.5px solid rgba(255,255,255,0.08);padding:14px 16px;padding-top:calc(14px + env(safe-area-inset-top));display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+.logo{font-size:17px;font-weight:500;color:#e8e8e4}.logo span{color:#1D9E75}
+.sync-badge{display:flex;align-items:center;gap:5px;font-size:11px;color:#888780;background:#252629;padding:4px 10px;border-radius:20px;border:0.5px solid rgba(255,255,255,0.06)}
+.sync-dot{width:5px;height:5px;border-radius:50%;background:#1D9E75;flex-shrink:0}
+.sync-dot.syncing{background:#BA7517;animation:pulse 1s infinite}
+.sync-dot.error{background:#E24B4A}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.tab-bar{background:#1a1b1e;border-top:0.5px solid rgba(255,255,255,0.08);padding:6px 4px;padding-bottom:calc(6px + env(safe-area-inset-bottom));display:flex;position:fixed;bottom:0;left:0;right:0;z-index:100}
+.tab{flex:1;padding:5px 2px;cursor:pointer;font-size:9px;font-weight:500;color:#5F5E5A;border:none;background:none;text-align:center;display:flex;flex-direction:column;align-items:center;gap:3px;transition:color .15s}
+.tab i{font-size:20px;line-height:1}
+.tab.active{color:#1D9E75}
+.tab-label{font-size:9px;font-weight:500;white-space:nowrap}
+.content{flex:1;padding:14px 16px;padding-bottom:calc(72px + env(safe-area-inset-bottom));max-width:680px;margin:0 auto;width:100%}
+.card{background:#1a1b1e;border:0.5px solid rgba(255,255,255,0.08);border-radius:12px;overflow:hidden;margin-bottom:12px}
+.card-header{padding:12px 16px;border-bottom:0.5px solid rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:space-between}
+.card-title{font-size:11px;font-weight:500;color:#5F5E5A;letter-spacing:.3px;text-transform:uppercase}
+.card-body{padding:14px 16px}
+.metric-card{background:#252629;border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:3px}
+.metric-label{font-size:11px;color:#888780;font-weight:500;display:flex;align-items:center;gap:4px}
+.metric-label i{font-size:14px}
+.metric-value{font-size:26px;font-weight:500;letter-spacing:-1px;color:#e8e8e4;line-height:1.1}
+.metric-value.pos{color:#1D9E75}.metric-value.neg{color:#E24B4A}.metric-value.warn{color:#BA7517}
+.metric-sub{font-size:11px;color:#5F5E5A}
+.list-row{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:0.5px solid rgba(255,255,255,0.05)}
+.list-row:last-child{border-bottom:none}
+.list-row-left{display:flex;flex-direction:column;gap:3px;flex:1;min-width:0;margin-right:10px}
+.list-row-title{font-size:13px;font-weight:500;color:#e8e8e4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.list-row-meta{display:flex;gap:5px;align-items:center;flex-wrap:wrap}
+.list-row-right{font-size:13px;font-weight:500;flex-shrink:0}
+.list-row-right.pos{color:#1D9E75}.list-row-right.neg{color:#E24B4A}
+.pill{display:inline-flex;align-items:center;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:500;white-space:nowrap;background:#252629;color:#888780;border:0.5px solid transparent}
+.pill-me{background:#0C447C;color:#85B7EB;border-color:#185FA5}
+.pill-wife{background:#3C3489;color:#AFA9EC;border-color:#534AB7}
+.pill-bp{background:#633806;color:#EF9F27;border-color:#854F0B}
+.pill-rq{background:#27500A;color:#97C459;border-color:#3B6D11}
+.form-label{font-size:10px;font-weight:500;color:#5F5E5A;letter-spacing:.3px;text-transform:uppercase;display:block;margin-bottom:5px}
+input[type=text],input[type=number],select{width:100%;background:#252629;border:0.5px solid rgba(255,255,255,0.1);border-radius:8px;padding:9px 11px;font-family:system-ui,-apple-system,sans-serif;font-size:13px;color:#e8e8e4;outline:none;-webkit-appearance:none;appearance:none;transition:border-color .15s}
+input:focus,select:focus{border-color:rgba(255,255,255,0.25);background:#2e2f33}
+select option{background:#252629}
+.acct-selector{display:flex;gap:5px;flex-wrap:wrap}
+.acct-sel-btn{flex:1;min-width:60px;padding:7px 5px;border-radius:8px;border:0.5px solid rgba(255,255,255,0.1);background:#252629;color:#888780;font-family:system-ui,-apple-system,sans-serif;font-size:12px;font-weight:500;cursor:pointer;text-align:center;transition:all .15s}
+.acct-sel-btn.active-me{background:#0C447C;color:#85B7EB;border-color:#185FA5}
+.acct-sel-btn.active-wife{background:#3C3489;color:#AFA9EC;border-color:#534AB7}
+.acct-sel-btn.active-bp{background:#633806;color:#EF9F27;border-color:#854F0B}
+.acct-sel-btn.active-rq{background:#27500A;color:#97C459;border-color:#3B6D11}
+.btn{padding:11px 20px;border-radius:8px;font-family:system-ui,-apple-system,sans-serif;font-size:14px;font-weight:500;cursor:pointer;border:0.5px solid rgba(255,255,255,0.12);background:#252629;color:#e8e8e4;transition:all .15s;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.btn-primary{background:#1D9E75;color:#fff;border-color:#1D9E75}
+.btn-full{width:100%;padding:13px}
+.btn-ghost{background:#252629;color:#888780;border-color:rgba(255,255,255,0.08)}
+.btn-sm{padding:4px 10px;font-size:11px;border-radius:6px;font-family:system-ui,-apple-system,sans-serif;font-weight:500;cursor:pointer;border:0.5px solid rgba(255,255,255,0.1);background:#252629;color:#888780}
+.btn-sm-edit{background:#633806;color:#EF9F27;border-color:#854F0B}
+.btn-sm-danger{background:#791F1F;color:#F09595;border-color:#A32D2D}
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;display:flex;align-items:flex-end;justify-content:center}
+@media(min-width:600px){.modal-bg{align-items:center}}
+.modal{background:#1a1b1e;border-radius:16px 16px 0 0;border:0.5px solid rgba(255,255,255,0.1);padding:20px;padding-bottom:calc(20px + env(safe-area-inset-bottom));width:100%;max-width:500px}
+@media(min-width:600px){.modal{border-radius:14px;padding:24px}}
+.modal-handle{width:32px;height:3px;background:rgba(255,255,255,0.12);border-radius:2px;margin:0 auto 16px}
+.modal-title{font-size:16px;font-weight:500;margin-bottom:4px;color:#e8e8e4}
+.modal-sub{font-size:12px;color:#5F5E5A;margin-bottom:16px}
+.modal-actions{display:flex;gap:8px;margin-top:16px}
+.toast{position:fixed;bottom:calc(68px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%) translateY(16px);background:#e8e8e4;border-radius:20px;padding:10px 18px;font-size:12px;font-weight:500;color:#1a1b1e;z-index:999;opacity:0;transition:all .25s;pointer-events:none;white-space:nowrap;max-width:90vw}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.loading{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:50vh;gap:12px;color:#5F5E5A;font-size:13px}
+.spinner{width:28px;height:28px;border:2px solid rgba(255,255,255,0.08);border-top-color:#1D9E75;border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.empty{padding:30px 20px;text-align:center;color:#5F5E5A;font-size:13px}
+.pos{color:#1D9E75;font-weight:500}.neg{color:#E24B4A;font-weight:500}
+.month-wrap{display:flex;align-items:flex-end;gap:6px;overflow-x:auto;padding:4px 2px}
+.month-col{display:flex;flex-direction:column;align-items:center;gap:3px;flex:0 0 auto;min-width:40px}
+.month-bar{width:32px;border-radius:3px 3px 0 0;min-height:2px}
+.month-bar.pos{background:#1D9E75}.month-bar.neg{background:#E24B4A;border-radius:0 0 3px 3px}
+.month-lbl{font-size:9px;color:#5F5E5A;font-weight:500}
+.month-val{font-size:9px;font-weight:500}
+.month-val.pos{color:#1D9E75}.month-val.neg{color:#E24B4A}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="topbar">
+    <div class="logo">MB<span>Empire</span> <span style="font-size:12px;color:#5F5E5A;font-weight:400">Casino</span></div>
+    <div class="sync-badge"><div class="sync-dot" id="sync-dot"></div><span id="sync-label">Loading</span></div>
+  </div>
+  <div class="content" id="main-content">
+    <div class="loading"><div class="spinner"></div>Loading…</div>
+  </div>
+  <div class="tab-bar">
+    <button class="tab active" id="tab-log" onclick="switchTab('log')"><i class="ti ti-plus"></i><span class="tab-label">Log</span></button>
+    <button class="tab" id="tab-history" onclick="switchTab('history')"><i class="ti ti-list"></i><span class="tab-label">History</span></button>
+    <button class="tab" id="tab-summary" onclick="switchTab('summary')"><i class="ti ti-chart-bar"></i><span class="tab-label">Summary</span></button>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<div id="modal-root"></div>
+
+<script>
+const PROFILES=['me','wife','bp','rq'];
+const PROFILE_LABELS={me:'JG',wife:'HG',bp:'BP',rq:'RQ'};
+const PROFILE_COLORS={me:'#378ADD',wife:'#7F77DD',bp:'#BA7517',rq:'#639922'};
+const CASINO_OFFER_TYPES=['Reload','Welcome','Free Spins','Cashback','Other'];
+
+let currentTab='log';
+let formAcct='me';
+let casinoPending=false;
+let hasDeposit=false;
+let operator='JG';
+let syncTimeout=null;
+let fullState={};
+
+function setSyncStatus(s){
+  const dot=document.getElementById('sync-dot'),label=document.getElementById('sync-label');
+  if(!dot||!label)return;
+  dot.className='sync-dot'+(s==='syncing'?' syncing':s==='error'?' error':'');
+  label.textContent=s==='syncing'?'Saving':s==='error'?'Offline':'Saved';
+}
+
+async function loadData(){
+  try{
+    const res=await fetch('/api/load');
+    if(!res.ok)throw new Error('HTTP '+res.status);
+    const json=await res.json();
+    if(json.ok&&json.data){
+      fullState=json.data;
+      PROFILES.forEach(p=>{if(!fullState[p])fullState[p]={casino:[],bank:0,transactions:[],bookies:{}};if(!fullState[p].casino)fullState[p].casino=[];});
+    }
+    setSyncStatus('synced');
+  }catch(e){setSyncStatus('error');}
+}
+
+async function saveData(){
+  setSyncStatus('syncing');
+  try{
+    const res=await fetch('/api/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(fullState)});
+    if(!res.ok)throw new Error();
+    setSyncStatus('synced');
+  }catch(e){setSyncStatus('error');}
+}
+function save(){if(syncTimeout)clearTimeout(syncTimeout);setSyncStatus('syncing');syncTimeout=setTimeout(saveData,1000);}
+
+function fmt(v){const n=parseFloat(v)||0;return(n<0?'-':'')+'£'+Math.abs(n).toFixed(2);}
+function fmtS(v){const n=parseFloat(v)||0;return(n>=0?'+':'-')+'£'+Math.abs(n).toFixed(2);}
+function todayStr(){const d=new Date();return[String(d.getDate()).padStart(2,'0'),String(d.getMonth()+1).padStart(2,'0'),d.getFullYear()].join('/');}
+function profileLabel(p){return PROFILE_LABELS[p]||p;}
+function profileColor(p){return PROFILE_COLORS[p]||'#888780';}
+function acctPill(a){return`<span class="pill pill-${a}">${profileLabel(a)}</span>`;}
+function casinoPnl(p){return(fullState[p]?.casino||[]).reduce((a,s)=>a+(s.netProfit||0),0);}
+function allSessions(){return PROFILES.flatMap(p=>(fullState[p]?.casino||[]).map(s=>({...s,_acct:p}))).sort((a,b)=>b.id-a.id);}
+
+function showToast(msg){
+  const t=document.getElementById('toast');t.textContent=msg;
+  t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);
+}
+
+function switchTab(t){
+  currentTab=t;
+  document.querySelectorAll('.tab').forEach(el=>el.classList.remove('active'));
+  document.getElementById('tab-'+t)?.classList.add('active');
+  render();window.scrollTo(0,0);
+}
+
+function render(){
+  const el=document.getElementById('main-content');
+  if(currentTab==='log')el.innerHTML=renderLog();
+  else if(currentTab==='history')el.innerHTML=renderHistory();
+  else if(currentTab==='summary')el.innerHTML=renderSummary();
+}
+
+function renderLog(){
+  const p=fullState[formAcct]||{bookies:{}};
+  const bookieKeys=Object.keys(p.bookies||{}).sort();
+  return`
+  <div class="card"><div class="card-header"><span class="card-title">Log casino session</span></div>
+  <div class="card-body" style="padding-bottom:80px">
+    <div style="margin-bottom:12px">
+      <div class="form-label">Account</div>
+      <div class="acct-selector">${PROFILES.map(pr=>`<button class="acct-sel-btn ${formAcct===pr?'active-'+pr:''}" onclick="formAcct='${pr}';render()">${profileLabel(pr)}</button>`).join('')}</div>
+    </div>
+    <div style="margin-bottom:10px">
+      <div class="form-label">Operator</div>
+      <div style="display:flex;gap:6px">
+        <button onclick="operator='JG';render()" style="flex:1;padding:9px;border-radius:8px;border:0.5px solid rgba(255,255,255,0.12);background:${operator==='JG'?'#0C447C':'#252629'};color:${operator==='JG'?'#85B7EB':'#888780'};font-family:system-ui;font-size:13px;font-weight:500;cursor:pointer">JG</button>
+        <button onclick="operator='JP';render()" style="flex:1;padding:9px;border-radius:8px;border:0.5px solid rgba(255,255,255,0.12);background:${operator==='JP'?'#27500A':'#252629'};color:${operator==='JP'?'#97C459':'#888780'};font-family:system-ui;font-size:13px;font-weight:500;cursor:pointer">JP</button>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:100px 1fr 1fr;gap:8px;margin-bottom:8px">
+      <div><div class="form-label">Date</div><input type="text" id="c-date" value="${todayStr()}" style="font-size:12px;padding:7px 9px"/></div>
+      <div><div class="form-label">Casino / Bookie</div>
+        <div style="position:relative">
+          <input type="text" id="c-casino-search" placeholder="Search…" autocomplete="off" oninput="filterBookies(this.value)" onfocus="showBookies()"/>
+          <input type="hidden" id="c-casino" value=""/>
+          <div id="c-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:50;background:#252629;border:0.5px solid rgba(255,255,255,0.15);border-radius:8px;margin-top:3px;max-height:180px;overflow-y:auto"></div>
+        </div>
+      </div>
+      <div><div class="form-label">Offer type</div><select id="c-offer">${CASINO_OFFER_TYPES.map(t=>`<option>${t}</option>`).join('')}</select></div>
+    </div>
+    <div style="margin-bottom:8px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:${hasDeposit?'8':'0'}px">
+        <div class="form-label" style="margin:0">Deposit required?</div>
+        <button onclick="hasDeposit=!hasDeposit;render()" style="padding:3px 12px;border-radius:20px;border:0.5px solid rgba(255,255,255,0.12);background:${hasDeposit?'#633806':'#252629'};color:${hasDeposit?'#EF9F27':'#888780'};font-family:system-ui;font-size:11px;font-weight:500;cursor:pointer">${hasDeposit?'Yes — remove':'+ Add deposit'}</button>
+      </div>
+      ${hasDeposit?`<div><div class="form-label">Deposit amount (£)</div><input type="number" id="c-deposit" placeholder="0.00" step="0.01" inputmode="decimal"/></div>`:'<input type="hidden" id="c-deposit" value="0"/>'}
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+      <div><div class="form-label">Wager amount (£)</div><input type="number" id="c-wager" placeholder="0.00" step="0.01" inputmode="decimal"/></div>
+      <div><div class="form-label">Wager P&L (£)</div><input type="number" id="c-wager-pnl" placeholder="e.g. -5.00" step="0.01" inputmode="decimal" oninput="updateNet()"/></div>
+    </div>
+    <div style="margin-bottom:8px">
+      <div class="form-label">Bonus win (£) <span style="font-size:9px;color:#444441;text-transform:none">free spins + bonus cash</span></div>
+      <input type="number" id="c-bonus-win" placeholder="0.00" step="0.01" inputmode="decimal" oninput="updateNet()"/>
+    </div>
+    <div style="margin-bottom:10px">
+      <div class="form-label">Bonus pending?</div>
+      <div style="display:flex;gap:8px">
+        <button onclick="casinoPending=false;updatePendingBtns()" id="c-btn-no" style="flex:1;padding:8px;border-radius:8px;border:0.5px solid rgba(255,255,255,0.1);background:${!casinoPending?'#27500A':'#252629'};color:${!casinoPending?'#97C459':'#888780'};font-family:system-ui;font-size:12px;font-weight:500;cursor:pointer">No — all done</button>
+        <button onclick="casinoPending=true;updatePendingBtns()" id="c-btn-yes" style="flex:1;padding:8px;border-radius:8px;border:0.5px solid rgba(255,255,255,0.1);background:${casinoPending?'#633806':'#252629'};color:${casinoPending?'#EF9F27':'#888780'};font-family:system-ui;font-size:12px;font-weight:500;cursor:pointer">Yes — pending</button>
+      </div>
+    </div>
+    <div style="background:#252629;border-radius:8px;padding:12px;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:12px;color:#888780">Net profit</span>
+        <span id="c-net" style="font-size:20px;font-weight:500;color:#1D9E75">+£0.00</span>
+      </div>
+      <div style="font-size:10px;color:#444441;margin-top:3px">Wager P&L + Bonus win → updates bookie balance</div>
+    </div>
+    <div><div class="form-label">Notes <span style="font-size:9px;color:#444441;text-transform:none">optional</span></div><input type="text" id="c-notes" placeholder="e.g. 30x wagering, slots only"/></div>
+    <div id="c-msg" style="font-size:12px;color:#E24B4A;margin-top:6px;text-align:center"></div>
+  </div></div>
+  <div style="position:fixed;bottom:calc(58px + env(safe-area-inset-bottom));left:0;right:0;padding:10px 16px;background:#0f1012;border-top:0.5px solid rgba(255,255,255,0.06);display:flex;gap:8px;z-index:90;max-width:680px;margin:0 auto">
+    <button class="btn btn-ghost" onclick="resetForm()" style="width:72px;flex-shrink:0">Clear</button>
+    <button class="btn btn-primary btn-full" onclick="saveSession()"><i class="ti ti-check"></i> Save session</button>
+  </div>`;
+}
+
+function updatePendingBtns(){
+  const yes=document.getElementById('c-btn-yes'),no=document.getElementById('c-btn-no');
+  if(yes){yes.style.background=casinoPending?'#633806':'#252629';yes.style.color=casinoPending?'#EF9F27':'#888780';}
+  if(no){no.style.background=!casinoPending?'#27500A':'#252629';no.style.color=!casinoPending?'#97C459':'#888780';}
+}
+
+function updateNet(){
+  const wPnl=parseFloat(document.getElementById('c-wager-pnl')?.value)||0;
+  const bWin=parseFloat(document.getElementById('c-bonus-win')?.value)||0;
+  const net=wPnl+bWin;
+  const el=document.getElementById('c-net');
+  if(el){el.textContent=fmtS(net);el.style.color=net>=0?'#1D9E75':'#E24B4A';}
+}
+
+function showBookies(){
+  const dd=document.getElementById('c-dropdown');if(!dd)return;
+  const q=document.getElementById('c-casino-search')?.value||'';
+  const list=Object.keys(fullState[formAcct]?.bookies||{}).sort();
+  const filtered=q?list.filter(b=>b.toLowerCase().includes(q.toLowerCase())):list;
+  renderBookieItems(filtered);dd.style.display='block';
+  setTimeout(()=>document.addEventListener('click',closeDropdown,{once:true}),10);
+}
+function closeDropdown(e){
+  const dd=document.getElementById('c-dropdown'),inp=document.getElementById('c-casino-search');
+  if(dd&&!dd.contains(e.target)&&e.target!==inp)dd.style.display='none';
+  else if(dd&&dd.style.display!=='none')document.addEventListener('click',closeDropdown,{once:true});
+}
+function filterBookies(q){
+  const dd=document.getElementById('c-dropdown');if(!dd)return;
+  const list=Object.keys(fullState[formAcct]?.bookies||{}).sort();
+  const filtered=q?list.filter(b=>b.toLowerCase().includes(q.toLowerCase())):list;
+  renderBookieItems(filtered);dd.style.display='block';
+  document.getElementById('c-casino').value='';
+}
+function renderBookieItems(items){
+  const dd=document.getElementById('c-dropdown');if(!dd)return;
+  if(!items.length){dd.innerHTML='<div style="padding:10px 12px;font-size:12px;color:#5F5E5A">No results</div>';return;}
+  dd.innerHTML=items.slice(0,20).map(b=>`<div onclick="selectBookie('${b.replace(/'/g,"\\'")}') " style="padding:10px 12px;font-size:13px;color:#e8e8e4;cursor:pointer;border-bottom:0.5px solid rgba(255,255,255,0.05)" onmouseenter="this.style.background='#2e2f33'" onmouseleave="this.style.background=''">${b}</div>`).join('');
+}
+function selectBookie(name){
+  const inp=document.getElementById('c-casino-search');if(inp)inp.value=name;
+  const bh=document.getElementById('c-casino');if(bh)bh.value=name;
+  const dd=document.getElementById('c-dropdown');if(dd)dd.style.display='none';
+}
+
+function saveSession(){
+  const msg=document.getElementById('c-msg');
+  const casino=document.getElementById('c-casino')?.value||(document.getElementById('c-casino-search')?.value?.trim()||'');
+  if(!casino){if(msg)msg.textContent='Select a casino / bookie.';return;}
+  const wagerPnl=parseFloat(document.getElementById('c-wager-pnl')?.value)||0;
+  const bonusWin=parseFloat(document.getElementById('c-bonus-win')?.value)||0;
+  const deposit=parseFloat(document.getElementById('c-deposit')?.value)||0;
+  const net=wagerPnl+bonusWin;
+  const p=fullState[formAcct];
+  if(!p.bookies[casino])p.bookies[casino]={bal:0,status:'Active',notes:''};
+  if(deposit>0){p.bank-=deposit;p.bookies[casino].bal=(p.bookies[casino].bal||0)+deposit;}
+  p.bookies[casino].bal=(p.bookies[casino].bal||0)+net;
+  if(!p.casino)p.casino=[];
+  p.casino.push({
+    id:Date.now(),
+    date:document.getElementById('c-date')?.value||todayStr(),
+    casino,operator,offerType:document.getElementById('c-offer')?.value||'Other',
+    deposit,wager:parseFloat(document.getElementById('c-wager')?.value)||0,
+    wagerPnl,bonusWin,netProfit:net,
+    pending:casinoPending,
+    notes:document.getElementById('c-notes')?.value||'',
+    _acct:formAcct,
+  });
+  save();showToast('Session saved!');resetForm();
+}
+
+function resetForm(){
+  casinoPending=false;hasDeposit=false;operator='JG';
+  ['c-casino','c-casino-search','c-deposit','c-wager','c-wager-pnl','c-bonus-win','c-notes'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  const d=document.getElementById('c-date');if(d)d.value=todayStr();
+  render();
+}
+
+function renderHistory(){
+  const sessions=allSessions();
+  if(!sessions.length)return`<div class="empty">No casino sessions yet</div>`;
+  return`<div class="card"><div class="card-header"><span class="card-title">All sessions</span><span style="font-size:11px;color:#5F5E5A">${sessions.length} total</span></div>
+  ${sessions.map(s=>`<div class="list-row">
+    <div class="list-row-left">
+      <div class="list-row-title">${s.casino}${s.pending?` <span style="font-size:10px;color:#EF9F27">⏳ pending</span>`:''}</div>
+      <div class="list-row-meta">
+        <span class="pill" style="background:#252629;color:#888780">${s.offerType}</span>
+        ${acctPill(s._acct)}
+        <span style="font-size:10px;color:#5F5E5A">${s.date}</span>
+        ${s.operator?`<span style="font-size:10px;font-weight:600;color:${s.operator==='JG'?'#85B7EB':'#97C459'}">${s.operator}</span>`:''}${s.wager?`<span style="font-size:10px;color:#5F5E5A">£${s.wager} wagered</span>`:''}
+        ${s.deposit?`<span style="font-size:10px;color:#EF9F27">dep £${s.deposit}</span>`:''}
+        ${s.bonusWin?`<span style="font-size:10px;color:#5F5E5A">bonus £${s.bonusWin.toFixed(2)}</span>`:''}
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+      <div class="list-row-right ${s.netProfit>=0?'pos':'neg'}">${fmtS(s.netProfit)}</div>
+      ${s.pending?`<button class="btn-sm btn-sm-edit" onclick="addBonus('${s._acct}',${s.id})">Add bonus</button>`:''}
+      <button class="btn-sm btn-sm-danger" onclick="deleteSession('${s._acct}',${s.id})" style="padding:3px 7px"><i class="ti ti-trash"></i></button>
+    </div>
+  </div>`).join('')}</div>`;
+}
+
+function addBonus(acct,id){
+  const session=(fullState[acct]?.casino||[]).find(s=>s.id===id);if(!session)return;
+  document.getElementById('modal-root').innerHTML=`
+  <div class="modal-bg" onclick="if(event.target===this)closeModal()">
+    <div class="modal">
+      <div class="modal-handle"></div>
+      <div class="modal-title">Add bonus win</div>
+      <div class="modal-sub">${session.casino} · ${session.date}</div>
+      <div style="margin-bottom:12px"><div class="form-label">Bonus win (£)</div>
+        <input type="number" id="modal-bonus" step="0.01" placeholder="0.00" inputmode="decimal" style="font-size:20px;font-weight:500;border-color:#1D9E75;background:#0d1f19"/>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-primary" style="flex:1" onclick="confirmBonus('${acct}',${id})">Save</button>
+        <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      </div>
+    </div>
+  </div>`;
+  setTimeout(()=>document.getElementById('modal-bonus')?.focus(),50);
+}
+
+function confirmBonus(acct,id){
+  const win=parseFloat(document.getElementById('modal-bonus')?.value)||0;
+  const session=(fullState[acct]?.casino||[]).find(s=>s.id===id);if(!session)return;
+  session.bonusWin=(session.bonusWin||0)+win;
+  session.netProfit=session.wagerPnl+session.bonusWin;
+  session.pending=false;
+  const p=fullState[acct];
+  if(session.casino&&p.bookies?.[session.casino])
+    p.bookies[session.casino].bal=(p.bookies[session.casino].bal||0)+win;
+  save();closeModal();showToast('Bonus win added!');render();
+}
+
+function deleteSession(acct,id){
+  if(!confirm('Delete session?'))return;
+  fullState[acct].casino=(fullState[acct].casino||[]).filter(s=>s.id!==id);
+  save();render();
+}
+
+function closeModal(){document.getElementById('modal-root').innerHTML='';}
+
+function renderSummary(){
+  const sessions=allSessions();
+  const total=PROFILES.reduce((a,p)=>a+casinoPnl(p),0);
+  const jgPnl=sessions.filter(s=>s.operator==='JG').reduce((a,s)=>a+(s.netProfit||0),0);
+  const jpPnl=sessions.filter(s=>s.operator==='JP').reduce((a,s)=>a+(s.netProfit||0),0);
+  const monthly={};
+  sessions.forEach(s=>{
+    const pts=s.date?.split('/');if(!pts||pts.length<3)return;
+    const k=`${pts[2]}-${pts[1]}`;monthly[k]=(monthly[k]||0)+s.netProfit;
+  });
+  const months=Object.keys(monthly).sort();
+  const maxAbs=Math.max(...Object.values(monthly).map(Math.abs),0.01);
+  const byCasino={};sessions.forEach(s=>{byCasino[s.casino]=(byCasino[s.casino]||0)+s.netProfit;});
+  const topCasinos=Object.entries(byCasino).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  return`
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+    <div class="metric-card" style="grid-column:span 2">
+      <div class="metric-label"><i class="ti ti-cards"></i>Total casino P&L</div>
+      <div class="metric-value ${total>=0?'pos':'neg'}">${fmtS(total)}</div>
+      <div class="metric-sub" style="display:flex;gap:10px;flex-wrap:wrap">
+        ${PROFILES.map(p=>`<span>${profileLabel(p)}: <span style="color:${casinoPnl(p)>=0?'#1D9E75':'#E24B4A'}">${fmtS(casinoPnl(p))}</span></span>`).join('')}
+      </div>
+    </div>
+  </div>
+  ${months.length?`<div class="card"><div class="card-header"><span class="card-title">Monthly P&L</span></div>
+  <div style="padding:12px;overflow-x:auto">
+    <div class="month-wrap" style="height:90px;align-items:flex-end">
+      ${months.map(k=>{const v=monthly[k];const pct=Math.abs(v)/maxAbs*82;const col=v>=0?'pos':'neg';const[yr,mo]=k.split('-');const lbl=new Date(+yr,+mo-1).toLocaleString('default',{month:'short'});
+        return`<div class="month-col"><div class="month-val ${col}">${fmtS(v)}</div><div class="month-bar ${col}" style="height:${pct}%"></div><div class="month-lbl">${lbl}</div></div>`;}).join('')}
+    </div>
+  </div></div>`:''}
+  ${topCasinos.length?`<div class="card"><div class="card-header"><span class="card-title">By casino</span></div>
+    ${topCasinos.map(([name,pnl])=>`<div class="list-row"><div class="list-row-left"><div class="list-row-title">${name}</div></div><div class="list-row-right ${pnl>=0?'pos':'neg'}">${fmtS(pnl)}</div></div>`).join('')}
+  </div>`:''}
+  <div class="card"><div class="card-header"><span class="card-title">By operator</span></div>
+    <div class="list-row"><div class="list-row-left"><div class="list-row-title" style="color:#85B7EB">JG</div></div><div class="list-row-right ${jgPnl>=0?'pos':'neg'}">${fmtS(jgPnl)}</div></div>
+    <div class="list-row"><div class="list-row-left"><div class="list-row-title" style="color:#97C459">JP</div></div><div class="list-row-right ${jpPnl>=0?'pos':'neg'}">${fmtS(jpPnl)}</div></div>
+  </div>
+  <div class="card"><div class="card-header"><span class="card-title">By account</span></div>
+    ${PROFILES.map(p=>{const pnl=casinoPnl(p);return`<div class="list-row"><div class="list-row-left"><div class="list-row-title" style="display:flex;align-items:center;gap:8px"><div style="width:7px;height:7px;border-radius:50%;background:${profileColor(p)}"></div>${profileLabel(p)}</div></div><div class="list-row-right ${pnl>=0?'pos':'neg'}">${fmtS(pnl)}</div></div>`;}).join('')}
+  </div>`;
+}
+
+async function init(){
+  await loadData();
+  render();
+}
+init();
+</script>
+</body>
+</html>
