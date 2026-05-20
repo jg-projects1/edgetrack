@@ -427,7 +427,6 @@ function renderMonthBars(map,height=90){
 // ── DASHBOARD ────────────────────────────────────────────────────────────────
 function renderDashboard(){
   const pending=pendingAll();
-  const combinedPnl=PROFILES.reduce((a,p)=>a+totalPnl(p),0);
   const allMap=monthlyPnl(allTxs());
   const totalTrades=PROFILES.reduce((a,p)=>a+(state[p].transactions||[]).length,0);
   const combinedPnl=PROFILES.reduce((a,p)=>a+totalPnl(p),0);
