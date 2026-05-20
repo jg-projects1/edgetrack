@@ -147,10 +147,17 @@ function pillClass(t){return'pill pill-'+(t||'').toLowerCase().replace(/[\s]/g,'
 function acctPill(a){return`<span class="pill pill-${a}">${PROFILE_LABELS[a]||a}</span>`;}
 
 // ── STATE ─────────────────────────────────────────────────────────────────────
+let mode='sports'; // 'sports' or 'casino'
 let step=1;
 let rawText='';
 let preview=[];
 let importResult=null;
+let casinoAccount='me';
+let casinoOperator='JG';
+let casinoStep=1;
+let casinoRaw='';
+let casinoPreview=[];
+let casinoImportResult=null;
 
 // ── PROGRESS ──────────────────────────────────────────────────────────────────
 function updateProgress(){
@@ -160,11 +167,18 @@ function updateProgress(){
   }
 }
 function render(){
-  updateProgress();
   const app=document.getElementById('app');
-  if(step===1)app.innerHTML=renderStep1();
-  else if(step===2)app.innerHTML=renderStep2();
-  else if(step===3)app.innerHTML=renderStep3();
+  // Mode selector always at top
+  const modeHtml=`<div style="display:flex;gap:8px;margin-bottom:20px">
+    <button onclick="mode='sports';step=1;rawText='';preview=[];importResult=null;render()" style="flex:1;padding:10px;border-radius:9px;font-family:'Syne',sans-serif;font-size:13px;font-weight:700;cursor:pointer;border:none;background:${mode==='sports'?'var(--green)':'var(--bg3)'};color:${mode==='sports'?'#000':'var(--text2)'}">⚽ Sports bets</button>
+    <button onclick="mode='casino';casinoStep=1;casinoRaw='';casinoPreview=[];casinoImportResult=null;render()" style="flex:1;padding:10px;border-radius:9px;font-family:'Syne',sans-serif;font-size:13px;font-weight:700;cursor:pointer;border:none;background:${mode==='casino'?'var(--green)':'var(--bg3)'};color:${mode==='casino'?'#000':'var(--text2)'}">🎰 Casino sessions</button>
+  </div>`;
+  if(mode==='sports'){
+    updateProgress();
+    app.innerHTML=modeHtml+(step===1?renderStep1():step===2?renderStep2():renderStep3());
+  }else{
+    app.innerHTML=modeHtml+(casinoStep===1?renderCasinoStep1():casinoStep===2?renderCasinoStep2():renderCasinoStep3());
+  }
 }
 
 // ── STEP 1: Paste ─────────────────────────────────────────────────────────────
@@ -409,6 +423,182 @@ function renderStep3(){
     </div>
   </div>`;
 }
+
+// ── CASINO IMPORT ─────────────────────────────────────────────────────────────
+function renderCasinoStep1(){
+  return`<div class="card">
+    <div class="card-title"><span class="step-num">1</span>Paste your casino data</div>
+    <div class="info-box" style="margin-bottom:14px">
+      Copy from Google Sheets including the header row.<br>
+      Expected columns: <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text)">Date, Bookie, Wagering, Free Spins</span>
+    </div>
+    <div style="margin-bottom:14px">
+      <label>Paste data here</label>
+      <textarea id="casino-paste" placeholder="Date&#9;Bookie&#9;Wagering&#9;Free Spins&#9;...">${casinoRaw}</textarea>
+    </div>
+    <div style="margin-bottom:14px">
+      <label>Default account (applied to all rows)</label>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
+        ${['me','wife','bp','rq'].map(p=>`<button onclick="casinoAccount='${p}';document.querySelectorAll('.cacct-btn').forEach(b=>b.style.background='var(--bg3)');this.style.background='var(--green)';this.style.color='#000'" class="cacct-btn" style="padding:7px 14px;border-radius:8px;border:none;font-family:'Syne',sans-serif;font-size:12px;font-weight:700;cursor:pointer;background:${casinoAccount===p?'var(--green)':'var(--bg3)'};color:${casinoAccount===p?'#000':'var(--text2)'}">${{me:'JG',wife:'HG',bp:'BP',rq:'RQ'}[p]}</button>`).join('')}
+      </div>
+    </div>
+    <div style="margin-bottom:14px">
+      <label>Default operator</label>
+      <div style="display:flex;gap:6px;margin-top:6px">
+        <button onclick="casinoOperator='JG';document.querySelectorAll('.cop-btn').forEach(b=>b.style.background='var(--bg3)');this.style.background='var(--green)';this.style.color='#000'" class="cop-btn" style="padding:7px 20px;border-radius:8px;border:none;font-family:'Syne',sans-serif;font-size:12px;font-weight:700;cursor:pointer;background:${casinoOperator==='JG'?'var(--green)':'var(--bg3)'};color:${casinoOperator==='JG'?'#000':'var(--text2)'}">JG</button>
+        <button onclick="casinoOperator='JP';document.querySelectorAll('.cop-btn').forEach(b=>b.style.background='var(--bg3)');this.style.background='var(--green)';this.style.color='#000'" class="cop-btn" style="padding:7px 20px;border-radius:8px;border:none;font-family:'Syne',sans-serif;font-size:12px;font-weight:700;cursor:pointer;background:${casinoOperator==='JP'?'var(--green)':'var(--bg3)'};color:${casinoOperator==='JP'?'#000':'var(--text2)'}">JP</button>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center">
+      <button class="btn btn-primary" onclick="processCasinoStep1()">Parse data →</button>
+      <span id="c1-msg" style="font-size:12px;color:var(--red)"></span>
+    </div>
+  </div>`;
+}
+
+function parseCasinoDate(v){
+  if(!v)return todayStr();
+  const s=String(v).trim();
+  // DD/MM or D/M
+  const m1=s.match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?$/);
+  if(m1){const yr=m1[3]?(m1[3].length===2?'20'+m1[3]:m1[3]):new Date().getFullYear();return`${m1[1].padStart(2,'0')}/${m1[2].padStart(2,'0')}/${yr}`;}
+  // DD-Mon
+  const m2=s.match(/^(\d{1,2})[-\s]([A-Za-z]{3,})(?:[-\s](\d{2,4}))?$/);
+  if(m2){const months={jan:'01',feb:'02',mar:'03',apr:'04',may:'05',jun:'06',jul:'07',aug:'08',sep:'09',oct:'10',nov:'11',dec:'12'};const mo=months[m2[2].toLowerCase().slice(0,3)];if(mo){const yr=m2[3]?(m2[3].length===2?'20'+m2[3]:m2[3]):new Date().getFullYear();return`${m2[1].padStart(2,'0')}/${mo}/${yr}`;}}
+  return s;
+}
+
+function todayStr(){const d=new Date();return[String(d.getDate()).padStart(2,'0'),String(d.getMonth()+1).padStart(2,'0'),d.getFullYear()].join('/');}
+
+function processCasinoStep1(){
+  casinoRaw=(document.getElementById('casino-paste')?.value||'').trim();
+  if(!casinoRaw){document.getElementById('c1-msg').textContent='Please paste your data first.';return;}
+  const lines=casinoRaw.split('\n').map(l=>l.trimEnd()).filter(l=>l.trim());
+  if(lines.length<2){document.getElementById('c1-msg').textContent='Need at least a header row plus data.';return;}
+  const sep=lines[0].includes('\t')?'\t':',';
+  const headers=lines[0].split(sep).map(h=>h.trim().replace(/^"|"$/g,''));
+  const dateCol=headers.findIndex(h=>h.toLowerCase()==='date');
+  const bookieCol=headers.findIndex(h=>h.toLowerCase()==='bookie'||h.toLowerCase()==='bookmaker'||h.toLowerCase()==='casino');
+  const wagerCol=headers.findIndex(h=>h.toLowerCase()==='wagering'||h.toLowerCase()==='wager'||h.toLowerCase()==='wager p&l'||h.toLowerCase()==='wager pnl');
+  const spinsCol=headers.findIndex(h=>h.toLowerCase()==='free spins'||h.toLowerCase()==='freespins'||h.toLowerCase()==='spins'||h.toLowerCase()==='bonus');
+  const operatorCol=headers.findIndex(h=>h.toLowerCase()==='operator'||h.toLowerCase()==='op');
+  if(bookieCol===-1){document.getElementById('c1-msg').textContent='Could not find Bookie column.';return;}
+  casinoPreview=[];
+  lines.slice(1).forEach((line,ri)=>{
+    const vals=line.split(sep).map(v=>v.trim().replace(/^"|"$/g,''));
+    const bookie=bookieCol>=0?(vals[bookieCol]||'').trim():'';
+    if(!bookie)return;
+    const wagerPnl=parseFloat((vals[wagerCol]||'').replace(/[£,]/g,''))||0;
+    const bonusWin=parseFloat((vals[spinsCol]||'').replace(/[£,]/g,''))||0;
+    const netProfit=parseFloat((wagerPnl+bonusWin).toFixed(2));
+    casinoPreview.push({
+      id:Date.now()+Math.random(),
+      date:parseCasinoDate(dateCol>=0?vals[dateCol]:''),
+      casino:bookie,
+      operator:operatorCol>=0?(vals[operatorCol]||casinoOperator):casinoOperator,
+      wagerPnl,bonusWin,netProfit,
+      offerType:'Reload',
+      pending:false,
+      notes:'Imported',
+      _acct:casinoAccount,
+      _src:ri+2,
+    });
+  });
+  if(!casinoPreview.length){document.getElementById('c1-msg').textContent='No valid rows found.';return;}
+  casinoStep=2;render();
+}
+
+function renderCasinoStep2(){
+  const totalPnl=casinoPreview.reduce((a,s)=>a+(s.netProfit||0),0);
+  const acctLabel={me:'JG',wife:'HG',bp:'BP',rq:'RQ'}[casinoAccount]||casinoAccount;
+  return`<div class="card">
+    <div class="card-title"><span class="step-num done">1</span>Data parsed</div>
+    <div style="font-size:12px;color:var(--green)">✓ ${casinoPreview.length} casino sessions ready</div>
+  </div>
+  <div class="card">
+    <div class="card-title"><span class="step-num">2</span>Preview — check before importing</div>
+    <div class="result-grid">
+      <div class="result-card"><div class="num">${casinoPreview.length}</div><div class="lbl">Sessions</div></div>
+      <div class="result-card"><div class="num" style="font-size:16px;color:${totalPnl>=0?'var(--green)':'var(--red)'}">${totalPnl>=0?'+':''}£${Math.abs(totalPnl).toFixed(2)}</div><div class="lbl">Total P&L</div></div>
+      <div class="result-card"><div class="num" style="font-size:16px">${acctLabel}</div><div class="lbl">Account</div></div>
+      <div class="result-card"><div class="num" style="font-size:16px">${casinoOperator}</div><div class="lbl">Operator</div></div>
+    </div>
+    <div class="info-box">Bookie balances will <strong>not</strong> be changed — history only.</div>
+    <div class="preview-wrap">
+      <table class="preview-table">
+        <thead><tr><th>Row</th><th>Date</th><th>Casino</th><th>Operator</th><th>Wager P&L</th><th>Bonus Win</th><th>Net</th></tr></thead>
+        <tbody>
+          ${casinoPreview.slice(0,200).map(s=>{
+            const netCol=(s.netProfit||0)>=0?'pos':'neg';
+            return`<tr>
+              <td style="color:var(--text3)">${s._src}</td>
+              <td>${s.date}</td>
+              <td style="font-weight:600;font-family:'Syne',sans-serif">${s.casino}</td>
+              <td style="color:${s.operator==='JG'?'#85B7EB':'#97C459'};font-weight:600">${s.operator}</td>
+              <td class="${(s.wagerPnl||0)>=0?'pos':'neg'}">${s.wagerPnl>=0?'+':''}£${Math.abs(s.wagerPnl||0).toFixed(2)}</td>
+              <td class="${(s.bonusWin||0)>0?'pos':'neu'}">£${(s.bonusWin||0).toFixed(2)}</td>
+              <td class="${netCol}">${(s.netProfit||0)>=0?'+':''}£${Math.abs(s.netProfit||0).toFixed(2)}</td>
+            </tr>`;
+          }).join('')}
+          ${casinoPreview.length>200?`<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:10px">... and ${casinoPreview.length-200} more</td></tr>`:''}
+        </tbody>
+      </table>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:16px">
+      <button class="btn btn-primary" onclick="doCasinoImport()">Import ${casinoPreview.length} sessions →</button>
+      <button class="btn btn-ghost" onclick="casinoStep=1;render()">← Start over</button>
+    </div>
+  </div>`;
+}
+
+async function doCasinoImport(){
+  document.getElementById('app').innerHTML=`<div class="card" style="text-align:center;padding:40px">
+    <div style="font-size:32px;margin-bottom:14px">⏳</div>
+    <div style="font-size:15px;font-weight:700;margin-bottom:6px">Importing ${casinoPreview.length} sessions…</div>
+    <div class="sync-row" style="justify-content:center;margin-top:16px"><div class="sync-dot syncing"></div><span>Connecting…</span></div>
+  </div>`;
+  try{
+    const loadRes=await fetch('/api/load');
+    if(!loadRes.ok)throw new Error('Failed to load current data');
+    const loadJson=await loadRes.json();
+    let state=loadJson.data||{};
+    ['me','wife','bp','rq'].forEach(pr=>{
+      if(!state[pr])state[pr]={bookies:{},bank:0,transactions:[],casino:[]};
+      if(!state[pr].casino)state[pr].casino=[];
+    });
+    casinoPreview.forEach(s=>{
+      state[s._acct].casino.push({
+        id:s.id,date:s.date,casino:s.casino,
+        operator:s.operator,offerType:s.offerType,
+        wagerPnl:s.wagerPnl,bonusWin:s.bonusWin,
+        netProfit:s.netProfit,pending:false,
+        notes:s.notes,_acct:s._acct,
+      });
+    });
+    const saveRes=await fetch('/api/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(state)});
+    if(!saveRes.ok)throw new Error('Failed to save');
+    casinoImportResult={success:true,count:casinoPreview.length};
+    casinoStep=3;render();
+  }catch(e){
+    document.getElementById('app').innerHTML=`<div class="card"><div class="error-box">⚠ Import failed: ${e.message}</div><button class="btn btn-ghost" onclick="casinoStep=2;render()">← Back</button></div>`;
+  }
+}
+
+function renderCasinoStep3(){
+  return`<div class="success-box">✓ Import complete — ${casinoImportResult?.count||0} casino sessions added</div>
+  <div class="card">
+    <div class="card-title"><span class="step-num done">3</span>Done</div>
+    <div style="font-size:13px;color:var(--text2);line-height:2">
+      <div>1. Open MBEmpire and check the <strong style="color:var(--text)">Casino</strong> tab</div>
+      <div>2. History and summary will now show your imported sessions</div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:18px">
+      <a href="/" class="btn btn-primary" style="text-decoration:none">← Go to MBEmpire</a>
+      <button class="btn btn-ghost" onclick="casinoStep=1;casinoRaw='';casinoPreview=[];casinoImportResult=null;render()">Import another batch</button>
+    </div>
+  </div>`;
+}
+
 
 render();
 </script>
