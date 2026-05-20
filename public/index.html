@@ -272,6 +272,14 @@ async function loadData(){
   }catch(e){
     console.error('Load error:',e);
     setSyncStatus('error');
+    // Show error on screen so we can diagnose
+    const mc=document.getElementById('main-content');
+    if(mc)mc.innerHTML=`<div style="padding:30px 16px;text-align:center">
+      <div style="font-size:13px;color:#E24B4A;margin-bottom:12px">⚠ Load failed: ${e.message}</div>
+      <div style="font-size:11px;color:#5F5E5A;margin-bottom:16px">Check your internet connection and try refreshing</div>
+      <button onclick="location.reload()" style="padding:10px 20px;background:#252629;color:#e8e8e4;border:0.5px solid rgba(255,255,255,0.1);border-radius:8px;font-family:system-ui;font-size:13px;cursor:pointer">Retry</button>
+      <div style="margin-top:20px;font-size:11px;color:#444441">If this keeps happening, open the browser console (F12) and share the exact error</div>
+    </div>`;
   }
 }
 
