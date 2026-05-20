@@ -1,6 +1,16 @@
 {
   "rewrites": [
-    { "source": "/import", "destination": "/import.html" },
-    { "source": "/((?!api|import).*)", "destination": "/index.html" }
+    {
+      "source": "/import",
+      "destination": "/import.html"
+    },
+    {
+      "source": "/casino",
+      "destination": "/casino.html"
+    },
+    {
+      "source": "/((?!api|import|casino).*)",
+      "destination": "/index.html"
+    }
   ]
 }
