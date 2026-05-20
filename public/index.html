@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#ffffff"/>
 <link rel="manifest" href="/manifest.json"/>
 <link rel="apple-touch-icon" href="/icon-192.png"/>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css"/>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css" media="print" onload="this.media='all'"/>
 <title>MBEmpire</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -264,12 +264,14 @@ async function loadData(){
     if(json.ok&&json.data){
       const saved=json.data;
       const hasData=PROFILES.some(p=>saved[p]&&((saved[p].transactions||[]).length>0||saved[p].bank!==0||Object.values(saved[p].bookies||{}).some(b=>(b.bal||0)!==0)));
-      if(hasData){Object.assign(state,saved);try{localStorage.setItem('mbe_cache',JSON.stringify(saved));}catch(e){}}
+      if(hasData){
+        Object.assign(state,saved);
+        try{localStorage.setItem('mbe_cache',JSON.stringify(saved));}catch(e){}
+      }
     }
     setSyncStatus('synced');
   }catch(e){
     console.error('Load error:',e);
-    try{const c=localStorage.getItem('mbe_cache');if(c){const s=JSON.parse(c);if(PROFILES.some(p=>s[p]&&((s[p].transactions||[]).length>0||s[p].bank!==0)))Object.assign(state,s);}}catch(le){}
     setSyncStatus('error');
   }
 }
@@ -319,7 +321,7 @@ const DEFAULT_BOOKIES=[
   'Unibet','Vbet','Video Slots','Virgin Bet','Virgin Games','William Hill'
 ];
 
-function makeProfile(){const b={};DEFAULT_BOOKIES.forEach(x=>b[x]={bal:0,status:'Active',notes:''});return{bookies:b,bank:0,transactions:[],casino:[]};}
+function makeProfile(){return{bookies:{},bank:0,transactions:[],casino:[]};}
 
 let currentProfile='me',currentTab='dashboard',formAccount='me',selectedBetType='',exchTransferBank='me';
 let recentBookies=[]; // tracks last 8 used bookies
@@ -1492,11 +1494,24 @@ function deleteCasinoSession(acct,id){
 }
 
 async function init(){
-  await loadData();
+  // Show UI immediately from cache, then sync from KV
+  const cached=localStorage.getItem('mbe_cache');
+  if(cached){
+    try{
+      const saved=JSON.parse(cached);
+      const hasData=PROFILES.some(p=>saved[p]&&((saved[p].transactions||[]).length>0||saved[p].bank!==0));
+      if(hasData){Object.assign(state,saved);}
+    }catch(e){}
+  }
   migrateLegacy();
   const pb=document.getElementById('profile-bar');if(pb)pb.style.display='none';
   switchProfile('me');
-  render();
+  render(); // render immediately from cache
+  // Then fetch latest from KV in background
+  loadData().then(()=>{
+    migrateLegacy();
+    render(); // re-render with server data
+  });
 }
 
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});
