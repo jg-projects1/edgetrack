@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#ffffff"/>
 <link rel="manifest" href="/manifest.json"/>
 <link rel="apple-touch-icon" href="/icon-192.png"/>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css" media="print" onload="this.media='all'"/>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css" />
 <title>MBEmpire</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -1494,24 +1494,11 @@ function deleteCasinoSession(acct,id){
 }
 
 async function init(){
-  // Show UI immediately from cache, then sync from KV
-  const cached=localStorage.getItem('mbe_cache');
-  if(cached){
-    try{
-      const saved=JSON.parse(cached);
-      const hasData=PROFILES.some(p=>saved[p]&&((saved[p].transactions||[]).length>0||saved[p].bank!==0));
-      if(hasData){Object.assign(state,saved);}
-    }catch(e){}
-  }
+  await loadData();
   migrateLegacy();
   const pb=document.getElementById('profile-bar');if(pb)pb.style.display='none';
   switchProfile('me');
-  render(); // render immediately from cache
-  // Then fetch latest from KV in background
-  loadData().then(()=>{
-    migrateLegacy();
-    render(); // re-render with server data
-  });
+  render();
 }
 
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});
