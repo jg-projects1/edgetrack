@@ -598,7 +598,7 @@ function closeModal(){document.getElementById('modal-root').innerHTML='';}
 function renderAdd(prefill){
   const p=state[formAccount];const pf=prefill||{};
   const exchOpts=EXCHANGES.map(e=>`<option${(pf.exchange||lastExchange)===e?' selected':''}>${e}</option>`).join('');
-  const topTypes=['Qualifier','Free Bet','Boost'];
+  const topTypes=['Boost','Qualifier','Free Bet'];
   const moreTypes=['Mug','Extra Place','2Up','MBAL','Cash Back','Cash Out','Arb'];
   const isMoreSel=moreTypes.includes(selectedBetType);
   return`
@@ -622,9 +622,8 @@ function renderAdd(prefill){
           ${topTypes.map(t=>`<button onclick="selectBetType('${t}')" style="flex:1;padding:10px 6px;border-radius:8px;border:0.5px solid ${selectedBetType===t?'transparent':'rgba(255,255,255,0.1)'};background:${selectedBetType===t?getTypeColor(t):'#252629'};color:${selectedBetType===t?getTypeTextColor(t):'#888780'};font-family:system-ui,-apple-system,sans-serif;font-size:13px;font-weight:500;cursor:pointer;transition:all .15s">${t}</button>`).join('')}
         </div>
         <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center">
-          ${(showMoreTypes||isMoreSel)?moreTypes.map(t=>`<div class="type-pill${selectedBetType===t?' sel sel-'+t.toLowerCase().replace(/\s/g,''):''}" data-type="${t}" onclick="selectBetType('${t}')">${t}</div>`).join(''):''}
-          <div class="type-pill${showMoreTypes&&!isMoreSel?' sel':''}" onclick="toggleMoreTypes()" style="${showMoreTypes?'background:#2e2f33;color:#B4B2A9;border-color:#444441':''}">${showMoreTypes?'Less ▲':'More ▼'}</div>
-          ${['Deposit','Withdrawal','Exchange Deposit','Exchange Withdrawal','Balance Amendment'].map(t=>`<div class="type-pill${selectedBetType===t?' sel sel-'+t.toLowerCase().replace(/\s/g,''):''}" data-type="${t}" onclick="selectBetType('${t}')">${t}</div>`).join('')}
+          ${(showMoreTypes||isMoreSel||['Deposit','Withdrawal','Exchange Deposit','Exchange Withdrawal','Balance Amendment'].includes(selectedBetType))?[...moreTypes,'Deposit','Withdrawal','Exchange Deposit','Exchange Withdrawal','Balance Amendment'].map(t=>`<div class="type-pill${selectedBetType===t?' sel sel-'+t.toLowerCase().replace(/\s/g,''):''}" data-type="${t}" onclick="selectBetType('${t}')">${t}</div>`).join(''):''}
+          <div class="type-pill${showMoreTypes?' sel':''}" onclick="toggleMoreTypes()" style="${showMoreTypes?'background:#2e2f33;color:#B4B2A9;border-color:#444441':''}">${showMoreTypes?'Less ▲':'More ▼'}</div>
         </div>
       </div>
 
