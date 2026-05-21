@@ -1468,6 +1468,7 @@ function saveCasinoSession(){
     id:Date.now(),
     date:document.getElementById('c-date')?.value||todayStr(),
     casino,
+    operator:casinoOperator,
     offerType:document.getElementById('c-offer-type')?.value||'Other',
     deposit,
     wager:parseFloat(document.getElementById('c-wager')?.value)||0,
