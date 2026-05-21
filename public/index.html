@@ -289,6 +289,25 @@ async function loadData(){
 async function saveData(){
   setSyncStatus('syncing');
   try{
+    // Fetch latest from server first and merge to avoid overwriting another device's changes
+    const loadRes=await fetch('/api/load');
+    if(loadRes.ok){
+      const loadJson=await loadRes.json();
+      if(loadJson.ok&&loadJson.data){
+        const server=loadJson.data;
+        PROFILES.forEach(pr=>{
+          if(!server[pr])return;
+          // Merge transactions — add any server txs we don't have locally
+          const localTxIds=new Set((state[pr].transactions||[]).map(t=>t.id));
+          const serverOnlyTxs=(server[pr].transactions||[]).filter(t=>!localTxIds.has(t.id));
+          if(serverOnlyTxs.length)state[pr].transactions=[...(state[pr].transactions||[]),...serverOnlyTxs];
+          // Merge casino sessions
+          const localCasinoIds=new Set((state[pr].casino||[]).map(s=>s.id));
+          const serverOnlyCasino=(server[pr].casino||[]).filter(s=>!localCasinoIds.has(s.id));
+          if(serverOnlyCasino.length)state[pr].casino=[...(state[pr].casino||[]),...serverOnlyCasino];
+        });
+      }
+    }
     const res=await fetch('/api/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(state)});
     if(!res.ok)throw new Error('HTTP '+res.status);
     setSyncStatus('synced');
@@ -300,7 +319,7 @@ async function saveData(){
   }
 }
 
-function debouncedSave(){if(syncTimeout)clearTimeout(syncTimeout);setSyncStatus('syncing');syncTimeout=setTimeout(saveData,1000);}
+function debouncedSave(){if(syncTimeout)clearTimeout(syncTimeout);setSyncStatus('syncing');syncTimeout=setTimeout(saveData,1500);}
 function save(){debouncedSave();}
 
 const PROFILES=['me','wife','bp','rq'];
