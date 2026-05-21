@@ -1477,7 +1477,8 @@ function saveCasinoSession(){
     _acct:casinoFormAcct,
   });
   save();showToast('Casino session saved!');
-  resetCasinoForm();
+  casinoPendingSpins=false;casinoHasDeposit=false;casinoOfferType='';
+  render(); // re-render full tab so operator P&L updates
 }
 
 
