@@ -925,7 +925,58 @@ function renderTxTable(txs,showAcct){
   }).join('')}</tbody></table></div>`;
 }
 
-function deleteTx(acct,id){if(!confirm('Delete? Balances will not be reversed.'))return;state[acct].transactions=state[acct].transactions.filter(t=>t.id!==id);save();render();}
+function deleteTx(acct,id){
+  if(!confirm('Delete this transaction? Balances will be reversed.'))return;
+  const tx=(state[acct].transactions||[]).find(t=>t.id===id);
+  if(!tx){state[acct].transactions=state[acct].transactions.filter(t=>t.id!==id);save();render();return;}
+  const p=state[acct];
+  const isFB=isFreeBet(tx.type);
+  const bstake=tx.bstake||0,bodds=tx.bodds||0,pnl=tx.pnl||0;
+  // Reverse the balance changes that were applied when this tx was logged/settled
+  if(BET_ONLY.includes(tx.type)){
+    if(tx.result==='Pending'){
+      // Was deducted at log time — restore stake to bookie
+      if(!isFB&&tx.bookie&&p.bookies[tx.bookie])
+        p.bookies[tx.bookie].bal=(p.bookies[tx.bookie].bal||0)+bstake;
+    }else if(tx.result==='Won'){
+      // Return was added — reverse it
+      if(isFB){
+        if(tx.bookie&&p.bookies[tx.bookie])
+          p.bookies[tx.bookie].bal=(p.bookies[tx.bookie].bal||0)-((bodds-1)*bstake);
+      }else{
+        if(tx.bookie&&p.bookies[tx.bookie])
+          p.bookies[tx.bookie].bal=(p.bookies[tx.bookie].bal||0)-(bodds*bstake);
+      }
+    }else if(tx.result==='Lost'){
+      // Stake was deducted, lay profit went to exchange — reverse exchange
+      if(!isFB&&tx.bookie&&p.bookies[tx.bookie])
+        p.bookies[tx.bookie].bal=(p.bookies[tx.bookie].bal||0)+bstake;
+      if(tx.exchange&&state.exchanges[tx.exchange]!==undefined)
+        state.exchanges[tx.exchange]=(state.exchanges[tx.exchange]||0)-pnl;
+    }
+  }else if(tx.type==='Deposit'){
+    // Reverse: bookie −deposit, bank +deposit
+    if(tx.bookie&&p.bookies[tx.bookie])p.bookies[tx.bookie].bal=(p.bookies[tx.bookie].bal||0)-(tx.amount||0);
+    p.bank+=(tx.amount||0);
+  }else if(tx.type==='Withdrawal'){
+    if(tx.bookie&&p.bookies[tx.bookie])p.bookies[tx.bookie].bal=(p.bookies[tx.bookie].bal||0)+(tx.amount||0);
+    p.bank-=(tx.amount||0);
+  }else if(tx.type==='Exchange Deposit'){
+    if(tx.exchange&&state.exchanges[tx.exchange]!==undefined)state.exchanges[tx.exchange]=(state.exchanges[tx.exchange]||0)-(tx.amount||0);
+    p.bank+=(tx.amount||0);
+  }else if(tx.type==='Exchange Withdrawal'){
+    if(tx.exchange&&state.exchanges[tx.exchange]!==undefined)state.exchanges[tx.exchange]=(state.exchanges[tx.exchange]||0)+(tx.amount||0);
+    p.bank-=(tx.amount||0);
+  }
+  // Balance Amendment — reverse the diff
+  else if(tx.type==='Balance Amendment'){
+    const target=tx.target;
+    if(target==='Bank'){p.bank-=(tx.diff||0);}
+    else if(target&&p.bookies[target]){p.bookies[target].bal=(p.bookies[target].bal||0)-(tx.diff||0);}
+  }
+  state[acct].transactions=state[acct].transactions.filter(t=>t.id!==id);
+  save();showToast('Transaction deleted & balances reversed');render();
+}
 
 function exportCSV(){
   const txs=allTxs();
@@ -1552,9 +1603,22 @@ function confirmCasinoSpins(acct,id){
 }
 
 function deleteCasinoSession(acct,id){
-  if(!confirm('Delete session?'))return;
+  if(!confirm('Delete session? Balances will be reversed.'))return;
+  const session=(state[acct].casino||[]).find(s=>s.id===id);
+  if(session){
+    const p=state[acct];
+    // Reverse deposit
+    if((session.deposit||0)>0){
+      p.bank+=(session.deposit||0);
+      if(session.casino&&p.bookies[session.casino])
+        p.bookies[session.casino].bal=(p.bookies[session.casino].bal||0)-(session.deposit||0);
+    }
+    // Reverse net profit from bookie balance
+    if(session.casino&&p.bookies[session.casino])
+      p.bookies[session.casino].bal=(p.bookies[session.casino].bal||0)-(session.netProfit||0);
+  }
   state[acct].casino=(state[acct].casino||[]).filter(s=>s.id!==id);
-  save();
+  save();showToast('Session deleted & balances reversed');
   const cv=document.getElementById('casino-view');
   if(cv)cv.innerHTML=renderCasinoHistory();
 }
