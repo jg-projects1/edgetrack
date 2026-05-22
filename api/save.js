@@ -8,13 +8,15 @@ export default async function handler(req, res) {
     const kvUrl = process.env.KV_REST_API_URL;
     const kvToken = process.env.KV_REST_API_TOKEN;
     const body = req.body;
+    // Store as JSON string - load.js does JSON.parse(data.result) so we need one stringify
+    const jsonString = JSON.stringify(body);
     const response = await fetch(`${kvUrl}/set/edgetrack_main`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${kvToken}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify(JSON.stringify(body))
+      body: JSON.stringify(jsonString)
     });
     if (!response.ok) throw new Error(`KV error: ${response.status}`);
     return res.status(200).json({ ok: true });
