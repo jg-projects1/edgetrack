@@ -265,88 +265,99 @@ async function loadData(){
     const json=await res.json();
     if(json.ok&&json.data){
       const saved=json.data;
-      const hasData=PROFILES.some(p=>saved[p]&&((saved[p].transactions||[]).length>0||saved[p].bank!==0||Object.values(saved[p].bookies||{}).some(b=>(b.bal||0)!==0)));
-      if(hasData){
-        Object.assign(state,saved);
-        try{localStorage.setItem('mbe_cache',JSON.stringify(saved));}catch(e){}
-      }
+      const hasData=PROFILES.some(p=>saved[p]&&((saved[p].transactions||[]).length>0||saved[p].bank!==0));
+      if(hasData)Object.assign(state,saved);
     }
     setSyncStatus('synced');
   }catch(e){
     console.error('Load error:',e);
     setSyncStatus('error');
-    // Show error on screen so we can diagnose
-    const mc=document.getElementById('main-content');
-    if(mc)mc.innerHTML=`<div style="padding:30px 16px;text-align:center">
-      <div style="font-size:13px;color:#E24B4A;margin-bottom:12px">⚠ Load failed: ${e.message}</div>
-      <div style="font-size:11px;color:#5F5E5A;margin-bottom:16px">Check your internet connection and try refreshing</div>
-      <button onclick="location.reload()" style="padding:10px 20px;background:#252629;color:#e8e8e4;border:0.5px solid rgba(255,255,255,0.1);border-radius:8px;font-family:system-ui;font-size:13px;cursor:pointer">Retry</button>
-      <div style="margin-top:20px;font-size:11px;color:#444441">If this keeps happening, open the browser console (F12) and share the exact error</div>
-    </div>`;
   }
 }
 
 async function saveData(){
   setSyncStatus('syncing');
   try{
-    // Step 1: Get the latest server state
+    // Atomic read-modify-write:
+    // 1. Fetch current server state
     const loadRes=await fetch('/api/load');
     if(!loadRes.ok)throw new Error('HTTP '+loadRes.status);
     const loadJson=await loadRes.json();
-    const server=loadJson.ok&&loadJson.data?loadJson.data:null;
+    const server=loadJson.ok&&loadJson.data?loadJson.data:{};
 
-    if(server){
-      // Step 2: Build merged state using server as base
-      // Apply only what changed locally since last load
-      const merged=JSON.parse(JSON.stringify(server)); // deep copy server state
+    // 2. Merge: server is base, local changes are applied on top
+    // New transactions/casino sessions added locally get added to server state
+    // Existing records: local wins (captures settlements, edits, deletes)
+    // Balances: local wins (most recent action)
+    const merged=JSON.parse(JSON.stringify(server));
 
-      PROFILES.forEach(pr=>{
-        if(!merged[pr])merged[pr]={transactions:[],casino:[],bank:0,bookies:{}};
+    PROFILES.forEach(pr=>{
+      if(!merged[pr])merged[pr]={transactions:[],casino:[],bank:0,bookies:{}};
 
-        // Transactions: start with server txs, add any local-only new txs
-        const serverTxIds=new Set((server[pr]?.transactions||[]).map(t=>t.id));
-        const localNewTxs=(state[pr]?.transactions||[]).filter(t=>!serverTxIds.has(t.id));
+      // Find transactions added locally since load (new IDs not on server)
+      const serverTxIds=new Set((server[pr]?.transactions||[]).map(t=>t.id));
+      const newLocalTxs=(state[pr]?.transactions||[]).filter(t=>!serverTxIds.has(t.id));
 
-        // Also apply local updates to existing txs (e.g. result changed from Pending to Won)
-        merged[pr].transactions=(server[pr]?.transactions||[]).map(serverTx=>{
-          const localTx=(state[pr]?.transactions||[]).find(t=>t.id===serverTx.id);
-          // If local has a newer version (result settled), use local
-          if(localTx&&localTx.result!=='Pending'&&serverTx.result==='Pending')return localTx;
-          if(localTx&&localTx.result===serverTx.result)return localTx; // use local for pnl edits
-          return serverTx;
-        });
-        // Add brand new local transactions
-        merged[pr].transactions=[...merged[pr].transactions,...localNewTxs];
+      // For existing txs: use local version if result changed (settlement)
+      // or if tx was deleted locally (not in local state anymore)
+      const localTxIds=new Set((state[pr]?.transactions||[]).map(t=>t.id));
+      const localHasData=(state[pr]?.transactions||[]).length>0;
+      let survivingServerTxs;
+      if(localHasData){
+        // Local has transactions — filter by what local knows about
+        // (deletions and settlements from local are respected)
+        survivingServerTxs=(server[pr]?.transactions||[])
+          .filter(t=>localTxIds.has(t.id))
+          .map(serverTx=>{
+            const localTx=(state[pr]?.transactions||[]).find(t=>t.id===serverTx.id);
+            return localTx||serverTx;
+          });
+      }else{
+        // Local has NO transactions — keep all server transactions untouched
+        // This prevents a fresh local state from wiping server data
+        survivingServerTxs=server[pr]?.transactions||[];
+      }
 
-        // Casino: same approach
-        const serverCasinoIds=new Set((server[pr]?.casino||[]).map(s=>s.id));
-        const localNewCasino=(state[pr]?.casino||[]).filter(s=>!serverCasinoIds.has(s.id));
-        merged[pr].casino=[...(server[pr]?.casino||[]).map(serverS=>{
-          const localS=(state[pr]?.casino||[]).find(s=>s.id===serverS.id);
-          return localS||serverS;
-        }),...localNewCasino];
+      merged[pr].transactions=[...survivingServerTxs,...newLocalTxs];
 
-        // Balances: use local (most recent action on this device)
-        merged[pr].bank=state[pr]?.bank??server[pr]?.bank??0;
-        merged[pr].bookies=state[pr]?.bookies||server[pr]?.bookies||{};
-      });
+      // Casino sessions
+      const serverCasinoIds=new Set((server[pr]?.casino||[]).map(s=>s.id));
+      const newLocalCasino=(state[pr]?.casino||[]).filter(s=>!serverCasinoIds.has(s.id));
+      const localCasinoIds=new Set((state[pr]?.casino||[]).map(s=>s.id));
+      const localHasCasino=(state[pr]?.casino||[]).length>0;
+      let survivingServerCasino;
+      if(localHasCasino){
+        survivingServerCasino=(server[pr]?.casino||[])
+          .filter(s=>localCasinoIds.has(s.id))
+          .map(serverS=>{
+            const localS=(state[pr]?.casino||[]).find(s=>s.id===serverS.id);
+            return localS||serverS;
+          });
+      }else{
+        survivingServerCasino=server[pr]?.casino||[];
+      }
+      merged[pr].casino=[...survivingServerCasino,...newLocalCasino];
 
-      // Exchanges: use local
-      merged.exchanges=state.exchanges||server.exchanges||{};
+      // Balances always from local (most recent action on this device)
+      merged[pr].bank=state[pr]?.bank??server[pr]?.bank??0;
+      merged[pr].bookies=state[pr]?.bookies||server[pr]?.bookies||{};
+    });
+    merged.exchanges=state.exchanges||server.exchanges||{};
 
-      // Update local state to merged
-      Object.assign(state,merged);
-    }
+    // Update local state to match merged
+    Object.assign(state,merged);
 
-    // Step 3: Save merged state
-    const res=await fetch('/api/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(state)});
+    // 3. Save merged state to server
+    const res=await fetch('/api/save',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(state)
+    });
     if(!res.ok)throw new Error('HTTP '+res.status);
     setSyncStatus('synced');
-    try{localStorage.setItem('mbe_cache',JSON.stringify(state));}catch(e){}
   }catch(e){
     console.error('Save error:',e);
     setSyncStatus('error');
-    try{localStorage.setItem('mbe_cache',JSON.stringify(state));}catch(le){}
   }
 }
 
