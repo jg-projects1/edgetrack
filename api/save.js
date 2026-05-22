@@ -9,10 +9,8 @@ module.exports = async (req, res) => {
 
   try {
     const data = req.body;
-    // Add server timestamp to every save
-    data._savedAt = Date.now();
     await kv.set('edgetrack_data', data);
-    res.status(200).json({ ok: true, savedAt: data._savedAt });
+    res.status(200).json({ ok: true });
   } catch (e) {
     console.error('Save error:', e);
     res.status(500).json({ ok: false, error: e.message });
