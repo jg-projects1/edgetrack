@@ -144,10 +144,43 @@ async function loadData(){
 async function saveData(){
   setSyncStatus('syncing');
   try{
+    // Read server state first, only update casino sessions for the relevant account
+    // This prevents overwriting sports data logged on another device
+    const loadRes=await fetch('/api/load');
+    if(!loadRes.ok)throw new Error('Load failed');
+    const loadJson=await loadRes.json();
+    const server=loadJson.ok&&loadJson.data?loadJson.data:{};
+
+    // Merge: use server as base, apply only casino changes from local
+    const merged=JSON.parse(JSON.stringify(server));
+    PROFILES.forEach(pr=>{
+      if(!merged[pr])merged[pr]={transactions:[],casino:[],bank:0,bookies:{}};
+      // Only update casino sessions — leave sports transactions untouched
+      const serverCasinoIds=new Set((server[pr]?.casino||[]).map(s=>s.id));
+      const newLocalCasino=(fullState[pr]?.casino||[]).filter(s=>!serverCasinoIds.has(s.id));
+      const localCasinoIds=new Set((fullState[pr]?.casino||[]).map(s=>s.id));
+      const survivingServerCasino=(server[pr]?.casino||[])
+        .filter(s=>localCasinoIds.has(s.id))
+        .map(serverS=>{
+          const localS=(fullState[pr]?.casino||[]).find(s=>s.id===serverS.id);
+          return localS||serverS;
+        });
+      merged[pr].casino=[...survivingServerCasino,...newLocalCasino];
+      // Update bank and bookies from local (casino deposits/profits affect these)
+      merged[pr].bank=fullState[pr]?.bank??server[pr]?.bank??0;
+      merged[pr].bookies=fullState[pr]?.bookies||server[pr]?.bookies||{};
+    });
+
+    // Update fullState to merged before saving
+    Object.assign(fullState,merged);
+
     const res=await fetch('/api/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(fullState)});
-    if(!res.ok)throw new Error();
+    if(!res.ok)throw new Error('Save failed');
     setSyncStatus('synced');
-  }catch(e){setSyncStatus('error');}
+  }catch(e){
+    console.error('Casino save error:',e);
+    setSyncStatus('error');
+  }
 }
 function save(){if(syncTimeout)clearTimeout(syncTimeout);setSyncStatus('syncing');syncTimeout=setTimeout(saveData,1000);}
 
