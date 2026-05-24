@@ -5,37 +5,37 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-title" content="Casino — MBEmpire"/>
-<meta name="theme-color" content="#0f1012"/>
+<meta name="theme-color" content="#3A3D47"/>
 <title>Casino — MBEmpire</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css"/>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{height:100%;-webkit-text-size-adjust:100%}
-body{font-family:system-ui,-apple-system,sans-serif;background:#0f1012;min-height:100%;font-size:14px;color:#e8e8e4;-webkit-tap-highlight-color:transparent}
+body{font-family:system-ui,-apple-system,sans-serif;background:#3A3D47;min-height:100%;font-size:14px;color:#e8e8e4;-webkit-tap-highlight-color:transparent}
 .app{display:flex;flex-direction:column;min-height:100svh}
-.topbar{background:#1a1b1e;border-bottom:0.5px solid rgba(255,255,255,0.08);padding:14px 16px;padding-top:calc(14px + env(safe-area-inset-top));display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+.topbar{background:#42454F;border-bottom:0.5px solid rgba(255,255,255,0.12);padding:14px 16px;padding-top:calc(14px + env(safe-area-inset-top));display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
 .logo{font-size:17px;font-weight:500;color:#e8e8e4}.logo span{color:#1D9E75}
-.sync-badge{display:flex;align-items:center;gap:5px;font-size:11px;color:#888780;background:#252629;padding:4px 10px;border-radius:20px;border:0.5px solid rgba(255,255,255,0.06)}
+.sync-badge{display:flex;align-items:center;gap:5px;font-size:11px;color:#C0C3CE;background:#4E5260;padding:4px 10px;border-radius:20px;border:0.5px solid rgba(255,255,255,0.10)}
 .sync-dot{width:5px;height:5px;border-radius:50%;background:#1D9E75;flex-shrink:0}
 .sync-dot.syncing{background:#BA7517;animation:pulse 1s infinite}
 .sync-dot.error{background:#E24B4A}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
-.tab-bar{background:#1a1b1e;border-top:0.5px solid rgba(255,255,255,0.08);padding:6px 4px;padding-bottom:calc(6px + env(safe-area-inset-bottom));display:flex;position:fixed;bottom:0;left:0;right:0;z-index:100}
-.tab{flex:1;padding:5px 2px;cursor:pointer;font-size:9px;font-weight:500;color:#5F5E5A;border:none;background:none;text-align:center;display:flex;flex-direction:column;align-items:center;gap:3px;transition:color .15s}
+.tab-bar{background:#42454F;border-top:0.5px solid rgba(255,255,255,0.12);padding:6px 4px;padding-bottom:calc(6px + env(safe-area-inset-bottom));display:flex;position:fixed;bottom:0;left:0;right:0;z-index:100}
+.tab{flex:1;padding:5px 2px;cursor:pointer;font-size:9px;font-weight:500;color:#B0B3BE;border:none;background:none;text-align:center;display:flex;flex-direction:column;align-items:center;gap:3px;transition:color .15s}
 .tab i{font-size:20px;line-height:1}
 .tab.active{color:#1D9E75}
 .tab-label{font-size:9px;font-weight:500;white-space:nowrap}
 .content{flex:1;padding:14px 16px;padding-bottom:calc(72px + env(safe-area-inset-bottom));max-width:680px;margin:0 auto;width:100%}
-.card{background:#1a1b1e;border:0.5px solid rgba(255,255,255,0.08);border-radius:12px;overflow:hidden;margin-bottom:12px}
-.card-header{padding:12px 16px;border-bottom:0.5px solid rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:space-between}
-.card-title{font-size:11px;font-weight:500;color:#5F5E5A;letter-spacing:.3px;text-transform:uppercase}
+.card{background:#42454F;border:0.5px solid rgba(255,255,255,0.12);border-radius:12px;overflow:hidden;margin-bottom:12px}
+.card-header{padding:12px 16px;border-bottom:0.5px solid rgba(255,255,255,0.10);display:flex;align-items:center;justify-content:space-between}
+.card-title{font-size:11px;font-weight:500;color:#B0B3BE;letter-spacing:.3px;text-transform:uppercase}
 .card-body{padding:14px 16px}
-.metric-card{background:#252629;border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:3px}
-.metric-label{font-size:11px;color:#888780;font-weight:500;display:flex;align-items:center;gap:4px}
+.metric-card{background:#4E5260;border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:3px}
+.metric-label{font-size:11px;color:#C0C3CE;font-weight:500;display:flex;align-items:center;gap:4px}
 .metric-label i{font-size:14px}
 .metric-value{font-size:26px;font-weight:500;letter-spacing:-1px;color:#e8e8e4;line-height:1.1}
 .metric-value.pos{color:#1D9E75}.metric-value.neg{color:#E24B4A}.metric-value.warn{color:#BA7517}
-.metric-sub{font-size:11px;color:#5F5E5A}
+.metric-sub{font-size:11px;color:#B0B3BE}
 .list-row{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:0.5px solid rgba(255,255,255,0.05)}
 .list-row:last-child{border-bottom:none}
 .list-row-left{display:flex;flex-direction:column;gap:3px;flex:1;min-width:0;margin-right:10px}
@@ -43,48 +43,48 @@ body{font-family:system-ui,-apple-system,sans-serif;background:#0f1012;min-heigh
 .list-row-meta{display:flex;gap:5px;align-items:center;flex-wrap:wrap}
 .list-row-right{font-size:13px;font-weight:500;flex-shrink:0}
 .list-row-right.pos{color:#1D9E75}.list-row-right.neg{color:#E24B4A}
-.pill{display:inline-flex;align-items:center;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:500;white-space:nowrap;background:#252629;color:#888780;border:0.5px solid transparent}
+.pill{display:inline-flex;align-items:center;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:500;white-space:nowrap;background:#4E5260;color:#C0C3CE;border:0.5px solid transparent}
 .pill-me{background:#0C447C;color:#85B7EB;border-color:#185FA5}
 .pill-wife{background:#3C3489;color:#AFA9EC;border-color:#534AB7}
 .pill-bp{background:#633806;color:#EF9F27;border-color:#854F0B}
 .pill-rq{background:#27500A;color:#97C459;border-color:#3B6D11}
-.form-label{font-size:10px;font-weight:500;color:#5F5E5A;letter-spacing:.3px;text-transform:uppercase;display:block;margin-bottom:5px}
-input[type=text],input[type=number],select{width:100%;background:#252629;border:0.5px solid rgba(255,255,255,0.1);border-radius:8px;padding:9px 11px;font-family:system-ui,-apple-system,sans-serif;font-size:13px;color:#e8e8e4;outline:none;-webkit-appearance:none;appearance:none;transition:border-color .15s}
-input:focus,select:focus{border-color:rgba(255,255,255,0.25);background:#2e2f33}
-select option{background:#252629}
+.form-label{font-size:10px;font-weight:500;color:#B0B3BE;letter-spacing:.3px;text-transform:uppercase;display:block;margin-bottom:5px}
+input[type=text],input[type=number],select{width:100%;background:#4E5260;border:0.5px solid rgba(255,255,255,0.15);border-radius:8px;padding:9px 11px;font-family:system-ui,-apple-system,sans-serif;font-size:13px;color:#e8e8e4;outline:none;-webkit-appearance:none;appearance:none;transition:border-color .15s}
+input:focus,select:focus{border-color:rgba(255,255,255,0.25);background:#575A65}
+select option{background:#4E5260}
 .acct-selector{display:flex;gap:5px;flex-wrap:wrap}
-.acct-sel-btn{flex:1;min-width:60px;padding:7px 5px;border-radius:8px;border:0.5px solid rgba(255,255,255,0.1);background:#252629;color:#888780;font-family:system-ui,-apple-system,sans-serif;font-size:12px;font-weight:500;cursor:pointer;text-align:center;transition:all .15s}
+.acct-sel-btn{flex:1;min-width:60px;padding:7px 5px;border-radius:8px;border:0.5px solid rgba(255,255,255,0.15);background:#4E5260;color:#C0C3CE;font-family:system-ui,-apple-system,sans-serif;font-size:12px;font-weight:500;cursor:pointer;text-align:center;transition:all .15s}
 .acct-sel-btn.active-me{background:#0C447C;color:#85B7EB;border-color:#185FA5}
 .acct-sel-btn.active-wife{background:#3C3489;color:#AFA9EC;border-color:#534AB7}
 .acct-sel-btn.active-bp{background:#633806;color:#EF9F27;border-color:#854F0B}
 .acct-sel-btn.active-rq{background:#27500A;color:#97C459;border-color:#3B6D11}
-.btn{padding:11px 20px;border-radius:8px;font-family:system-ui,-apple-system,sans-serif;font-size:14px;font-weight:500;cursor:pointer;border:0.5px solid rgba(255,255,255,0.12);background:#252629;color:#e8e8e4;transition:all .15s;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.btn{padding:11px 20px;border-radius:8px;font-family:system-ui,-apple-system,sans-serif;font-size:14px;font-weight:500;cursor:pointer;border:0.5px solid rgba(255,255,255,0.12);background:#4E5260;color:#e8e8e4;transition:all .15s;display:inline-flex;align-items:center;justify-content:center;gap:6px}
 .btn-primary{background:#1D9E75;color:#fff;border-color:#1D9E75}
 .btn-full{width:100%;padding:13px}
-.btn-ghost{background:#252629;color:#888780;border-color:rgba(255,255,255,0.08)}
-.btn-sm{padding:4px 10px;font-size:11px;border-radius:6px;font-family:system-ui,-apple-system,sans-serif;font-weight:500;cursor:pointer;border:0.5px solid rgba(255,255,255,0.1);background:#252629;color:#888780}
+.btn-ghost{background:#4E5260;color:#C0C3CE;border-color:rgba(255,255,255,0.12)}
+.btn-sm{padding:4px 10px;font-size:11px;border-radius:6px;font-family:system-ui,-apple-system,sans-serif;font-weight:500;cursor:pointer;border:0.5px solid rgba(255,255,255,0.15);background:#4E5260;color:#C0C3CE}
 .btn-sm-edit{background:#633806;color:#EF9F27;border-color:#854F0B}
 .btn-sm-danger{background:#791F1F;color:#F09595;border-color:#A32D2D}
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;display:flex;align-items:flex-end;justify-content:center}
 @media(min-width:600px){.modal-bg{align-items:center}}
-.modal{background:#1a1b1e;border-radius:16px 16px 0 0;border:0.5px solid rgba(255,255,255,0.1);padding:20px;padding-bottom:calc(20px + env(safe-area-inset-bottom));width:100%;max-width:500px}
+.modal{background:#42454F;border-radius:16px 16px 0 0;border:0.5px solid rgba(255,255,255,0.15);padding:20px;padding-bottom:calc(20px + env(safe-area-inset-bottom));width:100%;max-width:500px}
 @media(min-width:600px){.modal{border-radius:14px;padding:24px}}
 .modal-handle{width:32px;height:3px;background:rgba(255,255,255,0.12);border-radius:2px;margin:0 auto 16px}
 .modal-title{font-size:16px;font-weight:500;margin-bottom:4px;color:#e8e8e4}
-.modal-sub{font-size:12px;color:#5F5E5A;margin-bottom:16px}
+.modal-sub{font-size:12px;color:#B0B3BE;margin-bottom:16px}
 .modal-actions{display:flex;gap:8px;margin-top:16px}
-.toast{position:fixed;bottom:calc(68px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%) translateY(16px);background:#e8e8e4;border-radius:20px;padding:10px 18px;font-size:12px;font-weight:500;color:#1a1b1e;z-index:999;opacity:0;transition:all .25s;pointer-events:none;white-space:nowrap;max-width:90vw}
+.toast{position:fixed;bottom:calc(68px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%) translateY(16px);background:#e8e8e4;border-radius:20px;padding:10px 18px;font-size:12px;font-weight:500;color:#42454F;z-index:999;opacity:0;transition:all .25s;pointer-events:none;white-space:nowrap;max-width:90vw}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
-.loading{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:50vh;gap:12px;color:#5F5E5A;font-size:13px}
-.spinner{width:28px;height:28px;border:2px solid rgba(255,255,255,0.08);border-top-color:#1D9E75;border-radius:50%;animation:spin .7s linear infinite}
+.loading{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:50vh;gap:12px;color:#B0B3BE;font-size:13px}
+.spinner{width:28px;height:28px;border:2px solid rgba(255,255,255,0.12);border-top-color:#1D9E75;border-radius:50%;animation:spin .7s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
-.empty{padding:30px 20px;text-align:center;color:#5F5E5A;font-size:13px}
+.empty{padding:30px 20px;text-align:center;color:#B0B3BE;font-size:13px}
 .pos{color:#1D9E75;font-weight:500}.neg{color:#E24B4A;font-weight:500}
 .month-wrap{display:flex;align-items:flex-end;gap:6px;overflow-x:auto;padding:4px 2px}
 .month-col{display:flex;flex-direction:column;align-items:center;gap:3px;flex:0 0 auto;min-width:40px}
 .month-bar{width:32px;border-radius:3px 3px 0 0;min-height:2px}
 .month-bar.pos{background:#1D9E75}.month-bar.neg{background:#E24B4A;border-radius:0 0 3px 3px}
-.month-lbl{font-size:9px;color:#5F5E5A;font-weight:500}
+.month-lbl{font-size:9px;color:#B0B3BE;font-weight:500}
 .month-val{font-size:9px;font-weight:500}
 .month-val.pos{color:#1D9E75}.month-val.neg{color:#E24B4A}
 </style>
@@ -92,7 +92,7 @@ select option{background:#252629}
 <body>
 <div class="app">
   <div class="topbar">
-    <div class="logo">MB<span>Empire</span> <span style="font-size:12px;color:#5F5E5A;font-weight:400">Casino</span></div>
+    <div class="logo">MB<span>Empire</span> <span style="font-size:12px;color:#B0B3BE;font-weight:400">Casino</span></div>
     <div class="sync-badge"><div class="sync-dot" id="sync-dot"></div><span id="sync-label">Loading</span></div>
   </div>
   <div class="content" id="main-content">
@@ -119,7 +119,8 @@ let casinoPending=false;
 let hasDeposit=false;
 let operator='JG';
 let syncTimeout=null;
-let fullState={};
+const PROFILES=['me','wife','bp','rq'];
+let fullState={me:{casino:[]},wife:{casino:[]},bp:{casino:[]},rq:{casino:[]}};
 
 function setSyncStatus(s){
   const dot=document.getElementById('sync-dot'),label=document.getElementById('sync-label');
@@ -130,12 +131,13 @@ function setSyncStatus(s){
 
 async function loadData(){
   try{
-    const res=await fetch('/api/load');
+    const res=await fetch('/api/load-casino');
     if(!res.ok)throw new Error('HTTP '+res.status);
     const json=await res.json();
     if(json.ok&&json.data){
-      fullState=json.data;
-      PROFILES.forEach(p=>{if(!fullState[p])fullState[p]={casino:[],bank:0,transactions:[],bookies:{}};if(!fullState[p].casino)fullState[p].casino=[];});
+      PROFILES.forEach(p=>{
+        if(json.data[p]?.casino)fullState[p].casino=json.data[p].casino;
+      });
     }
     setSyncStatus('synced');
   }catch(e){setSyncStatus('error');}
@@ -144,8 +146,10 @@ async function loadData(){
 async function saveData(){
   setSyncStatus('syncing');
   try{
-    // Server handles all merging — just send current state directly
-    const res=await fetch('/api/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(fullState)});
+    // Save casino sessions only — never touches sports data
+    const casinoState={};
+    PROFILES.forEach(pr=>{casinoState[pr]={casino:fullState[pr]?.casino||[]};});
+    const res=await fetch('/api/save-casino',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(casinoState)});
     if(!res.ok)throw new Error('Save failed');
     setSyncStatus('synced');
   }catch(e){
@@ -159,7 +163,7 @@ function fmt(v){const n=parseFloat(v)||0;return(n<0?'-':'')+'£'+Math.abs(n).toF
 function fmtS(v){const n=parseFloat(v)||0;return(n>=0?'+':'-')+'£'+Math.abs(n).toFixed(2);}
 function todayStr(){const d=new Date();return[String(d.getDate()).padStart(2,'0'),String(d.getMonth()+1).padStart(2,'0'),d.getFullYear()].join('/');}
 function profileLabel(p){return PROFILE_LABELS[p]||p;}
-function profileColor(p){return PROFILE_COLORS[p]||'#888780';}
+function profileColor(p){return PROFILE_COLORS[p]||'#C0C3CE';}
 function acctPill(a){return`<span class="pill pill-${a}">${profileLabel(a)}</span>`;}
 function casinoPnl(p){return(fullState[p]?.casino||[]).reduce((a,s)=>a+(s.netProfit||0),0);}
 function allSessions(){return PROFILES.flatMap(p=>(fullState[p]?.casino||[]).map(s=>({...s,_acct:p}))).sort((a,b)=>b.id-a.id);}
@@ -196,8 +200,8 @@ function renderLog(){
     <div style="margin-bottom:10px">
       <div class="form-label">Operator</div>
       <div style="display:flex;gap:6px">
-        <button onclick="operator='JG';render()" style="flex:1;padding:9px;border-radius:8px;border:0.5px solid rgba(255,255,255,0.12);background:${operator==='JG'?'#0C447C':'#252629'};color:${operator==='JG'?'#85B7EB':'#888780'};font-family:system-ui;font-size:13px;font-weight:500;cursor:pointer">JG</button>
-        <button onclick="operator='JP';render()" style="flex:1;padding:9px;border-radius:8px;border:0.5px solid rgba(255,255,255,0.12);background:${operator==='JP'?'#27500A':'#252629'};color:${operator==='JP'?'#97C459':'#888780'};font-family:system-ui;font-size:13px;font-weight:500;cursor:pointer">JP</button>
+        <button onclick="operator='JG';render()" style="flex:1;padding:9px;border-radius:8px;border:0.5px solid rgba(255,255,255,0.12);background:${operator==='JG'?'#0C447C':'#4E5260'};color:${operator==='JG'?'#85B7EB':'#C0C3CE'};font-family:system-ui;font-size:13px;font-weight:500;cursor:pointer">JG</button>
+        <button onclick="operator='JP';render()" style="flex:1;padding:9px;border-radius:8px;border:0.5px solid rgba(255,255,255,0.12);background:${operator==='JP'?'#27500A':'#4E5260'};color:${operator==='JP'?'#97C459':'#C0C3CE'};font-family:system-ui;font-size:13px;font-weight:500;cursor:pointer">JP</button>
       </div>
     </div>
     <div style="display:grid;grid-template-columns:100px 1fr 1fr;gap:8px;margin-bottom:8px">
@@ -206,7 +210,7 @@ function renderLog(){
         <div style="position:relative">
           <input type="text" id="c-casino-search" placeholder="Search…" autocomplete="off" oninput="filterBookies(this.value)" onfocus="showBookies()"/>
           <input type="hidden" id="c-casino" value=""/>
-          <div id="c-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:50;background:#252629;border:0.5px solid rgba(255,255,255,0.15);border-radius:8px;margin-top:3px;max-height:180px;overflow-y:auto"></div>
+          <div id="c-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:50;background:#4E5260;border:0.5px solid rgba(255,255,255,0.15);border-radius:8px;margin-top:3px;max-height:180px;overflow-y:auto"></div>
         </div>
       </div>
       <div><div class="form-label">Offer type</div><select id="c-offer">${CASINO_OFFER_TYPES.map(t=>`<option>${t}</option>`).join('')}</select></div>
@@ -214,7 +218,7 @@ function renderLog(){
     <div style="margin-bottom:8px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:${hasDeposit?'8':'0'}px">
         <div class="form-label" style="margin:0">Deposit required?</div>
-        <button onclick="hasDeposit=!hasDeposit;render()" style="padding:3px 12px;border-radius:20px;border:0.5px solid rgba(255,255,255,0.12);background:${hasDeposit?'#633806':'#252629'};color:${hasDeposit?'#EF9F27':'#888780'};font-family:system-ui;font-size:11px;font-weight:500;cursor:pointer">${hasDeposit?'Yes — remove':'+ Add deposit'}</button>
+        <button onclick="hasDeposit=!hasDeposit;render()" style="padding:3px 12px;border-radius:20px;border:0.5px solid rgba(255,255,255,0.12);background:${hasDeposit?'#633806':'#4E5260'};color:${hasDeposit?'#EF9F27':'#C0C3CE'};font-family:system-ui;font-size:11px;font-weight:500;cursor:pointer">${hasDeposit?'Yes — remove':'+ Add deposit'}</button>
       </div>
       ${hasDeposit?`<div><div class="form-label">Deposit amount (£)</div><input type="number" id="c-deposit" placeholder="0.00" step="0.01" inputmode="decimal"/></div>`:'<input type="hidden" id="c-deposit" value="0"/>'}
     </div>
@@ -223,27 +227,27 @@ function renderLog(){
       <div><div class="form-label">Wager P&L (£)</div><input type="number" id="c-wager-pnl" placeholder="e.g. -5.00" step="0.01" inputmode="decimal" oninput="updateNet()"/></div>
     </div>
     <div style="margin-bottom:8px">
-      <div class="form-label">Bonus win (£) <span style="font-size:9px;color:#444441;text-transform:none">free spins + bonus cash</span></div>
+      <div class="form-label">Bonus win (£) <span style="font-size:9px;color:#8A8D98;text-transform:none">free spins + bonus cash</span></div>
       <input type="number" id="c-bonus-win" placeholder="0.00" step="0.01" inputmode="decimal" oninput="updateNet()"/>
     </div>
     <div style="margin-bottom:10px">
       <div class="form-label">Bonus pending?</div>
       <div style="display:flex;gap:8px">
-        <button onclick="casinoPending=false;updatePendingBtns()" id="c-btn-no" style="flex:1;padding:8px;border-radius:8px;border:0.5px solid rgba(255,255,255,0.1);background:${!casinoPending?'#27500A':'#252629'};color:${!casinoPending?'#97C459':'#888780'};font-family:system-ui;font-size:12px;font-weight:500;cursor:pointer">No — all done</button>
-        <button onclick="casinoPending=true;updatePendingBtns()" id="c-btn-yes" style="flex:1;padding:8px;border-radius:8px;border:0.5px solid rgba(255,255,255,0.1);background:${casinoPending?'#633806':'#252629'};color:${casinoPending?'#EF9F27':'#888780'};font-family:system-ui;font-size:12px;font-weight:500;cursor:pointer">Yes — pending</button>
+        <button onclick="casinoPending=false;updatePendingBtns()" id="c-btn-no" style="flex:1;padding:8px;border-radius:8px;border:0.5px solid rgba(255,255,255,0.15);background:${!casinoPending?'#27500A':'#4E5260'};color:${!casinoPending?'#97C459':'#C0C3CE'};font-family:system-ui;font-size:12px;font-weight:500;cursor:pointer">No — all done</button>
+        <button onclick="casinoPending=true;updatePendingBtns()" id="c-btn-yes" style="flex:1;padding:8px;border-radius:8px;border:0.5px solid rgba(255,255,255,0.15);background:${casinoPending?'#633806':'#4E5260'};color:${casinoPending?'#EF9F27':'#C0C3CE'};font-family:system-ui;font-size:12px;font-weight:500;cursor:pointer">Yes — pending</button>
       </div>
     </div>
-    <div style="background:#252629;border-radius:8px;padding:12px;margin-bottom:8px">
+    <div style="background:#4E5260;border-radius:8px;padding:12px;margin-bottom:8px">
       <div style="display:flex;justify-content:space-between;align-items:center">
-        <span style="font-size:12px;color:#888780">Net profit</span>
+        <span style="font-size:12px;color:#C0C3CE">Net profit</span>
         <span id="c-net" style="font-size:20px;font-weight:500;color:#1D9E75">+£0.00</span>
       </div>
-      <div style="font-size:10px;color:#444441;margin-top:3px">Wager P&L + Bonus win → updates bookie balance</div>
+      <div style="font-size:10px;color:#8A8D98;margin-top:3px">Wager P&L + Bonus win → updates bookie balance</div>
     </div>
-    <div><div class="form-label">Notes <span style="font-size:9px;color:#444441;text-transform:none">optional</span></div><input type="text" id="c-notes" placeholder="e.g. 30x wagering, slots only"/></div>
+    <div><div class="form-label">Notes <span style="font-size:9px;color:#8A8D98;text-transform:none">optional</span></div><input type="text" id="c-notes" placeholder="e.g. 30x wagering, slots only"/></div>
     <div id="c-msg" style="font-size:12px;color:#E24B4A;margin-top:6px;text-align:center"></div>
   </div></div>
-  <div style="position:fixed;bottom:calc(58px + env(safe-area-inset-bottom));left:0;right:0;padding:10px 16px;background:#0f1012;border-top:0.5px solid rgba(255,255,255,0.06);display:flex;gap:8px;z-index:90;max-width:680px;margin:0 auto">
+  <div style="position:fixed;bottom:calc(58px + env(safe-area-inset-bottom));left:0;right:0;padding:10px 16px;background:#3A3D47;border-top:0.5px solid rgba(255,255,255,0.10);display:flex;gap:8px;z-index:90;max-width:680px;margin:0 auto">
     <button class="btn btn-ghost" onclick="resetForm()" style="width:72px;flex-shrink:0">Clear</button>
     <button class="btn btn-primary btn-full" onclick="saveSession()"><i class="ti ti-check"></i> Save session</button>
   </div>`;
@@ -251,8 +255,8 @@ function renderLog(){
 
 function updatePendingBtns(){
   const yes=document.getElementById('c-btn-yes'),no=document.getElementById('c-btn-no');
-  if(yes){yes.style.background=casinoPending?'#633806':'#252629';yes.style.color=casinoPending?'#EF9F27':'#888780';}
-  if(no){no.style.background=!casinoPending?'#27500A':'#252629';no.style.color=!casinoPending?'#97C459':'#888780';}
+  if(yes){yes.style.background=casinoPending?'#633806':'#4E5260';yes.style.color=casinoPending?'#EF9F27':'#C0C3CE';}
+  if(no){no.style.background=!casinoPending?'#27500A':'#4E5260';no.style.color=!casinoPending?'#97C459':'#C0C3CE';}
 }
 
 function updateNet(){
@@ -285,8 +289,8 @@ function filterBookies(q){
 }
 function renderBookieItems(items){
   const dd=document.getElementById('c-dropdown');if(!dd)return;
-  if(!items.length){dd.innerHTML='<div style="padding:10px 12px;font-size:12px;color:#5F5E5A">No results</div>';return;}
-  dd.innerHTML=items.slice(0,20).map(b=>`<div onclick="selectBookie('${b.replace(/'/g,"\\'")}') " style="padding:10px 12px;font-size:13px;color:#e8e8e4;cursor:pointer;border-bottom:0.5px solid rgba(255,255,255,0.05)" onmouseenter="this.style.background='#2e2f33'" onmouseleave="this.style.background=''">${b}</div>`).join('');
+  if(!items.length){dd.innerHTML='<div style="padding:10px 12px;font-size:12px;color:#B0B3BE">No results</div>';return;}
+  dd.innerHTML=items.slice(0,20).map(b=>`<div onclick="selectBookie('${b.replace(/'/g,"\\'")}') " style="padding:10px 12px;font-size:13px;color:#e8e8e4;cursor:pointer;border-bottom:0.5px solid rgba(255,255,255,0.05)" onmouseenter="this.style.background='#575A65'" onmouseleave="this.style.background=''">${b}</div>`).join('');
 }
 function selectBookie(name){
   const inp=document.getElementById('c-casino-search');if(inp)inp.value=name;
@@ -330,17 +334,17 @@ function resetForm(){
 function renderHistory(){
   const sessions=allSessions();
   if(!sessions.length)return`<div class="empty">No casino sessions yet</div>`;
-  return`<div class="card"><div class="card-header"><span class="card-title">All sessions</span><span style="font-size:11px;color:#5F5E5A">${sessions.length} total</span></div>
+  return`<div class="card"><div class="card-header"><span class="card-title">All sessions</span><span style="font-size:11px;color:#B0B3BE">${sessions.length} total</span></div>
   ${sessions.map(s=>`<div class="list-row">
     <div class="list-row-left">
       <div class="list-row-title">${s.casino}${s.pending?` <span style="font-size:10px;color:#EF9F27">⏳ pending</span>`:''}</div>
       <div class="list-row-meta">
-        <span class="pill" style="background:#252629;color:#888780">${s.offerType}</span>
+        <span class="pill" style="background:#4E5260;color:#C0C3CE">${s.offerType}</span>
         ${acctPill(s._acct)}
-        <span style="font-size:10px;color:#5F5E5A">${s.date}</span>
-        ${s.operator?`<span style="font-size:10px;font-weight:600;color:${s.operator==='JG'?'#85B7EB':'#97C459'}">${s.operator}</span>`:''}${s.wager?`<span style="font-size:10px;color:#5F5E5A">£${s.wager} wagered</span>`:''}
+        <span style="font-size:10px;color:#B0B3BE">${s.date}</span>
+        ${s.operator?`<span style="font-size:10px;font-weight:600;color:${s.operator==='JG'?'#85B7EB':'#97C459'}">${s.operator}</span>`:''}${s.wager?`<span style="font-size:10px;color:#B0B3BE">£${s.wager} wagered</span>`:''}
         ${s.deposit?`<span style="font-size:10px;color:#EF9F27">dep £${s.deposit}</span>`:''}
-        ${s.bonusWin?`<span style="font-size:10px;color:#5F5E5A">bonus £${s.bonusWin.toFixed(2)}</span>`:''}
+        ${s.bonusWin?`<span style="font-size:10px;color:#B0B3BE">bonus £${s.bonusWin.toFixed(2)}</span>`:''}
       </div>
     </div>
     <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
