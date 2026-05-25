@@ -1802,14 +1802,15 @@ function checkPin(){
   `;
 }
 
-async async function loadApp(){
+async function loadApp(){
   window._appLoading=true;
-  await loadData();
-  migrateLegacy();
-  window._appLoading=false;
-  const pb=document.getElementById('profile-bar');if(pb)pb.style.display='none';
-  switchProfile('me');
-  render();
+  loadData().then(()=>{
+    migrateLegacy();
+    window._appLoading=false;
+    const pb=document.getElementById('profile-bar');if(pb)pb.style.display='none';
+    switchProfile('me');
+    render();
+  });
 }
 
 async function init(){
