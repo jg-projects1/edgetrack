@@ -130,13 +130,25 @@ function setSyncStatus(s){
 
 async function loadData(){
   try{
-    const res=await fetch('/api/load-casino');
-    if(!res.ok)throw new Error('HTTP '+res.status);
-    const json=await res.json();
-    if(json.ok&&json.data){
+    const [casinoRes, sportsRes] = await Promise.all([
+      fetch('/api/load-casino'),
+      fetch('/api/load')
+    ]);
+    if(!casinoRes.ok)throw new Error('HTTP '+casinoRes.status);
+    const casinoJson=await casinoRes.json();
+    if(casinoJson.ok&&casinoJson.data){
       PROFILES.forEach(p=>{
-        if(json.data[p]?.casino)fullState[p].casino=json.data[p].casino;
+        if(casinoJson.data[p]?.casino)fullState[p].casino=casinoJson.data[p].casino;
       });
+    }
+    // Load bookie list from sports data for the dropdown only
+    if(sportsRes.ok){
+      const sportsJson=await sportsRes.json();
+      if(sportsJson.ok&&sportsJson.data){
+        PROFILES.forEach(p=>{
+          if(sportsJson.data[p]?.bookies)fullState[p].bookies=sportsJson.data[p].bookies;
+        });
+      }
     }
     setSyncStatus('synced');
   }catch(e){setSyncStatus('error');}
