@@ -292,6 +292,7 @@ async function loadData(){
 }
 
 async function saveData(){
+  if(window._appLoading){console.log('Save blocked during load');return;}
   setSyncStatus('syncing');
   try{
     // Build sports-only state (no casino sessions)
@@ -352,13 +353,13 @@ const DEFAULT_BOOKIES=[
   'Unibet','Vbet','Video Slots','Virgin Bet','Virgin Games','William Hill'
 ];
 
-function makeProfile(){const b={};DEFAULT_BOOKIES.forEach(x=>b[x]={bal:0,status:'Active',notes:''});return{bookies:b,bank:0,transactions:[]};}
+function makeProfile(){const b={};DEFAULT_BOOKIES.forEach(x=>b[x]={bal:0,status:'Active',notes:''});return{bookies:b,bank:0,transactions:[],freeBets:[]};}
 function freshState(){const ex={};EXCHANGES.forEach(x=>ex[x]=0);const st={exchanges:ex};PROFILES.forEach(pr=>st[pr]=makeProfile());return st;}
 const state=freshState();
 function migrateLegacy(){
   PROFILES.forEach(pr=>{
     if(!state[pr])state[pr]=makeProfile();
-    if(!state[pr].transactions)state[pr].transactions=[];
+    if(!state[pr].transactions)state[pr].transactions=[];if(!state[pr].freeBets)state[pr].freeBets=[];
     const bk=state[pr].bookies||{};
     DEFAULT_BOOKIES.forEach(b=>{if(!bk[b])bk[b]={bal:0,status:'Active',notes:''};});
     Object.keys(bk).forEach(k=>{
@@ -535,7 +536,51 @@ function renderDashboard(){
         </div>
         <div class="list-row-right ${t.result==='Won'?'pos':t.result==='Lost'?'neg':t.result==='Pending'?'warn':''}">${t.result==='Pending'?'pending':fmtS(t.pnl||0)}</div>
       </div>`).join('')||'<div class="empty">No trades yet — tap Log trade to start</div>'}
+  </div>
+  ${renderFreeBetsPanel()}
+`;}
+
+function renderFreeBetsPanel(){
+  const all=PROFILES.flatMap(pr=>(state[pr].freeBets||[]).map(fb=>({...fb,_pr:pr})));
+  const pending=all.filter(fb=>fb.status==='Pending');
+  const used=all.filter(fb=>fb.status==='Used');
+  if(all.length===0)return '';
+  return `<div class="card" style="margin-top:12px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div style="font-size:13px;font-weight:500;color:#F0F0F5">Free Bets</div>
+      ${pending.length>0?`<span style="font-size:11px;background:#0F6E56;color:#9FE1CB;padding:3px 8px;border-radius:20px">${pending.length} pending</span>`:''}
+    </div>
+    ${pending.length>0?`
+    <div style="margin-bottom:8px">
+      ${pending.map(fb=>`
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:0.5px solid rgba(255,255,255,0.08)">
+        <div>
+          <div style="font-size:13px;color:#F0F0F5">${fb.bookie}</div>
+          <div style="font-size:11px;color:#B0B3BE">${fb._pr.toUpperCase()} · ${fb.date}</div>
+        </div>
+        <button onclick="markFreeBetUsed('${fb._pr}','${fb.id}')" style="font-size:11px;padding:4px 10px;border-radius:6px;border:0.5px solid rgba(255,255,255,0.2);background:#4E5260;color:#F0F0F5;cursor:pointer">Mark used</button>
+      </div>`).join('')}
+    </div>`:''}
+    ${used.length>0?`
+    <details style="margin-top:4px">
+      <summary style="font-size:11px;color:#B0B3BE;cursor:pointer;list-style:none">▸ ${used.length} used</summary>
+      <div style="margin-top:6px">
+        ${used.map(fb=>`
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:0.5px solid rgba(255,255,255,0.06)">
+          <div>
+            <div style="font-size:12px;color:#888780;text-decoration:line-through">${fb.bookie}</div>
+            <div style="font-size:11px;color:#888780">${fb._pr.toUpperCase()} · ${fb.date}</div>
+          </div>
+          <span style="font-size:10px;color:#888780">Used</span>
+        </div>`).join('')}
+      </div>
+    </details>`:''}
   </div>`;
+}
+
+function markFreeBetUsed(pr,id){
+  const fb=(state[pr].freeBets||[]).find(f=>String(f.id)===String(id));
+  if(fb){fb.status='Used';save();render();}
 }
 
 // ── PENDING ──────────────────────────────────────────────────────────────────
@@ -868,6 +913,10 @@ function submitTx(){
     if(!p.transactions)p.transactions=[];
     const tx={id:Date.now(),date,type:selectedBetType,bookie,exchange,event,bstake,bodds,comm,result,pnl,notes,_acct:formAccount};
     p.transactions.push(tx);applyBalanceAtLog(tx,p);
+    if(selectedBetType==='Qualifier'){
+      if(!p.freeBets)p.freeBets=[];
+      p.freeBets.push({id:Date.now()+Math.random(),date,bookie,acct:formAccount,status:'Pending'});
+    }
   }
   // Track recent bookies and last exchange
   const usedBookie=document.getElementById('f-bookie')?.value||(document.getElementById('f-bookie-search')?.value||'');
@@ -1753,9 +1802,11 @@ function checkPin(){
   `;
 }
 
-async function loadApp(){
+async async function loadApp(){
+  window._appLoading=true;
   await loadData();
   migrateLegacy();
+  window._appLoading=false;
   const pb=document.getElementById('profile-bar');if(pb)pb.style.display='none';
   switchProfile('me');
   render();
