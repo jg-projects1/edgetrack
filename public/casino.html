@@ -119,7 +119,6 @@ let casinoPending=false;
 let hasDeposit=false;
 let operator='JG';
 let syncTimeout=null;
-const PROFILES=['me','wife','bp','rq'];
 let fullState={me:{casino:[]},wife:{casino:[]},bp:{casino:[]},rq:{casino:[]}};
 
 function setSyncStatus(s){
@@ -307,9 +306,6 @@ function saveSession(){
   const deposit=parseFloat(document.getElementById('c-deposit')?.value)||0;
   const net=wagerPnl+bonusWin;
   const p=fullState[formAcct];
-  if(!p.bookies[casino])p.bookies[casino]={bal:0,status:'Active',notes:''};
-  if(deposit>0){p.bank-=deposit;p.bookies[casino].bal=(p.bookies[casino].bal||0)+deposit;}
-  p.bookies[casino].bal=(p.bookies[casino].bal||0)+net;
   if(!p.casino)p.casino=[];
   p.casino.push({
     id:Date.now(),
