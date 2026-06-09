@@ -23,7 +23,6 @@ export default async function handler(req, res) {
       }
     }
 
-    // Server-side merge of casino sessions only
     const profiles = ['me', 'wife', 'bp', 'rq'];
     const merged = JSON.parse(JSON.stringify(server));
 
@@ -31,28 +30,74 @@ export default async function handler(req, res) {
       if (!merged[pr]) merged[pr] = { casino: [] };
       if (!incoming[pr]) return;
 
-      const serverCasinoMap = new Map((server[pr]?.casino || []).map(s => [s.id, s]));
-      const incomingCasinoMap = new Map((incoming[pr]?.casino || []).map(s => [s.id, s]));
-      const incomingHasCasino = (incoming[pr]?.casino || []).length > 0;
+      const serverSessions = server[pr]?.casino || [];
+      const incomingSessions = incoming[pr]?.casino || [];
 
-      if (incomingHasCasino) {
-        const allIds = new Set([...serverCasinoMap.keys(), ...incomingCasinoMap.keys()]);
-        const mergedCasino = [];
+      // Split server sessions by operator
+      const serverJG = serverSessions.filter(s => s.operator === 'JG');
+      const serverJP = serverSessions.filter(s => s.operator === 'JP');
+      const incomingJG = incomingSessions.filter(s => s.operator === 'JG');
+      const incomingJP = incomingSessions.filter(s => s.operator === 'JP');
+
+      // Determine which operator this client is working with
+      const hasIncomingJG = incomingJG.length > 0;
+      const hasIncomingJP = incomingJP.length > 0;
+      const hasServerJG = serverJG.length > 0;
+      const hasServerJP = serverJP.length > 0;
+
+      // Merge each operator's sessions independently
+      // If incoming has sessions for an operator, merge them
+      // If incoming has NO sessions for an operator but server does, keep server's
+      let mergedJG, mergedJP;
+
+      if (hasIncomingJG || !hasServerJG) {
+        // Merge JG sessions
+        const serverMap = new Map(serverJG.map(s => [s.id, s]));
+        const incomingMap = new Map(incomingJG.map(s => [s.id, s]));
+        const allIds = new Set([...serverMap.keys(), ...incomingMap.keys()]);
+        mergedJG = [];
         allIds.forEach(id => {
-          const serverS = serverCasinoMap.get(id);
-          const incomingS = incomingCasinoMap.get(id);
-          if (!incomingS) {
-            if (incomingHasCasino) return; // deleted locally
-            mergedCasino.push(serverS);
-          } else if (!serverS) {
-            mergedCasino.push(incomingS); // new session
+          const ss = serverMap.get(id);
+          const is = incomingMap.get(id);
+          if (!is) {
+            // Only drop if this client had JG sessions (explicit delete)
+            if (hasIncomingJG) return;
+            mergedJG.push(ss);
+          } else if (!ss) {
+            mergedJG.push(is);
           } else {
-            mergedCasino.push(incomingS); // incoming wins
+            mergedJG.push(is);
           }
         });
-        merged[pr].casino = mergedCasino;
+      } else {
+        // Keep all server JG sessions untouched
+        mergedJG = serverJG;
       }
-      // If incoming has no casino sessions, keep server sessions untouched
+
+      if (hasIncomingJP || !hasServerJP) {
+        // Merge JP sessions
+        const serverMap = new Map(serverJP.map(s => [s.id, s]));
+        const incomingMap = new Map(incomingJP.map(s => [s.id, s]));
+        const allIds = new Set([...serverMap.keys(), ...incomingMap.keys()]);
+        mergedJP = [];
+        allIds.forEach(id => {
+          const ss = serverMap.get(id);
+          const is = incomingMap.get(id);
+          if (!is) {
+            if (hasIncomingJP) return;
+            mergedJP.push(ss);
+          } else if (!ss) {
+            mergedJP.push(is);
+          } else {
+            mergedJP.push(is);
+          }
+        });
+      } else {
+        // Keep all server JP sessions untouched
+        mergedJP = serverJP;
+      }
+
+      merged[pr].casino = [...mergedJG, ...mergedJP];
     });
 
     const jsonString = JSON.stringify(merged);
