@@ -9,7 +9,6 @@ export default async function handler(req, res) {
     const kvToken = process.env.KV_REST_API_TOKEN;
     const incoming = req.body;
 
-    // Load current casino state
     const loadRes = await fetch(`${kvUrl}/get/edgetrack_casino`, {
       headers: { Authorization: `Bearer ${kvToken}` }
     });
@@ -33,71 +32,32 @@ export default async function handler(req, res) {
       const serverSessions = server[pr]?.casino || [];
       const incomingSessions = incoming[pr]?.casino || [];
 
-      // Split server sessions by operator
-      const serverJG = serverSessions.filter(s => s.operator === 'JG');
-      const serverJP = serverSessions.filter(s => s.operator === 'JP');
-      const incomingJG = incomingSessions.filter(s => s.operator === 'JG');
-      const incomingJP = incomingSessions.filter(s => s.operator === 'JP');
+      // ADDITIVE MERGE: never lose a session that exists on the server,
+      // regardless of operator or staleness. Union by ID.
+      // - Sessions on server but not in incoming: KEEP (could be from another device/operator)
+      // - Sessions in incoming but not on server: ADD (new session)
+      // - Sessions in both: incoming wins (handles edits like "add bonus")
+      // - True deletes are handled by an explicit deletedIds list from the client (see below)
 
-      // Determine which operator this client is working with
-      const hasIncomingJG = incomingJG.length > 0;
-      const hasIncomingJP = incomingJP.length > 0;
-      const hasServerJG = serverJG.length > 0;
-      const hasServerJP = serverJP.length > 0;
+      const serverMap = new Map(serverSessions.map(s => [String(s.id), s]));
+      const incomingMap = new Map(incomingSessions.map(s => [String(s.id), s]));
+      const deletedIds = new Set((incoming[pr]?.deletedIds || []).map(String));
 
-      // Merge each operator's sessions independently
-      // If incoming has sessions for an operator, merge them
-      // If incoming has NO sessions for an operator but server does, keep server's
-      let mergedJG, mergedJP;
+      const allIds = new Set([...serverMap.keys(), ...incomingMap.keys()]);
+      const mergedSessions = [];
 
-      if (hasIncomingJG || !hasServerJG) {
-        // Merge JG sessions
-        const serverMap = new Map(serverJG.map(s => [s.id, s]));
-        const incomingMap = new Map(incomingJG.map(s => [s.id, s]));
-        const allIds = new Set([...serverMap.keys(), ...incomingMap.keys()]);
-        mergedJG = [];
-        allIds.forEach(id => {
-          const ss = serverMap.get(id);
-          const is = incomingMap.get(id);
-          if (!is) {
-            // Only drop if this client had JG sessions (explicit delete)
-            if (hasIncomingJG) return;
-            mergedJG.push(ss);
-          } else if (!ss) {
-            mergedJG.push(is);
-          } else {
-            mergedJG.push(is);
-          }
-        });
-      } else {
-        // Keep all server JG sessions untouched
-        mergedJG = serverJG;
-      }
+      allIds.forEach(id => {
+        if (deletedIds.has(id)) return; // explicitly deleted — drop from both
+        const ss = serverMap.get(id);
+        const is = incomingMap.get(id);
+        if (is) {
+          mergedSessions.push(is); // incoming version wins (new or edited)
+        } else if (ss) {
+          mergedSessions.push(ss); // only on server — keep it (don't lose it)
+        }
+      });
 
-      if (hasIncomingJP || !hasServerJP) {
-        // Merge JP sessions
-        const serverMap = new Map(serverJP.map(s => [s.id, s]));
-        const incomingMap = new Map(incomingJP.map(s => [s.id, s]));
-        const allIds = new Set([...serverMap.keys(), ...incomingMap.keys()]);
-        mergedJP = [];
-        allIds.forEach(id => {
-          const ss = serverMap.get(id);
-          const is = incomingMap.get(id);
-          if (!is) {
-            if (hasIncomingJP) return;
-            mergedJP.push(ss);
-          } else if (!ss) {
-            mergedJP.push(is);
-          } else {
-            mergedJP.push(is);
-          }
-        });
-      } else {
-        // Keep all server JP sessions untouched
-        mergedJP = serverJP;
-      }
-
-      merged[pr].casino = [...mergedJG, ...mergedJP];
+      merged[pr].casino = mergedSessions;
     });
 
     const jsonString = JSON.stringify(merged);
