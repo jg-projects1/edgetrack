@@ -120,6 +120,7 @@ let hasDeposit=false;
 let operator='JG';
 let syncTimeout=null;
 let fullState={me:{casino:[]},wife:{casino:[]},bp:{casino:[]},rq:{casino:[]}};
+let deletedIds={me:[],wife:[],bp:[],rq:[]};
 
 function setSyncStatus(s){
   const dot=document.getElementById('sync-dot'),label=document.getElementById('sync-label');
@@ -159,9 +160,11 @@ async function saveData(){
   try{
     // Save casino sessions only — never touches sports data
     const casinoState={};
-    PROFILES.forEach(pr=>{casinoState[pr]={casino:fullState[pr]?.casino||[]};});
+    PROFILES.forEach(pr=>{casinoState[pr]={casino:fullState[pr]?.casino||[],deletedIds:deletedIds[pr]||[]};});
     const res=await fetch('/api/save-casino',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(casinoState)});
     if(!res.ok)throw new Error('Save failed');
+    // Clear deletedIds after successful save since server has processed them
+    PROFILES.forEach(pr=>{deletedIds[pr]=[];});
     setSyncStatus('synced');
   }catch(e){
     console.error('Casino save error:',e);
@@ -398,6 +401,8 @@ function confirmBonus(acct,id){
 function deleteSession(acct,id){
   if(!confirm('Delete session?'))return;
   fullState[acct].casino=(fullState[acct].casino||[]).filter(s=>s.id!==id);
+  if(!deletedIds[acct])deletedIds[acct]=[];
+  deletedIds[acct].push(id);
   save();render();
 }
 
