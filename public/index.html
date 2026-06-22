@@ -307,7 +307,7 @@ async function saveData(){
     // Build casino-only state
     const casinoState={};
     PROFILES.forEach(pr=>{
-      casinoState[pr]={casino:state[pr]?.casino||[]};
+      casinoState[pr]={casino:state[pr]?.casino||[],deletedIds:casinoDeletedIds[pr]||[]};
     });
     // Save both in parallel
     const [sportsRes,casinoRes]=await Promise.all([
@@ -316,6 +316,7 @@ async function saveData(){
     ]);
     if(!sportsRes.ok)throw new Error('Sports save failed');
     if(!casinoRes.ok)throw new Error('Casino save failed');
+    PROFILES.forEach(pr=>{casinoDeletedIds[pr]=[];});
     setSyncStatus('synced');
   }catch(e){
     console.error('Save error:',e);
@@ -356,6 +357,7 @@ const DEFAULT_BOOKIES=[
 function makeProfile(){const b={};DEFAULT_BOOKIES.forEach(x=>b[x]={bal:0,status:'Active',notes:''});return{bookies:b,bank:0,transactions:[],freeBets:[]};}
 function freshState(){const ex={};EXCHANGES.forEach(x=>ex[x]=0);const st={exchanges:ex};PROFILES.forEach(pr=>st[pr]=makeProfile());return st;}
 const state=freshState();
+let casinoDeletedIds={me:[],wife:[],bp:[],rq:[]};
 function migrateLegacy(){
   PROFILES.forEach(pr=>{
     if(!state[pr])state[pr]=makeProfile();
@@ -1689,6 +1691,8 @@ function deleteCasinoSession(acct,id){
       p.bookies[session.casino].bal=(p.bookies[session.casino].bal||0)-(session.netProfit||0);
   }
   state[acct].casino=(state[acct].casino||[]).filter(s=>s.id!==id);
+  if(!casinoDeletedIds[acct])casinoDeletedIds[acct]=[];
+  casinoDeletedIds[acct].push(id);
   save();showToast('Session deleted & balances reversed');
   const cv=document.getElementById('casino-view');
   if(cv)cv.innerHTML=renderCasinoHistory();
