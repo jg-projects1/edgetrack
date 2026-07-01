@@ -9,67 +9,100 @@ export default async function handler(req, res) {
     const kvToken = process.env.KV_REST_API_TOKEN;
     const incoming = req.body;
 
-    const loadRes = await fetch(`${kvUrl}/get/edgetrack_casino`, {
-      headers: { Authorization: `Bearer ${kvToken}` }
-    });
+    // Load current casino state
+    const [casinoLoadRes, sportsLoadRes] = await Promise.all([
+      fetch(`${kvUrl}/get/edgetrack_casino`, { headers: { Authorization: `Bearer ${kvToken}` } }),
+      fetch(`${kvUrl}/get/edgetrack_main`, { headers: { Authorization: `Bearer ${kvToken}` } })
+    ]);
+
     let server = {};
-    if (loadRes.ok) {
-      const loadData = await loadRes.json();
-      if (loadData.result) {
-        let parsed = JSON.parse(loadData.result);
-        if (typeof parsed === 'string') parsed = JSON.parse(parsed);
-        server = parsed;
-      }
+    if (casinoLoadRes.ok) {
+      const d = await casinoLoadRes.json();
+      if (d.result) { let p = JSON.parse(d.result); if (typeof p === 'string') p = JSON.parse(p); server = p; }
+    }
+
+    let sportsServer = {};
+    if (sportsLoadRes.ok) {
+      const d = await sportsLoadRes.json();
+      if (d.result) { let p = JSON.parse(d.result); if (typeof p === 'string') p = JSON.parse(p); sportsServer = p; }
     }
 
     const profiles = ['me', 'wife', 'bp', 'rq'];
-    const merged = JSON.parse(JSON.stringify(server));
+    const mergedCasino = JSON.parse(JSON.stringify(server));
+    const mergedSports = JSON.parse(JSON.stringify(sportsServer));
 
     profiles.forEach(pr => {
-      if (!merged[pr]) merged[pr] = { casino: [] };
+      if (!mergedCasino[pr]) mergedCasino[pr] = { casino: [] };
       if (!incoming[pr]) return;
 
       const serverSessions = server[pr]?.casino || [];
       const incomingSessions = incoming[pr]?.casino || [];
-
-      // ADDITIVE MERGE: never lose a session that exists on the server,
-      // regardless of operator or staleness. Union by ID.
-      // - Sessions on server but not in incoming: KEEP (could be from another device/operator)
-      // - Sessions in incoming but not on server: ADD (new session)
-      // - Sessions in both: incoming wins (handles edits like "add bonus")
-      // - True deletes are handled by an explicit deletedIds list from the client (see below)
-
-      const serverMap = new Map(serverSessions.map(s => [String(s.id), s]));
-      const incomingMap = new Map(incomingSessions.map(s => [String(s.id), s]));
       const deletedIds = new Set((incoming[pr]?.deletedIds || []).map(String));
 
-      const allIds = new Set([...serverMap.keys(), ...incomingMap.keys()]);
-      const mergedSessions = [];
+      // Find truly new sessions (not on server) to apply balance changes
+      const serverIds = new Set(serverSessions.map(s => String(s.id)));
+      const newSessions = incomingSessions.filter(s => !serverIds.has(String(s.id)));
+      const deletedSessions = serverSessions.filter(s => deletedIds.has(String(s.id)));
 
-      allIds.forEach(id => {
-        if (deletedIds.has(id)) return; // explicitly deleted — drop from both
-        const ss = serverMap.get(id);
-        const is = incomingMap.get(id);
-        if (is) {
-          mergedSessions.push(is); // incoming version wins (new or edited)
-        } else if (ss) {
-          mergedSessions.push(ss); // only on server — keep it (don't lose it)
+      // Apply new session balance changes to sports/main state
+      if (!mergedSports[pr]) mergedSports[pr] = { bank: 0, bookies: {}, transactions: [] };
+      newSessions.forEach(s => {
+        const casino = s.casino;
+        const net = s.netProfit || 0;
+        const deposit = s.deposit || 0;
+        if (!mergedSports[pr].bookies[casino]) mergedSports[pr].bookies[casino] = { bal: 0, status: 'Active', notes: '' };
+        if (deposit > 0) {
+          mergedSports[pr].bank -= deposit;
+          mergedSports[pr].bookies[casino].bal += deposit;
         }
+        mergedSports[pr].bookies[casino].bal += net;
       });
 
-      merged[pr].casino = mergedSessions;
+      // Reverse deleted session balance changes
+      deletedSessions.forEach(s => {
+        const casino = s.casino;
+        const net = s.netProfit || 0;
+        const deposit = s.deposit || 0;
+        if (!mergedSports[pr].bookies) mergedSports[pr].bookies = {};
+        if (!mergedSports[pr].bookies[casino]) mergedSports[pr].bookies[casino] = { bal: 0, status: 'Active', notes: '' };
+        if (deposit > 0) {
+          mergedSports[pr].bank += deposit;
+          mergedSports[pr].bookies[casino].bal -= deposit;
+        }
+        mergedSports[pr].bookies[casino].bal -= net;
+      });
+
+      // Additive merge for casino sessions
+      const serverMap = new Map(serverSessions.map(s => [String(s.id), s]));
+      const incomingMap = new Map(incomingSessions.map(s => [String(s.id), s]));
+      const allIds = new Set([...serverMap.keys(), ...incomingMap.keys()]);
+      const mergedSessions = [];
+      allIds.forEach(id => {
+        if (deletedIds.has(id)) return;
+        const ss = serverMap.get(id);
+        const is = incomingMap.get(id);
+        mergedSessions.push(is || ss);
+      });
+      mergedCasino[pr].casino = mergedSessions;
     });
 
-    const jsonString = JSON.stringify(merged);
-    const saveRes = await fetch(`${kvUrl}/set/edgetrack_casino`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${kvToken}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(jsonString)
-    });
-    if (!saveRes.ok) throw new Error(`KV save error: ${saveRes.status}`);
+    // Save both keys in parallel
+    const [casinoSaveRes, sportsSaveRes] = await Promise.all([
+      fetch(`${kvUrl}/set/edgetrack_casino`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${kvToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(JSON.stringify(mergedCasino))
+      }),
+      fetch(`${kvUrl}/set/edgetrack_main`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${kvToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(JSON.stringify(mergedSports))
+      })
+    ]);
+
+    if (!casinoSaveRes.ok) throw new Error(`Casino KV save error: ${casinoSaveRes.status}`);
+    if (!sportsSaveRes.ok) throw new Error(`Sports KV save error: ${sportsSaveRes.status}`);
+
     return res.status(200).json({ ok: true });
   } catch (e) {
     console.error('Save casino error:', e);
