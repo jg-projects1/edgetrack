@@ -82,10 +82,18 @@ export default async function handler(req, res) {
         merged[pr].transactions = mergedTxs;
       }
 
-      // Balances: use incoming
+      // Balances: always use incoming regardless of stale check
+      // Bank and bookies reflect the most recent action on this device
       if (incoming[pr].bank !== undefined) merged[pr].bank = incoming[pr].bank;
       if (incoming[pr].bookies && Object.keys(incoming[pr].bookies).length > 0) {
-        merged[pr].bookies = incoming[pr].bookies;
+        // Merge bookies: keep server bookies not in incoming, update ones that are
+        const serverBookies = server[pr]?.bookies || {};
+        const incomingBookies = incoming[pr].bookies;
+        const mergedBookies = { ...serverBookies };
+        Object.keys(incomingBookies).forEach(bk => {
+          mergedBookies[bk] = incomingBookies[bk];
+        });
+        merged[pr].bookies = mergedBookies;
       }
     });
 
