@@ -13,8 +13,10 @@ export default async function handler(req, res) {
     // Use client-provided server state if available (avoids stale replica reads)
     // Otherwise fall back to reading from KV
     let server = {};
-    if (incoming._serverState && typeof incoming._serverState === 'object') {
+    let serverSource = 'kv';
+    if (incoming._serverState && typeof incoming._serverState === 'object' && Object.keys(incoming._serverState).length > 0) {
       server = incoming._serverState;
+      serverSource = 'client';
     } else {
       const loadRes = await fetch(`${kvUrl}/get/edgetrack_main`, {
         headers: { Authorization: `Bearer ${kvToken}` }
@@ -103,6 +105,8 @@ export default async function handler(req, res) {
     const auditEntry = {
       ts: new Date().toISOString(),
       source: incoming._source || 'unknown',
+      serverSource,
+      serverCounts: Object.fromEntries(profiles.map(pr => [pr, server[pr]?.transactions?.length || 0])),
       counts: verifiedCounts,
       banks: verifiedBanks,
       intended_counts: Object.fromEntries(profiles.map(pr => [pr, merged[pr]?.transactions?.length || 0])),
