@@ -33,58 +33,56 @@ export default async function handler(req, res) {
 
       const serverTxs = server[pr]?.transactions || [];
       const incomingTxs = incoming[pr]?.transactions || [];
-
-      // SAFETY: if incoming has far fewer transactions than server, 
-      // it's a stale client — keep all server transactions and only add new ones
       const serverCount = serverTxs.length;
       const incomingCount = incomingTxs.length;
+
+      // Safety: if incoming has far fewer transactions than server,
+      // treat as stale client — only add new, apply settlements, never drop
       const isStaleDrop = serverCount > 10 && incomingCount < serverCount * 0.5;
 
-      if (isStaleDrop) {
-        // Only add genuinely new transactions from incoming
-        const serverTxIds = new Set(serverTxs.map(t => t.id));
-        const newTxs = incomingTxs.filter(t => !serverTxIds.has(t.id));
-        // Apply updates to existing txs (settlements)
+      if (isStaleDrop || incomingCount === 0) {
+        // Keep all server transactions, only add new ones and apply settlements
+        const incomingMap = new Map(incomingTxs.map(t => [String(t.id), t]));
         merged[pr].transactions = serverTxs.map(serverTx => {
-          const incomingTx = incomingTxs.find(t => t.id === serverTx.id);
+          const incomingTx = incomingMap.get(String(serverTx.id));
           if (incomingTx && incomingTx.result !== 'Pending' && serverTx.result === 'Pending') {
-            return incomingTx; // apply settlement
+            return incomingTx;
+          }
+          if (incomingTx && incomingTx.pnl !== serverTx.pnl) {
+            return incomingTx; // pnl edit
           }
           return serverTx;
-        }).concat(newTxs);
-      } else if (incomingCount === 0 && serverCount > 0) {
-        // Incoming has no transactions but server does — keep server untouched
-        merged[pr].transactions = serverTxs;
+        });
+        // Add brand new transactions not on server
+        const serverIds = new Set(serverTxs.map(t => String(t.id)));
+        const newTxs = incomingTxs.filter(t => !serverIds.has(String(t.id)));
+        merged[pr].transactions = [...merged[pr].transactions, ...newTxs];
       } else {
-        // Normal merge: server is base, apply incoming changes
-        const serverTxMap = new Map(serverTxs.map(t => [t.id, t]));
-        const incomingTxMap = new Map(incomingTxs.map(t => [t.id, t]));
-        const allIds = new Set([...serverTxMap.keys(), ...incomingTxMap.keys()]);
+        // Normal merge — additive by ID, explicit deletes via deletedIds
+        const deletedIds = new Set((incoming[pr]?.deletedIds || []).map(String));
+        const serverMap = new Map(serverTxs.map(t => [String(t.id), t]));
+        const incomingMap = new Map(incomingTxs.map(t => [String(t.id), t]));
+        const allIds = new Set([...serverMap.keys(), ...incomingMap.keys()]);
         const mergedTxs = [];
         allIds.forEach(id => {
-          const serverTx = serverTxMap.get(id);
-          const incomingTx = incomingTxMap.get(id);
-          if (!incomingTx) {
-            // On server, not in incoming — keep unless incoming has data (explicit delete)
-            if (incomingCount > 0) return; // deleted locally
-            mergedTxs.push(serverTx);
-          } else if (!serverTx) {
-            mergedTxs.push(incomingTx); // new
-          } else {
+          if (deletedIds.has(id)) return;
+          const serverTx = serverMap.get(id);
+          const incomingTx = incomingMap.get(id);
+          if (incomingTx) {
             // Prefer settled over pending
-            if (incomingTx.result !== 'Pending' && serverTx.result === 'Pending') {
-              mergedTxs.push(incomingTx);
-            } else if (serverTx.result !== 'Pending' && incomingTx.result === 'Pending') {
-              mergedTxs.push(serverTx); // server already settled, keep it
+            if (serverTx && serverTx.result !== 'Pending' && incomingTx.result === 'Pending') {
+              mergedTxs.push(serverTx);
             } else {
               mergedTxs.push(incomingTx);
             }
+          } else if (serverTx) {
+            mergedTxs.push(serverTx);
           }
         });
         merged[pr].transactions = mergedTxs;
       }
 
-      // Balances: only update if incoming has meaningful data
+      // Balances: use incoming
       if (incoming[pr].bank !== undefined) merged[pr].bank = incoming[pr].bank;
       if (incoming[pr].bookies && Object.keys(incoming[pr].bookies).length > 0) {
         merged[pr].bookies = incoming[pr].bookies;
@@ -93,17 +91,41 @@ export default async function handler(req, res) {
 
     if (incoming.exchanges) merged.exchanges = incoming.exchanges;
 
-    const jsonString = JSON.stringify(merged);
-    const saveRes = await fetch(`${kvUrl}/set/edgetrack_main`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${kvToken}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(jsonString)
-    });
-    if (!saveRes.ok) throw new Error(`KV save error: ${saveRes.status}`);
+    // Log save audit entry
+    const auditEntry = {
+      ts: new Date().toISOString(),
+      counts: Object.fromEntries(profiles.map(pr => [pr, merged[pr]?.transactions?.length || 0]))
+    };
+    // Keep last 50 audit entries
+    let audit = [];
+    try {
+      const auditRes = await fetch(`${kvUrl}/get/edgetrack_audit`, {
+        headers: { Authorization: `Bearer ${kvToken}` }
+      });
+      if (auditRes.ok) {
+        const auditData = await auditRes.json();
+        if (auditData.result) audit = JSON.parse(auditData.result);
+        if (typeof audit === 'string') audit = JSON.parse(audit);
+      }
+    } catch(e) {}
+    audit.push(auditEntry);
+    if (audit.length > 50) audit = audit.slice(-50);
 
+    const jsonString = JSON.stringify(merged);
+    const [saveRes] = await Promise.all([
+      fetch(`${kvUrl}/set/edgetrack_main`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${kvToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(jsonString)
+      }),
+      fetch(`${kvUrl}/set/edgetrack_audit`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${kvToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(JSON.stringify(audit))
+      })
+    ]);
+
+    if (!saveRes.ok) throw new Error(`KV save error: ${saveRes.status}`);
     return res.status(200).json({ ok: true });
   } catch (e) {
     console.error('Save error:', e);
