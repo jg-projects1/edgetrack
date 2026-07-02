@@ -6,10 +6,11 @@ export default async function handler(req, res) {
   try {
     const kvUrl = process.env.KV_REST_API_URL;
     const kvToken = process.env.KV_REST_API_TOKEN;
+    const profiles = ['me', 'wife', 'bp', 'rq'];
 
     const fetchData = async () => {
       const response = await fetch(`${kvUrl}/get/edgetrack_main`, {
-        headers: { Authorization: `Bearer ${kvToken}`, 'Cache-Control': 'no-cache, no-store' }
+        headers: { Authorization: `Bearer ${kvToken}`, 'Cache-Control': 'no-cache' }
       });
       if (!response.ok) throw new Error(`KV error: ${response.status}`);
       const data = await response.json();
@@ -21,24 +22,42 @@ export default async function handler(req, res) {
       return null;
     };
 
-    // First read
-    let parsed = await fetchData();
+    const countTxs = (d) => d ? profiles.reduce((a, p) => a + (d[p]?.transactions?.length || 0), 0) : 0;
 
-    // If we got data, do a second read after 300ms to get fresher replica data
-    // This helps with Upstash eventual consistency lag
-    await new Promise(r => setTimeout(r, 300));
-    const parsed2 = await fetchData();
+    // Read the count stamp to know what the latest save produced
+    let expectedCounts = null;
+    try {
+      const stampRes = await fetch(`${kvUrl}/get/edgetrack_stamp`, {
+        headers: { Authorization: `Bearer ${kvToken}` }
+      });
+      if (stampRes.ok) {
+        const stampData = await stampRes.json();
+        if (stampData.result) {
+          let stamp = JSON.parse(stampData.result);
+          if (typeof stamp === 'string') stamp = JSON.parse(stamp);
+          expectedCounts = stamp.counts;
+        }
+      }
+    } catch(e) {}
 
-    // Use whichever has more transactions (fresher data)
-    if (parsed2) {
-      const profiles = ['me', 'wife', 'bp', 'rq'];
-      const count1 = parsed ? profiles.reduce((a, p) => a + (parsed[p]?.transactions?.length || 0), 0) : 0;
-      const count2 = profiles.reduce((a, p) => a + (parsed2[p]?.transactions?.length || 0), 0);
-      if (count2 >= count1) parsed = parsed2;
+    const expectedTotal = expectedCounts ? profiles.reduce((a, p) => a + (expectedCounts[p] || 0), 0) : 0;
+
+    // Retry until we get data matching the expected count, or max 5 attempts
+    let best = null;
+    const maxAttempts = 5;
+    const delays = [0, 300, 500, 700, 1000];
+    
+    for (let i = 0; i < maxAttempts; i++) {
+      if (i > 0) await new Promise(r => setTimeout(r, delays[i]));
+      const data = await fetchData();
+      const total = countTxs(data);
+      if (!best || total > countTxs(best)) best = data;
+      // Stop retrying if we have the expected count
+      if (expectedTotal > 0 && total >= expectedTotal) break;
     }
 
-    if (parsed) {
-      return res.status(200).json({ ok: true, data: parsed });
+    if (best) {
+      return res.status(200).json({ ok: true, data: best });
     } else {
       return res.status(200).json({ ok: true, data: null });
     }
