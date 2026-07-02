@@ -262,15 +262,25 @@ async function loadData(){
   try{
     // Load sports data and casino data separately
     const [sportsRes, casinoRes] = await Promise.all([
-      fetch('/api/load'),
-      fetch('/api/load-casino')
+      fetch('/api/load?t='+Date.now()),
+      fetch('/api/load-casino?t='+Date.now())
     ]);
     if(!sportsRes.ok)throw new Error('HTTP '+sportsRes.status);
     const sportsJson=await sportsRes.json();
     if(sportsJson.ok&&sportsJson.data){
       const saved=sportsJson.data;
       const hasData=PROFILES.some(p=>saved[p]&&((saved[p].transactions||[]).length>0||saved[p].bank!==0));
-      if(hasData)Object.assign(state,saved);
+      if(hasData){
+        // Deep copy to avoid reference issues
+        PROFILES.forEach(pr=>{
+          if(saved[pr]){
+            state[pr]=JSON.parse(JSON.stringify(saved[pr]));
+            if(!state[pr].casino)state[pr].casino=[];
+            if(!state[pr].freeBets)state[pr].freeBets=[];
+          }
+        });
+        if(saved.exchanges)state.exchanges=JSON.parse(JSON.stringify(saved.exchanges));
+      }
     }
     // Merge casino sessions into state
     if(casinoRes.ok){
@@ -279,7 +289,7 @@ async function loadData(){
         PROFILES.forEach(pr=>{
           if(casinoJson.data[pr]?.casino){
             if(!state[pr])state[pr]={transactions:[],casino:[],bank:0,bookies:{}};
-            state[pr].casino=casinoJson.data[pr].casino;
+            state[pr].casino=JSON.parse(JSON.stringify(casinoJson.data[pr].casino));
           }
         });
       }
