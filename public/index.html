@@ -333,6 +333,7 @@ async function saveData(source='unknown'){
   }catch(e){
     console.error('Save error:',e);
     setSyncStatus('error');
+    showToast('⚠ Save failed: '+e.message);
   }
 }
 function debouncedSave(source='unknown'){if(syncTimeout)clearTimeout(syncTimeout);setSyncStatus('syncing');syncTimeout=setTimeout(()=>saveData(source),1500);}
@@ -658,7 +659,7 @@ function applyBalanceAtLog(tx,p){
 
 function settleBet(acct,id,result){
   const p=state[acct];const tx=(p.transactions||[]).find(t=>t.id===id);if(!tx||tx.result!=='Pending')return;
-  tx.result=result;applyBalanceOnSettle(tx,p,result);save();
+  tx.result=result;applyBalanceOnSettle(tx,p,result);if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('settle');
   const card=document.getElementById('pcard-'+id);
   if(card){card.style.transition='opacity .25s,transform .25s';card.style.opacity='0';card.style.transform='translateY(-6px)';setTimeout(()=>{card.remove();updateBadge();},260);}
   showToast(`${result==='Won'?'Won':'Lost'} — ${fmtS(tx.pnl||0)}`,result==='Won'?'success':'error');
@@ -698,7 +699,7 @@ function confirmPnlEdit(acct,id){
   // Bookie balance is set from odds×stake on settlement, not from P&L
   if(tx.result==='Lost'&&tx.exchange&&state.exchanges[tx.exchange]!==undefined)
     state.exchanges[tx.exchange]=(state.exchanges[tx.exchange]||0)+diff;
-  save();closeModal();showToast(`P&L updated to ${fmtS(newPnl)}`);render();
+  if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('editPnl');closeModal();showToast(`P&L updated to ${fmtS(newPnl)}`);render();
 }
 
 function closeModal(){document.getElementById('modal-root').innerHTML='';}
@@ -891,7 +892,7 @@ function submitTx(){
     else{const name=target.slice(7);oldVal=(p.bookies||{})[name]?.bal||0;p.bookies[name].bal=newVal;targetLabel=name;}
     const diff=newVal-oldVal;if(!p.transactions)p.transactions=[];
     p.transactions.push({id:Date.now(),date,type:'Balance Amendment',target:targetLabel,oldVal,newVal,diff,pnl:diff,notes:reason,result:'—',_acct:formAccount});
-    save();showToast(`${targetLabel} → ${fmt(newVal)}`);msg.textContent='';resetForm();setTimeout(render,100);return;
+    if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('balanceAmend');showToast(`${targetLabel} → ${fmt(newVal)}`);msg.textContent='';resetForm();setTimeout(render,100);return;
   }
   const bookie=document.getElementById('f-bookie')?.value||(document.getElementById('f-bookie-search')?.value||''),exchange=document.getElementById('f-exchange')?.value,event=document.getElementById('f-event')?.value||'';
   const bstake=parseFloat(document.getElementById('f-bstake')?.value)||0,bodds=parseFloat(document.getElementById('f-bodds')?.value)||0,comm=parseFloat(document.getElementById('f-comm')?.value)||0;
@@ -934,7 +935,7 @@ function submitTx(){
   // Store last saved tx for quick duplicate
   const lastTx={type:selectedBetType,bookie:document.getElementById('f-bookie')?.value||(document.getElementById('f-bookie-search')?.value||''),exchange:document.getElementById('f-exchange')?.value||'',event:document.getElementById('f-event')?.value||'',bstake:document.getElementById('f-bstake')?.value||'',bodds:document.getElementById('f-bodds')?.value||'',pnl:document.getElementById('f-pnl')?.value||'',_acct:formAccount};
   lastSavedTrade=lastTx;
-  save();showToast('✓ Trade saved');msg.textContent='';
+  if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('logTrade');showToast('✓ Trade saved');msg.textContent='';
   // Stay on form — keep type, bookie, exchange; clear event/stake/odds/pnl
   const keepBookie=document.getElementById('f-bookie-search')?.value||'';
   const keepBookieVal=document.getElementById('f-bookie')?.value||'';
@@ -1007,7 +1008,7 @@ function renderTxTable(txs,showAcct){
 function deleteTx(acct,id){
   if(!confirm('Delete this transaction? Balances will be reversed.'))return;
   const tx=(state[acct].transactions||[]).find(t=>t.id===id);
-  if(!tx){state[acct].transactions=state[acct].transactions.filter(t=>t.id!==id);save();render();return;}
+  if(!tx){state[acct].transactions=state[acct].transactions.filter(t=>t.id!==id);if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('quickDeleteTx');render();return;}
   const p=state[acct];
   const isFB=isFreeBet(tx.type);
   const bstake=tx.bstake||0,bodds=tx.bodds||0,pnl=tx.pnl||0;
@@ -1183,7 +1184,7 @@ function confirmBookieEdit(acct,name){
   const newBal=parseFloat(document.getElementById('modal-bal')?.value),newStatus=document.getElementById('modal-status')?.value||'Active',newNotes=document.getElementById('modal-notes')?.value||'',reason=document.getElementById('modal-reason')?.value||'Manual edit';
   const bk=state[acct].bookies[name],oldBal=bk.bal||0;bk.status=newStatus;bk.notes=newNotes;
   if(!isNaN(newBal)&&newBal!==oldBal){const diff=newBal-oldBal;bk.bal=newBal;if(!state[acct].transactions)state[acct].transactions=[];state[acct].transactions.push({id:Date.now(),date:todayStr(),type:'Balance Amendment',target:name,oldVal:oldBal,newVal:newBal,diff,pnl:diff,notes:reason,result:'—',_acct:acct});}
-  save();closeModal();showToast(`${name} updated`);render();
+  if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('bookieEdit');closeModal();showToast(`${name} updated`);render();
 }
 
 function showAmendModal(type,acct,name){
@@ -1610,7 +1611,7 @@ function saveCasinoSession(){
     notes:document.getElementById('c-notes')?.value||'',
     _acct:casinoFormAcct,
   });
-  save();showToast('Casino session saved!');
+  if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('casinoSession');showToast('Casino session saved!');
   casinoPendingSpins=false;casinoHasDeposit=false;casinoOfferType='';
   render(); // re-render full tab so operator P&L updates
 }
@@ -1679,7 +1680,7 @@ function confirmCasinoSpins(acct,id){
   if(session.casino&&p.bookies[session.casino]){
     p.bookies[session.casino].bal=(p.bookies[session.casino].bal||0)+win;
   }
-  save();closeModal();showToast('Bonus win added!');
+  if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('bonusWin');closeModal();showToast('Bonus win added!');
   const cv=document.getElementById('casino-view');
   if(cv)cv.innerHTML=renderCasinoHistory();
 }
