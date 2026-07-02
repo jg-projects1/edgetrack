@@ -337,6 +337,9 @@ async function saveData(source='unknown'){
           state[pr].bank=sportsJson.data[pr].bank;
           state[pr].bookies=sportsJson.data[pr].bookies;
           state[pr].transactions=sportsJson.data[pr].transactions;
+          // Preserve casino data — not included in sports response
+          if(!state[pr].casino)state[pr].casino=[];
+          if(!state[pr].freeBets)state[pr].freeBets=[];
         }
       });
       if(sportsJson.data.exchanges)state.exchanges=sportsJson.data.exchanges;
@@ -1024,7 +1027,7 @@ function renderTxTable(txs,showAcct){
 function deleteTx(acct,id){
   if(!confirm('Delete this transaction? Balances will be reversed.'))return;
   const tx=(state[acct].transactions||[]).find(t=>t.id===id);
-  if(!tx){state[acct].transactions=state[acct].transactions.filter(t=>t.id!==id);if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('quickDeleteTx');render();return;}
+  if(!tx){state[acct].transactions=state[acct].transactions.filter(t=>t.id!==id);if(!deletedTxIds[acct])deletedTxIds[acct]=[];deletedTxIds[acct].push(id);if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('quickDeleteTx');render();return;}
   const p=state[acct];
   const isFB=isFreeBet(tx.type);
   const bstake=tx.bstake||0,bodds=tx.bodds||0,pnl=tx.pnl||0;
@@ -1073,7 +1076,8 @@ function deleteTx(acct,id){
   state[acct].transactions=state[acct].transactions.filter(t=>t.id!==id);
   if(!deletedTxIds[acct])deletedTxIds[acct]=[];
   deletedTxIds[acct].push(id);
-  save('deleteTx');showToast('Transaction deleted & balances reversed');render();
+  if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}
+  saveData('deleteTx');showToast('Transaction deleted & balances reversed');render();
 }
 
 function exportCSV(){
