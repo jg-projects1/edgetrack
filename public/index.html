@@ -1210,7 +1210,8 @@ function confirmAmend(type,acct,name){
   if(type==='bank'){oldVal=p.bank;p.bank=newVal;targetLabel='Bank';}else{oldVal=p.bookies[name]?.bal||0;p.bookies[name].bal=newVal;targetLabel=name;}
   const diff=newVal-oldVal;if(!p.transactions)p.transactions=[];
   p.transactions.push({id:Date.now(),date:todayStr(),type:'Balance Amendment',target:targetLabel,oldVal,newVal,diff,pnl:diff,notes:reason,result:'—',_acct:acct});
-  save();closeModal();showToast(`${targetLabel} → ${fmt(newVal)}`);render();
+  if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}
+  saveData();closeModal();showToast(`${targetLabel} → ${fmt(newVal)}`);render();
 }
 
 function adjustExch(name){const cur=state.exchanges[name],val=prompt(`Set balance for ${name}:`,cur.toFixed(2));if(val===null)return;const n=parseFloat(val);if(isNaN(n))return;state.exchanges[name]=n;save();render();}
