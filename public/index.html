@@ -481,12 +481,15 @@ function renderMonthBars(map,height=90){
 
 // ── DASHBOARD ────────────────────────────────────────────────────────────────
 function renderDashboard(){
-  const pending=pendingAll();
   const allMap=monthlyPnl(allTxs());
   const totalTrades=PROFILES.reduce((a,p)=>a+(state[p].transactions||[]).length,0);
   const combinedSports=PROFILES.reduce((a,p)=>a+sportsPnl(p),0);
   const combinedCasino=PROFILES.reduce((a,p)=>a+casinoPnl(p),0);
   const combinedPnl=combinedSports+combinedCasino;
+  const totalBank=PROFILES.reduce((a,p)=>a+(state[p].bank||0),0);
+  const totalBookies=PROFILES.reduce((a,p)=>a+totalBookie(p),0);
+  const totalExchanges=Object.values(state.exchanges||{}).reduce((a,v)=>a+(v||0),0);
+  const totalFunds=totalBank+totalBookies+totalExchanges;
   return`
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
     <div class="metric-card" style="grid-column:span 2">
@@ -498,11 +501,15 @@ function renderDashboard(){
         <span>Casino: <span style="color:${combinedCasino>=0?'#1D9E75':'#E24B4A'}">${fmtS(combinedCasino)}</span></span>
       </div>
     </div>
-    ${pending.length?`<div class="metric-card" style="background:#633806;grid-column:span 2;cursor:pointer" onclick="switchTab('pending')">
-      <div class="metric-label" style="color:#EF9F27"><i class="ti ti-clock" aria-hidden="true"></i>Pending</div>
-      <div class="metric-value warn">${pending.length}</div>
-      <div class="metric-sub" style="color:#EF9F27">Tap to settle →</div>
-    </div>`:''}
+    <div class="metric-card" style="grid-column:span 2">
+      <div class="metric-label"><i class="ti ti-cash" aria-hidden="true"></i>Total funds</div>
+      <div class="metric-value">${fmt(totalFunds)}</div>
+      <div class="metric-sub" style="display:flex;gap:10px;flex-wrap:wrap">
+        <span>Bank: ${fmt(totalBank)}</span>
+        <span>Bookies: ${fmt(totalBookies)}</span>
+        <span>Exchanges: ${fmt(totalExchanges)}</span>
+      </div>
+    </div>
   </div>
   <div class="acct-grid">
     ${PROFILES.map(p=>{
@@ -527,20 +534,6 @@ function renderDashboard(){
     <div class="card-header"><span class="card-title">Monthly P&L</span></div>
     <div style="padding:12px 14px;overflow-x:auto">${renderMonthBars(allMap,90)}</div>
   </div>`:''}
-  <div class="card">
-    <div class="card-header">
-      <span class="card-title">Recent trades</span>
-      <span style="font-size:12px;color:#1D9E75;cursor:pointer" onclick="switchTab('history')">View all</span>
-    </div>
-    ${allTxs().slice(0,6).map(t=>`
-      <div class="list-row">
-        <div class="list-row-left">
-          <div class="list-row-title">${t.event||t.exchange||t.bookie||'—'}</div>
-          <div class="list-row-meta"><span class="${pillClass(t.type)}">${t.type}</span>${acctPill(t._acct)}<span style="font-size:10px;color:#C0C3CE">${t.bookie||''}</span></div>
-        </div>
-        <div class="list-row-right ${t.result==='Won'?'pos':t.result==='Lost'?'neg':t.result==='Pending'?'warn':''}">${t.result==='Pending'?'pending':fmtS(t.pnl||0)}</div>
-      </div>`).join('')||'<div class="empty">No trades yet — tap Log trade to start</div>'}
-  </div>
   ${renderFreeBetsPanel()}
 `;}
 
