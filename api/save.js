@@ -136,6 +136,17 @@ export default async function handler(req, res) {
       body: JSON.stringify(JSON.stringify(audit))
     });
 
+    // Write count stamp so load.js knows what to expect
+    const countStamp = {
+      ts: new Date().toISOString(),
+      counts: Object.fromEntries(profiles.map(pr => [pr, merged[pr]?.transactions?.length || 0]))
+    };
+    await fetch(`${kvUrl}/set/edgetrack_stamp`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${kvToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(JSON.stringify(countStamp))
+    });
+
     return res.status(200).json({ ok: true, data: merged });
   } catch (e) {
     console.error('Save error:', e);
