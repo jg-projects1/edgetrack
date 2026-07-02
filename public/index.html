@@ -1825,7 +1825,11 @@ document.addEventListener('wheel', function(e){
   }
 }, {passive:false});
 
-if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.getRegistrations().then(regs=>{
+    regs.forEach(r=>r.unregister());
+  });
+}
 init();
 </script>
 </div>
