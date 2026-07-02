@@ -141,7 +141,7 @@ export default async function handler(req, res) {
       body: JSON.stringify(JSON.stringify(audit))
     });
 
-    return res.status(200).json({ ok: true });
+    return res.status(200).json({ ok: true, data: merged });
   } catch (e) {
     console.error('Save error:', e);
     return res.status(500).json({ ok: false, error: e.message });
