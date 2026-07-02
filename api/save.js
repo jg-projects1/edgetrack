@@ -37,44 +37,31 @@ export default async function handler(req, res) {
 
       const serverTxs = server[pr]?.transactions || [];
       const incomingTxs = incoming[pr]?.transactions || [];
-      const serverCount = serverTxs.length;
-      const incomingCount = incomingTxs.length;
-
-      const isStaleDrop = serverCount > 10 && incomingCount < serverCount * 0.5;
-
-      if (isStaleDrop || incomingCount === 0) {
-        const incomingMap = new Map(incomingTxs.map(t => [String(t.id), t]));
-        merged[pr].transactions = serverTxs.map(serverTx => {
-          const incomingTx = incomingMap.get(String(serverTx.id));
-          if (incomingTx && incomingTx.result !== 'Pending' && serverTx.result === 'Pending') return incomingTx;
-          if (incomingTx && incomingTx.pnl !== serverTx.pnl) return incomingTx;
-          return serverTx;
-        });
-        const serverIds = new Set(serverTxs.map(t => String(t.id)));
-        const newTxs = incomingTxs.filter(t => !serverIds.has(String(t.id)));
-        merged[pr].transactions = [...merged[pr].transactions, ...newTxs];
-      } else {
-        const deletedIds = new Set((incoming[pr]?.deletedIds || []).map(String));
-        const serverMap = new Map(serverTxs.map(t => [String(t.id), t]));
-        const incomingMap = new Map(incomingTxs.map(t => [String(t.id), t]));
-        const allIds = new Set([...serverMap.keys(), ...incomingMap.keys()]);
-        const mergedTxs = [];
-        allIds.forEach(id => {
-          if (deletedIds.has(id)) return;
-          const serverTx = serverMap.get(id);
-          const incomingTx = incomingMap.get(id);
-          if (incomingTx) {
-            if (serverTx && serverTx.result !== 'Pending' && incomingTx.result === 'Pending') {
-              mergedTxs.push(serverTx);
-            } else {
-              mergedTxs.push(incomingTx);
-            }
-          } else if (serverTx) {
+      // Simple additive merge — client provides lastServerState so no stale reads
+      // Union of server + incoming by ID, with explicit deletes honoured
+      const deletedIds = new Set((incoming[pr]?.deletedIds || []).map(String));
+      const serverMap = new Map(serverTxs.map(t => [String(t.id), t]));
+      const incomingMap = new Map(incomingTxs.map(t => [String(t.id), t]));
+      const allIds = new Set([...serverMap.keys(), ...incomingMap.keys()]);
+      const mergedTxs = [];
+      allIds.forEach(id => {
+        if (deletedIds.has(id)) return;
+        const serverTx = serverMap.get(id);
+        const incomingTx = incomingMap.get(id);
+        if (incomingTx && serverTx) {
+          // Both have it — prefer settled over pending
+          if (serverTx.result !== 'Pending' && incomingTx.result === 'Pending') {
             mergedTxs.push(serverTx);
+          } else {
+            mergedTxs.push(incomingTx);
           }
-        });
-        merged[pr].transactions = mergedTxs;
-      }
+        } else if (incomingTx) {
+          mergedTxs.push(incomingTx); // new transaction
+        } else if (serverTx) {
+          mergedTxs.push(serverTx); // only on server — keep it
+        }
+      });
+      merged[pr].transactions = mergedTxs;
 
       // Always apply incoming balances
       if (incoming[pr].bank !== undefined) merged[pr].bank = incoming[pr].bank;
