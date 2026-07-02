@@ -102,7 +102,10 @@ export default async function handler(req, res) {
     // Log save audit entry
     const auditEntry = {
       ts: new Date().toISOString(),
-      counts: Object.fromEntries(profiles.map(pr => [pr, merged[pr]?.transactions?.length || 0]))
+      counts: Object.fromEntries(profiles.map(pr => [pr, merged[pr]?.transactions?.length || 0])),
+      banks: Object.fromEntries(profiles.map(pr => [pr, merged[pr]?.bank || 0])),
+      incoming_banks: Object.fromEntries(profiles.map(pr => [pr, incoming[pr]?.bank])),
+      incoming_counts: Object.fromEntries(profiles.map(pr => [pr, incoming[pr]?.transactions?.length || 0]))
     };
     // Keep last 50 audit entries
     let audit = [];
