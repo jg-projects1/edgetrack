@@ -301,12 +301,13 @@ async function loadData(){
   }
 }
 
-async function saveData(){
+async function saveData(source='unknown'){
   if(window._appLoading){console.log('Save blocked during load');return;}
   setSyncStatus('syncing');
+  window._lastSaveSource=source;
   try{
     // Build sports-only state (no casino sessions)
-    const sportsState={exchanges:state.exchanges};
+    const sportsState={exchanges:state.exchanges,_source:source};
     PROFILES.forEach(pr=>{
       sportsState[pr]={
         bank:state[pr]?.bank||0,
@@ -334,8 +335,8 @@ async function saveData(){
     setSyncStatus('error');
   }
 }
-function debouncedSave(){if(syncTimeout)clearTimeout(syncTimeout);setSyncStatus('syncing');syncTimeout=setTimeout(saveData,1500);}
-function save(){debouncedSave();}
+function debouncedSave(source='unknown'){if(syncTimeout)clearTimeout(syncTimeout);setSyncStatus('syncing');syncTimeout=setTimeout(()=>saveData(source),1500);}
+function save(source='unknown'){debouncedSave(source);}
 
 const PROFILES=['me','wife','bp','rq'];
 const PROFILE_LABELS={me:'JG',wife:'HG',bp:'BP',rq:'RQ'};
@@ -587,7 +588,7 @@ function renderFreeBetsPanel(){
 
 function markFreeBetUsed(pr,id){
   const fb=(state[pr].freeBets||[]).find(f=>String(f.id)===String(id));
-  if(fb){fb.status='Used';save();render();}
+  if(fb){fb.status='Used';save('freeBetUsed');render();}
 }
 
 // ── PENDING ──────────────────────────────────────────────────────────────────
@@ -1055,7 +1056,7 @@ function deleteTx(acct,id){
   state[acct].transactions=state[acct].transactions.filter(t=>t.id!==id);
   if(!deletedTxIds[acct])deletedTxIds[acct]=[];
   deletedTxIds[acct].push(id);
-  save();showToast('Transaction deleted & balances reversed');render();
+  save('deleteTx');showToast('Transaction deleted & balances reversed');render();
 }
 
 function exportCSV(){
@@ -1214,7 +1215,7 @@ function confirmAmend(type,acct,name){
   saveData();closeModal();showToast(`${targetLabel} → ${fmt(newVal)}`);render();
 }
 
-function adjustExch(name){const cur=state.exchanges[name],val=prompt(`Set balance for ${name}:`,cur.toFixed(2));if(val===null)return;const n=parseFloat(val);if(isNaN(n))return;state.exchanges[name]=n;save();render();}
+function adjustExch(name){const cur=state.exchanges[name],val=prompt(`Set balance for ${name}:`,cur.toFixed(2));if(val===null)return;const n=parseFloat(val);if(isNaN(n))return;state.exchanges[name]=n;save('adjustExch');render();}
 function addBookie(acct){
   const inp=document.getElementById('new-bookie-name'),name=inp?.value?.trim();if(!name)return;
   if(!state[acct].bookies)state[acct].bookies={};
@@ -1701,7 +1702,7 @@ function deleteCasinoSession(acct,id){
   state[acct].casino=(state[acct].casino||[]).filter(s=>s.id!==id);
   if(!casinoDeletedIds[acct])casinoDeletedIds[acct]=[];
   casinoDeletedIds[acct].push(id);
-  save();showToast('Session deleted & balances reversed');
+  save('deleteCasino');showToast('Session deleted & balances reversed');
   const cv=document.getElementById('casino-view');
   if(cv)cv.innerHTML=renderCasinoHistory();
 }
