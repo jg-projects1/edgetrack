@@ -103,6 +103,27 @@ export default async function handler(req, res) {
     if (!casinoSaveRes.ok) throw new Error(`Casino KV save error: ${casinoSaveRes.status}`);
     if (!sportsSaveRes.ok) throw new Error(`Sports KV save error: ${sportsSaveRes.status}`);
 
+    // Audit log
+    const auditEntry = {
+      ts: new Date().toISOString(),
+      counts: Object.fromEntries(profiles.map(pr => [pr, mergedCasino[pr]?.casino?.length || 0]))
+    };
+    let audit = [];
+    try {
+      const auditRes = await fetch(`${kvUrl}/get/edgetrack_casino_audit`, { headers: { Authorization: `Bearer ${kvToken}` } });
+      if (auditRes.ok) {
+        const d = await auditRes.json();
+        if (d.result) { audit = JSON.parse(d.result); if (typeof audit === 'string') audit = JSON.parse(audit); }
+      }
+    } catch(e) {}
+    audit.push(auditEntry);
+    if (audit.length > 50) audit = audit.slice(-50);
+    await fetch(`${kvUrl}/set/edgetrack_casino_audit`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${kvToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(JSON.stringify(audit))
+    });
+
     return res.status(200).json({ ok: true });
   } catch (e) {
     console.error('Save casino error:', e);
