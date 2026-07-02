@@ -328,6 +328,18 @@ async function saveData(source='unknown'){
     ]);
     if(!sportsRes.ok)throw new Error('Sports save failed');
     if(!casinoRes.ok)throw new Error('Casino save failed');
+    // Update state from server's merged response — avoids stale load on next refresh
+    const sportsJson=await sportsRes.json();
+    if(sportsJson.ok&&sportsJson.data){
+      PROFILES.forEach(pr=>{
+        if(sportsJson.data[pr]){
+          state[pr].bank=sportsJson.data[pr].bank;
+          state[pr].bookies=sportsJson.data[pr].bookies;
+          state[pr].transactions=sportsJson.data[pr].transactions;
+        }
+      });
+      if(sportsJson.data.exchanges)state.exchanges=sportsJson.data.exchanges;
+    }
     PROFILES.forEach(pr=>{casinoDeletedIds[pr]=[];deletedTxIds[pr]=[];});
     setSyncStatus('synced');
   }catch(e){
