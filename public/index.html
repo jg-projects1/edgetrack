@@ -176,9 +176,9 @@ select option{background:#4E5260;color:#e8e8e4}
 .pinfo-val{font-size:13px;font-weight:500;color:#e8e8e4}
 .pinfo-val.pos{color:#1D9E75}.pinfo-val.neg{color:#E24B4A}
 
-.month-wrap{display:flex;align-items:flex-end;gap:6px;overflow-x:auto;padding:4px 2px}
-.month-col{display:flex;flex-direction:column;align-items:center;gap:3px;flex:0 0 auto;min-width:40px}
-.month-bar{width:32px;border-radius:3px 3px 0 0;min-height:2px}
+.month-wrap{display:flex;align-items:flex-end;gap:4px;overflow-x:auto;padding:6px 2px 2px}
+.month-col{display:flex;flex-direction:column;align-items:center;gap:2px;flex:0 0 auto;min-width:44px}
+.month-bar{width:36px;border-radius:3px 3px 0 0;min-height:3px}
 .month-bar.pos{background:#1D9E75}.month-bar.neg{background:#E24B4A;border-radius:0 0 3px 3px}
 .month-lbl{font-size:9px;color:#B0B3BE;font-weight:500}
 .month-val{font-size:9px;font-weight:500}
@@ -469,12 +469,12 @@ function monthlyPnl(txs){
   return map;
 }
 
-function renderMonthBars(map,height=90){
+function renderMonthBars(map,height=110){
   const keys=Object.keys(map).sort();if(!keys.length)return`<div class="empty">No data yet</div>`;
   const vals=keys.map(k=>map[k]);const maxAbs=Math.max(...vals.map(Math.abs),0.01);
-  return`<div class="month-wrap" style="height:${height}px;align-items:flex-end">
-    ${keys.map(k=>{const v=map[k];const pct=Math.abs(v)/maxAbs*82;const col=v>=0?'pos':'neg';const[yr,mo]=k.split('-');const lbl=new Date(+yr,+mo-1).toLocaleString('default',{month:'short'});
-      return`<div class="month-col"><div class="month-val ${col}">${fmtS(v)}</div><div class="month-bar ${col}" style="height:${pct}%"></div><div class="month-lbl">${lbl}</div></div>`;
+  return`<div class="month-wrap" style="height:${height}px;align-items:flex-end;gap:4px">
+    ${keys.map(k=>{const v=map[k];const pct=Math.abs(v)/maxAbs*70;const col=v>=0?'pos':'neg';const[yr,mo]=k.split('-');const lbl=new Date(+yr,+mo-1).toLocaleString('default',{month:'short'});
+      return`<div class="month-col" style="min-width:44px"><div class="month-val ${col}" style="font-size:11px;font-weight:600">${fmtS(v)}</div><div class="month-bar ${col}" style="height:${pct}%;width:36px"></div><div class="month-lbl" style="font-size:11px;margin-top:3px">${lbl}</div></div>`;
     }).join('')}
   </div>`;
 }
@@ -532,7 +532,7 @@ function renderDashboard(){
   </div>
   ${Object.keys(allMap).length?`<div class="card" style="margin-bottom:12px">
     <div class="card-header"><span class="card-title">Monthly P&L</span></div>
-    <div style="padding:12px 14px;overflow-x:auto">${renderMonthBars(allMap,90)}</div>
+    <div style="padding:12px 14px;overflow-x:auto">${renderMonthBars(allMap)}</div>
   </div>`:''}
   ${renderFreeBetsPanel()}
 `;}
