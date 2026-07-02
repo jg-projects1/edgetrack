@@ -10,18 +10,22 @@ export default async function handler(req, res) {
     const kvToken = process.env.KV_REST_API_TOKEN;
     const incoming = req.body;
 
-    // Load current server state
-    const loadRes = await fetch(`${kvUrl}/get/edgetrack_main`, {
-      headers: { Authorization: `Bearer ${kvToken}` }
-    });
-    if (!loadRes.ok) throw new Error(`KV load error: ${loadRes.status}`);
-    const loadData = await loadRes.json();
-
+    // Use client-provided server state if available (avoids stale replica reads)
+    // Otherwise fall back to reading from KV
     let server = {};
-    if (loadData.result) {
-      let parsed = JSON.parse(loadData.result);
-      if (typeof parsed === 'string') parsed = JSON.parse(parsed);
-      server = parsed;
+    if (incoming._serverState && typeof incoming._serverState === 'object') {
+      server = incoming._serverState;
+    } else {
+      const loadRes = await fetch(`${kvUrl}/get/edgetrack_main`, {
+        headers: { Authorization: `Bearer ${kvToken}` }
+      });
+      if (!loadRes.ok) throw new Error(`KV load error: ${loadRes.status}`);
+      const loadData = await loadRes.json();
+      if (loadData.result) {
+        let parsed = JSON.parse(loadData.result);
+        if (typeof parsed === 'string') parsed = JSON.parse(parsed);
+        server = parsed;
+      }
     }
 
     const profiles = ['me', 'wife', 'bp', 'rq'];
