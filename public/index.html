@@ -260,7 +260,34 @@ function setSyncStatus(s){
 
 async function loadData(){
   try{
-    // Load sports data and casino data separately
+    // Try sessionStorage first — most recent confirmed state from this session
+    const cached=sessionStorage.getItem('mbe_state');
+    if(cached){
+      const parsed=JSON.parse(cached);
+      PROFILES.forEach(pr=>{
+        if(parsed[pr]){
+          state[pr]=JSON.parse(JSON.stringify(parsed[pr]));
+          if(!state[pr].casino)state[pr].casino=[];
+          if(!state[pr].freeBets)state[pr].freeBets=[];
+        }
+      });
+      if(parsed.exchanges)state.exchanges=JSON.parse(JSON.stringify(parsed.exchanges));
+      lastServerState=JSON.parse(JSON.stringify(parsed));
+      setSyncStatus('synced');
+      // Still fetch from server in background to pick up changes from other devices
+      fetchFromServer();
+      return;
+    }
+    // No cache — load from server directly
+    await fetchFromServer();
+  }catch(e){
+    console.error('Load error:',e);
+    setSyncStatus('error');
+  }
+}
+
+async function fetchFromServer(){
+  try{
     const [sportsRes, casinoRes] = await Promise.all([
       fetch('/api/load?t='+Date.now()),
       fetch('/api/load-casino?t='+Date.now())
@@ -271,20 +298,23 @@ async function loadData(){
       const saved=sportsJson.data;
       const hasData=PROFILES.some(p=>saved[p]&&((saved[p].transactions||[]).length>0||saved[p].bank!==0));
       if(hasData){
-        // Deep copy to avoid reference issues
-        PROFILES.forEach(pr=>{
-          if(saved[pr]){
-            state[pr]=JSON.parse(JSON.stringify(saved[pr]));
-            if(!state[pr].casino)state[pr].casino=[];
-            if(!state[pr].freeBets)state[pr].freeBets=[];
-          }
-        });
-        if(saved.exchanges)state.exchanges=JSON.parse(JSON.stringify(saved.exchanges));
-        lastServerState=JSON.parse(JSON.stringify(saved));
+        // Only update if server has more data than current state
+        const serverCount=PROFILES.reduce((a,p)=>a+(saved[p]?.transactions||[]).length,0);
+        const localCount=PROFILES.reduce((a,p)=>a+(state[p]?.transactions||[]).length,0);
+        if(serverCount>=localCount){
+          PROFILES.forEach(pr=>{
+            if(saved[pr]){
+              state[pr]=JSON.parse(JSON.stringify(saved[pr]));
+              if(!state[pr].casino)state[pr].casino=[];
+              if(!state[pr].freeBets)state[pr].freeBets=[];
+            }
+          });
+          if(saved.exchanges)state.exchanges=JSON.parse(JSON.stringify(saved.exchanges));
+          lastServerState=JSON.parse(JSON.stringify(saved));
+        }
       }
     }
-    // Merge casino sessions into state
-    if(casinoRes.ok){
+    if(casinoRes&&casinoRes.ok){
       const casinoJson=await casinoRes.json();
       if(casinoJson.ok&&casinoJson.data){
         PROFILES.forEach(pr=>{
@@ -296,9 +326,9 @@ async function loadData(){
       }
     }
     setSyncStatus('synced');
+    render();
   }catch(e){
-    console.error('Load error:',e);
-    setSyncStatus('error');
+    console.error('Server fetch error:',e);
   }
 }
 
@@ -351,6 +381,8 @@ async function saveData(source='unknown'){
       if(sportsJson.data.exchanges)state.exchanges=sportsJson.data.exchanges;
       // Track confirmed server state so next save can skip stale KV read
       lastServerState=JSON.parse(JSON.stringify(sportsJson.data));
+      // Cache in sessionStorage so pull-to-refresh gets fresh data
+      try{sessionStorage.setItem('mbe_state',JSON.stringify(sportsJson.data));}catch(e){}
     }
     PROFILES.forEach(pr=>{casinoDeletedIds[pr]=[];deletedTxIds[pr]=[];});
     setSyncStatus('synced');
