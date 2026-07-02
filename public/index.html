@@ -304,6 +304,12 @@ async function loadData(){
 
 async function saveData(source='unknown'){
   if(window._appLoading){console.log('Save blocked during load');return;}
+  // If a save is already in progress, queue this one and return
+  if(saveInProgress){
+    pendingSave=source;
+    return;
+  }
+  saveInProgress=true;
   setSyncStatus('syncing');
   window._lastSaveSource=source;
   try{
@@ -352,6 +358,9 @@ async function saveData(source='unknown'){
     console.error('Save error:',e);
     setSyncStatus('error');
     showToast('⚠ Save failed: '+e.message);
+  }finally{
+    saveInProgress=false;
+    if(pendingSave){const nextSource=pendingSave;pendingSave=null;saveData(nextSource);}
   }
 }
 function debouncedSave(source='unknown'){if(syncTimeout)clearTimeout(syncTimeout);setSyncStatus('syncing');syncTimeout=setTimeout(()=>saveData(source),1500);}
@@ -391,6 +400,8 @@ const state=freshState();
 let casinoDeletedIds={me:[],wife:[],bp:[],rq:[]};
 let deletedTxIds={me:[],wife:[],bp:[],rq:[]};
 let lastServerState=null; // tracks last confirmed server state to avoid stale reads
+let saveInProgress=false;
+let pendingSave=null; // queues a save if one is already in progress
 function migrateLegacy(){
   PROFILES.forEach(pr=>{
     if(!state[pr])state[pr]=makeProfile();
