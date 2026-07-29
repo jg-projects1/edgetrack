@@ -550,12 +550,13 @@ function monthlyPnl(txs){
   return map;
 }
 
-function renderMonthBars(map,height=110){
+function renderMonthBars(map,height=90){
   const keys=Object.keys(map).sort();if(!keys.length)return`<div class="empty">No data yet</div>`;
   const vals=keys.map(k=>map[k]);const maxAbs=Math.max(...vals.map(Math.abs),0.01);
+  const barH=height-40;
   return`<div class="month-wrap" style="height:${height}px;align-items:flex-end;gap:4px">
-    ${keys.map(k=>{const v=map[k];const pct=Math.abs(v)/maxAbs*70;const col=v>=0?'pos':'neg';const[yr,mo]=k.split('-');const lbl=new Date(+yr,+mo-1).toLocaleString('default',{month:'short'});
-      return`<div class="month-col" style="min-width:44px"><div class="month-val ${col}" style="font-size:11px;font-weight:600">${fmtS(v)}</div><div class="month-bar ${col}" style="height:${pct}%;width:36px"></div><div class="month-lbl" style="font-size:11px;margin-top:3px">${lbl}</div></div>`;
+    ${keys.map(k=>{const v=map[k];const pct=Math.max(Math.abs(v)/maxAbs*barH,2);const col=v>=0?'pos':'neg';const[yr,mo]=k.split('-');const lbl=new Date(+yr,+mo-1).toLocaleString('default',{month:'short'});
+      return`<div class="month-col" style="min-width:40px"><div class="month-val ${col}" style="font-size:10px;font-weight:600">${fmtS(v)}</div><div class="month-bar ${col}" style="height:${pct}px;width:34px"></div><div class="month-lbl" style="font-size:10px;margin-top:2px">${lbl}</div></div>`;
     }).join('')}
   </div>`;
 }
@@ -1198,7 +1199,10 @@ function renderReports(){
   </div>
   <div class="card" style="margin-bottom:12px">
     <div class="card-header"><span class="card-title">Monthly P&L — Sports (All Accounts)</span></div>
-    <div style="padding:8px 12px;overflow-x:auto">${renderMonthBars(allMap)}</div>
+    <div style="padding:6px 10px;overflow-x:auto">${renderMonthBars(allMap)}</div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+    ${PROFILES.map(p=>`<div class="card"><div class="card-header"><span class="card-title" style="color:${profileColor(p)}">${profileLabel(p)}</span></div><div style="padding:6px 8px;overflow-x:auto">${renderMonthBars(monthlyPnl(state[p].transactions||[]),80)}</div></div>`).join('')}
   </div>
   <div class="card"><div class="card-header"><span class="card-title">Top bookies by P&L</span></div>
     ${topBookies.length?topBookies.map(([name,pnl])=>`<div class="list-row"><div class="list-row-left"><div class="list-row-title">${name}</div></div><div class="list-row-right ${pnl>=0?'pos':'neg'}">${fmtS(pnl)}</div></div>`).join(''):'<div class="empty">No data yet</div>'}
@@ -2352,7 +2356,10 @@ function renderReports(){
   </div>
   <div class="card" style="margin-bottom:12px">
     <div class="card-header"><span class="card-title">Monthly P&L — Sports (All Accounts)</span></div>
-    <div style="padding:8px 12px;overflow-x:auto">${renderMonthBars(allMap)}</div>
+    <div style="padding:6px 10px;overflow-x:auto">${renderMonthBars(allMap)}</div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+    ${PROFILES.map(p=>`<div class="card"><div class="card-header"><span class="card-title" style="color:${profileColor(p)}">${profileLabel(p)}</span></div><div style="padding:6px 8px;overflow-x:auto">${renderMonthBars(monthlyPnl(state[p].transactions||[]),80)}</div></div>`).join('')}
   </div>
   <div class="card"><div class="card-header"><span class="card-title">Top bookies by P&L</span></div>
     ${topBookies.length?topBookies.map(([name,pnl])=>`<div class="list-row"><div class="list-row-left"><div class="list-row-title">${name}</div></div><div class="list-row-right ${pnl>=0?'pos':'neg'}">${fmtS(pnl)}</div></div>`).join(''):'<div class="empty">No data yet</div>'}
