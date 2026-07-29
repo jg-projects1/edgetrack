@@ -1196,9 +1196,9 @@ function renderReports(){
     <div style="font-size:16px;font-weight:500;color:#e8e8e4">Reports</div>
     <button class="btn-sm" onclick="exportCSV()"><i class="ti ti-download" aria-hidden="true"></i> Export CSV</button>
   </div>
-  <div class="card"><div class="card-header"><span class="card-title">Monthly P&L — all accounts</span></div><div style="padding:12px;overflow-x:auto">${renderMonthBars(allMap,100)}</div></div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
-    ${PROFILES.map(p=>`<div class="card"><div class="card-header"><span class="card-title" style="color:${profileColor(p)}">${profileLabel(p)}</span></div><div style="padding:10px;overflow-x:auto">${renderMonthBars(monthlyPnl(state[p].transactions||[]),70)}</div></div>`).join('')}
+  <div class="card" style="margin-bottom:12px">
+    <div class="card-header"><span class="card-title">Monthly P&L — Sports (All Accounts)</span></div>
+    <div style="padding:8px 12px;overflow-x:auto">${renderMonthBars(allMap)}</div>
   </div>
   <div class="card"><div class="card-header"><span class="card-title">Top bookies by P&L</span></div>
     ${topBookies.length?topBookies.map(([name,pnl])=>`<div class="list-row"><div class="list-row-left"><div class="list-row-title">${name}</div></div><div class="list-row-right ${pnl>=0?'pos':'neg'}">${fmtS(pnl)}</div></div>`).join(''):'<div class="empty">No data yet</div>'}
@@ -1587,13 +1587,9 @@ function renderCasino(){
     if(s.operator!=='JP')return a;
     return a+(s.startBal!==undefined?s.endBal-s.startBal:s.netProfit||0);
   },0);
-
   const profilePnlHtml=PROFILES.map(p=>'<span>'+profileLabel(p)+': <span style="color:'+(casinoPnl(p)>=0?'#1D9E75':'#E24B4A')+'">'+fmtS(casinoPnl(p))+'</span></span>').join('');
 
-  const _v=['log','history','monthly','summary'];
-  const _l=['Log session','History','Monthly','Summary'];
-  const tabs=_v.map((v,i)=>'<button onclick="casinoView='+JSON.stringify(v)+';switchCasinoView('+JSON.stringify(v)+')" class="btn '+(casinoView===v?'btn-primary':'btn-ghost')+'" style="flex:1;padding:10px">'+_l[i]+'</button>').join('');
-
+  // Render view content separately so tabs work correctly
   let viewHtml='';
   if(casinoView==='log')viewHtml=renderCasinoForm();
   else if(casinoView==='history')viewHtml=renderCasinoHistory();
@@ -1609,14 +1605,14 @@ function renderCasino(){
     +'<span style="font-size:11px">JG: <span style="color:'+(jgPnl>=0?'#1D9E75':'#E24B4A')+';font-weight:500">'+fmtS(jgPnl)+'</span></span>'
     +'<span style="font-size:11px">JP: <span style="color:'+(jpPnl>=0?'#1D9E75':'#E24B4A')+';font-weight:500">'+fmtS(jpPnl)+'</span></span>'
     +'</div></div></div>'
-    +'<div style="display:flex;gap:8px;margin-bottom:14px">'+tabs+'</div>'
+    +'<div style="display:flex;gap:8px;margin-bottom:14px">'
+    +'<button onclick="setCasinoView(0)" class="btn '+(casinoView==='log'?'btn-primary':'btn-ghost')+'" style="flex:1;padding:10px">Log</button>'
+    +'<button onclick="setCasinoView(1)" class="btn '+(casinoView==='history'?'btn-primary':'btn-ghost')+'" style="flex:1;padding:10px">History</button>'
+    +'<button onclick="setCasinoView(2)" class="btn '+(casinoView==='monthly'?'btn-primary':'btn-ghost')+'" style="flex:1;padding:10px">Monthly</button>'
+    +'<button onclick="setCasinoView(3)" class="btn '+(casinoView==='summary'?'btn-primary':'btn-ghost')+'" style="flex:1;padding:10px">Summary</button>'
+    +'</div>'
     +'<div id="casino-view">'+viewHtml+'</div>';
 }
-
-function renderLogFn(){return renderCasinoForm();}
-function renderHistoryFn(){return renderCasinoHistory();}
-function renderMonthlyFn(){return renderCasinoMonthly();}
-function renderSummaryFn(){return renderCasinoSummaryView();}
 
 
 function renderCasinoMonthly(){
@@ -2354,9 +2350,9 @@ function renderReports(){
     <div style="font-size:16px;font-weight:500;color:#e8e8e4">Reports</div>
     <button class="btn-sm" onclick="exportCSV()"><i class="ti ti-download" aria-hidden="true"></i> Export CSV</button>
   </div>
-  <div class="card"><div class="card-header"><span class="card-title">Monthly P&L — all accounts</span></div><div style="padding:12px;overflow-x:auto">${renderMonthBars(allMap,100)}</div></div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
-    ${PROFILES.map(p=>`<div class="card"><div class="card-header"><span class="card-title" style="color:${profileColor(p)}">${profileLabel(p)}</span></div><div style="padding:10px;overflow-x:auto">${renderMonthBars(monthlyPnl(state[p].transactions||[]),70)}</div></div>`).join('')}
+  <div class="card" style="margin-bottom:12px">
+    <div class="card-header"><span class="card-title">Monthly P&L — Sports (All Accounts)</span></div>
+    <div style="padding:8px 12px;overflow-x:auto">${renderMonthBars(allMap)}</div>
   </div>
   <div class="card"><div class="card-header"><span class="card-title">Top bookies by P&L</span></div>
     ${topBookies.length?topBookies.map(([name,pnl])=>`<div class="list-row"><div class="list-row-left"><div class="list-row-title">${name}</div></div><div class="list-row-right ${pnl>=0?'pos':'neg'}">${fmtS(pnl)}</div></div>`).join(''):'<div class="empty">No data yet</div>'}
@@ -2726,6 +2722,11 @@ function getRiskAdvice(risk){
 
 
 // ── CASINO FORM FUNCTIONS ─────────────────────────────────────────────────────
+function setCasinoView(i){
+  casinoView=['log','history','monthly','summary'][i];
+  render();
+}
+
 function switchCasinoView(v){
   casinoView=v;
   const el=document.getElementById('casino-view');
