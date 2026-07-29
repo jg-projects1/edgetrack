@@ -407,26 +407,22 @@ const EXCHANGE_TRANSFER=['Exchange Deposit','Exchange Withdrawal'];
 const BET_ONLY=['Qualifier','Free Bet','Boost','Mug','Extra Place','2Up','MBAL','Cash Back','Cash Out','Arb'];
 const FREE_BET_TYPES=['Free Bet'];
 const EXCHANGES=['Betfair','Smarkets','Matchbook','Betdaq'];
-const BOOKIE_STATUSES=['Active','Restricted','Gubbed','Closed'];
+const BOOKIE_STATUSES=['Not Signed Up','Active','Restricted','Gubbed','Closed'];
 const DEFAULT_BOOKIES=[
-  '10bet','247bet','32Red','36 Vegas','7bet','888 Sport','Admiral Casino','Arrowbet',
-  'Bally Casino','Bestodds','Bet UK','Bet442','Bet600','Betano','Betfair','Betfred',
-  'Betgoodwin','BetMGM','Betstgeorge','BetTom','Betvickers','Betvictor','Betway',
-  'Betwright','Betzone','Bingostars','Boyle','Bresbet','Buzz Casino','Bwin',
-  'Casumo','Copybet','Coral','Dabble','Dazn','Double Bubble','Dragonbet','Dream Vegas',
-  'Fabulous Vegas','Fairplay','Fanteam','Fitzbet','Fitzdares','Foxy','Fruit Kings',
-  'Gala','Geoff Banks','Grosvenor','GRP','Highbet','Hollywoodbets','Hot Streak Casino',
-  'Jackpot Joy','Jackpot Mobile','Ken Howells','Kwiff','Ladbrokes','Leovegas',
-  'Livescorebet','Lottoland','Lottomart','Luckymate','Mecca Bingo','Mega Riches',
-  'Meta Betting','Midnite','Monopoly','MrQ','MrVegas','Netbet','Octobet','Paddy Power',
-  'Parimatch','Party Casino','Pink Casino','Planet Sport Bet','Planet Sports',
-  'Priced Up','Puntit','Quick Bet','Quinnbet','Rainbow Riches','Regal Wins',
-  'Royale Lounge','Skybet','Slot Planet','Sporting Bet','Spreadex','Stakemate',
-  'Star Sports','Sun Vegas','Swifty Sports','Talksportbet','Tigerbet','Tombola Arcade',
-  'Unibet','Vbet','Video Slots','Virgin Bet','Virgin Games','William Hill'
+  '10bet','247bet','32Red','36 Vegas','7bet','888 Sport','Admiral Casino','Arrowbet','Bally Casino','Bestodds',
+  'Bet UK','Bet442','Bet600','Betano','Betfair','Betfred','Betgoodwin','BetMGM','Betstgeorge','BetTom',
+  'Betvickers','Betvictor','Betway','Betwright','Betzone','Bingostars','Boyle','Bresbet','Buzz Casino','Bwin',
+  'Casumo','Copybet','Coral','Dabble','Dazn','Double Bubble','Dragonbet','Dream Vegas','Fabulous Vegas','Fairplay',
+  'Fanteam','Fitzbet','Fitzdares','Foxy','Fruit Kings','Gala','Geoff Banks','Grosvenor','GRP','Highbet',
+  'Hollywoodbets','Hot Streak Casino','Jackpot Joy','Jackpot Mobile','Ken Howells','Kwiff','Ladbrokes','Leovegas','Livescorebet','Lottoland',
+  'Lottomart','Luckymate','Mecca Bingo','Mega Riches','Meta Betting','Midnite','Monopoly','MrQ','MrVegas','Netbet',
+  'Octobet','Paddy Power','Parimatch','Party Casino','Pink Casino','Planet Sport Bet','Planet Sports','Play Bingo','Priced Up','Puntit',
+  'Quick Bet','Quinnbet','Rainbow Riches','Regal Wins','Royale Lounge','Skybet','Slot Planet','Sporting Bet','Spreadex','Stakemate',
+  'Star Sports','Sun Vegas','Swifty Sports','Talksportbet','Tigerbet','Tombola Arcade','Unibet','Vbet','Video Slots','Virgin Bet',
+  'Virgin Games','William Hill'
 ];
 
-function makeProfile(){const b={};DEFAULT_BOOKIES.forEach(x=>b[x]={bal:0,status:'Active',notes:''});return{bookies:b,bank:0,transactions:[],freeBets:[]};}
+function makeProfile(){const b={};DEFAULT_BOOKIES.forEach(x=>b[x]={bal:0,status:'Not Signed Up',notes:''});return{bookies:b,bank:0,transactions:[],freeBets:[]};}
 function freshState(){const ex={};EXCHANGES.forEach(x=>ex[x]=0);const st={exchanges:ex};PROFILES.forEach(pr=>st[pr]=makeProfile());return st;}
 const state=freshState();
 let casinoDeletedIds={me:[],wife:[],bp:[],rq:[]};
@@ -439,7 +435,7 @@ function migrateLegacy(){
     if(!state[pr])state[pr]=makeProfile();
     if(!state[pr].transactions)state[pr].transactions=[];if(!state[pr].freeBets)state[pr].freeBets=[];
     const bk=state[pr].bookies||{};
-    DEFAULT_BOOKIES.forEach(b=>{if(!bk[b])bk[b]={bal:0,status:'Active',notes:''};});
+    DEFAULT_BOOKIES.forEach(b=>{if(!bk[b])bk[b]={bal:0,status:'Not Signed Up',notes:''};});
     Object.keys(bk).forEach(k=>{
       if(typeof bk[k]==='number')bk[k]={bal:bk[k],status:'Active',notes:''};
       if(!bk[k].status)bk[k].status='Active';
@@ -496,7 +492,7 @@ function toggleMoreTypes(){showMoreTypes=!showMoreTypes;const el=document.getEle
 function toggleComm(){showComm=!showComm;const el=document.getElementById('main-content');if(el)el.innerHTML=renderAdd();}
 
 function statusBadge(s){
-  const cls={Active:'badge-active',Restricted:'badge-restricted',Gubbed:'badge-gubbed',Closed:'badge-closed'}[s]||'badge-active';
+  const cls={Active:'badge-active',Restricted:'badge-restricted',Gubbed:'badge-gubbed',Closed:'badge-closed','Not Signed Up':'badge-unsigned'}[s]||'badge-unsigned';
   return`<span class="badge ${cls}">${s}</span>`;
 }
 
