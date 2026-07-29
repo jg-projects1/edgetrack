@@ -264,4 +264,2746 @@ async function loadData(){
     const cached=localStorage.getItem('mbe_state');
     if(cached){
       const parsed=JSON.parse(cached);
-      PROFILES.for
+      PROFILES.forEach(pr=>{
+        if(parsed[pr]){
+          state[pr]=JSON.parse(JSON.stringify(parsed[pr]));
+          if(!state[pr].casino)state[pr].casino=[];
+          if(!state[pr].freeBets)state[pr].freeBets=[];
+        }
+      });
+      if(parsed.exchanges)state.exchanges=JSON.parse(JSON.stringify(parsed.exchanges));
+      lastServerState=JSON.parse(JSON.stringify(parsed));
+      setSyncStatus('synced');
+      // Still fetch from server in background to pick up changes from other devices
+      fetchFromServer();
+      return;
+    }
+    // No cache — load from server directly
+    await fetchFromServer();
+  }catch(e){
+    console.error('Load error:',e);
+    setSyncStatus('error');
+  }
+}
+
+async function fetchFromServer(){
+  try{
+    const [sportsRes, casinoRes] = await Promise.all([
+      fetch('/api/load?t='+Date.now()),
+      fetch('/api/load-casino?t='+Date.now())
+    ]);
+    if(!sportsRes.ok)throw new Error('HTTP '+sportsRes.status);
+    const sportsJson=await sportsRes.json();
+    if(sportsJson.ok&&sportsJson.data){
+      const saved=sportsJson.data;
+      const hasData=PROFILES.some(p=>saved[p]&&((saved[p].transactions||[]).length>0||saved[p].bank!==0));
+      if(hasData){
+        // Only update if server has more data than current state
+        const serverCount=PROFILES.reduce((a,p)=>a+(saved[p]?.transactions||[]).length,0);
+        const localCount=PROFILES.reduce((a,p)=>a+(state[p]?.transactions||[]).length,0);
+        if(serverCount>=localCount){
+          PROFILES.forEach(pr=>{
+            if(saved[pr]){
+              state[pr]=JSON.parse(JSON.stringify(saved[pr]));
+              if(!state[pr].casino)state[pr].casino=[];
+              if(!state[pr].freeBets)state[pr].freeBets=[];
+            }
+          });
+          if(saved.exchanges)state.exchanges=JSON.parse(JSON.stringify(saved.exchanges));
+          lastServerState=JSON.parse(JSON.stringify(saved));
+        }
+      }
+    }
+    if(casinoRes&&casinoRes.ok){
+      const casinoJson=await casinoRes.json();
+      if(casinoJson.ok&&casinoJson.data){
+        PROFILES.forEach(pr=>{
+          if(casinoJson.data[pr]?.casino){
+            if(!state[pr])state[pr]={transactions:[],casino:[],bank:0,bookies:{}};
+            state[pr].casino=JSON.parse(JSON.stringify(casinoJson.data[pr].casino));
+          }
+        });
+      }
+    }
+    setSyncStatus('synced');
+    render();
+  }catch(e){
+    console.error('Server fetch error:',e);
+  }
+}
+
+async function saveData(source='unknown'){
+  if(window._appLoading){console.log('Save blocked during load');return;}
+  // If a save is already in progress, queue this one and return
+  if(saveInProgress){
+    pendingSave=source;
+    return;
+  }
+  saveInProgress=true;
+  setSyncStatus('syncing');
+  window._lastSaveSource=source;
+  try{
+    // Build sports-only state (no casino sessions)
+    const sportsState={exchanges:state.exchanges,_source:source,_serverState:lastServerState};
+    PROFILES.forEach(pr=>{
+      sportsState[pr]={
+        bank:state[pr]?.bank||0,
+        bookies:state[pr]?.bookies||{},
+        transactions:state[pr]?.transactions||[],
+        deletedIds:deletedTxIds[pr]||[]
+      };
+    });
+    // Build casino-only state
+    const casinoState={};
+    PROFILES.forEach(pr=>{
+      casinoState[pr]={casino:state[pr]?.casino||[],deletedIds:casinoDeletedIds[pr]||[]};
+    });
+    // Save both in parallel
+    const [sportsRes,casinoRes]=await Promise.all([
+      fetch('/api/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(sportsState)}),
+      fetch('/api/save-casino',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(casinoState)})
+    ]);
+    if(!sportsRes.ok)throw new Error('Sports save failed');
+    if(!casinoRes.ok)throw new Error('Casino save failed');
+    // Update state from server's merged response — avoids stale load on next refresh
+    const sportsJson=await sportsRes.json();
+    if(sportsJson.ok&&sportsJson.data){
+      PROFILES.forEach(pr=>{
+        if(sportsJson.data[pr]){
+          state[pr].bank=sportsJson.data[pr].bank;
+          state[pr].bookies=sportsJson.data[pr].bookies;
+          state[pr].transactions=sportsJson.data[pr].transactions;
+          // Preserve casino data — not included in sports response
+          if(!state[pr].casino)state[pr].casino=[];
+          if(!state[pr].freeBets)state[pr].freeBets=[];
+        }
+      });
+      if(sportsJson.data.exchanges)state.exchanges=sportsJson.data.exchanges;
+      // Track confirmed server state so next save can skip stale KV read
+      lastServerState=JSON.parse(JSON.stringify(sportsJson.data));
+      // Cache in sessionStorage so pull-to-refresh gets fresh data
+      try{localStorage.setItem('mbe_state',JSON.stringify(sportsJson.data));}catch(e){}
+    }
+    PROFILES.forEach(pr=>{casinoDeletedIds[pr]=[];deletedTxIds[pr]=[];});
+    setSyncStatus('synced');
+  }catch(e){
+    console.error('Save error:',e);
+    setSyncStatus('error');
+    showToast('⚠ Save failed: '+e.message);
+  }finally{
+    saveInProgress=false;
+    if(pendingSave){const nextSource=pendingSave;pendingSave=null;saveData(nextSource);}
+  }
+}
+function debouncedSave(source='unknown'){if(syncTimeout)clearTimeout(syncTimeout);setSyncStatus('syncing');syncTimeout=setTimeout(()=>saveData(source),1500);}
+function save(source='unknown'){debouncedSave(source);}
+
+const PROFILES=['me','wife','bp','rq'];
+const PROFILE_LABELS={me:'JG',wife:'HG',bp:'BP',rq:'RQ'};
+const PROFILE_COLORS={me:'#F0A500',wife:'#7F77DD',bp:'#BA7517',rq:'#639922'};
+const BET_TYPES=['Qualifier','Free Bet','Boost','Mug','Extra Place','2Up','MBAL','Cash Back','Cash Out','Arb','Deposit','Withdrawal','Exchange Deposit','Exchange Withdrawal','Balance Amendment'];
+const BOOKIE_TRANSFER=['Deposit','Withdrawal'];
+const EXCHANGE_TRANSFER=['Exchange Deposit','Exchange Withdrawal'];
+const BET_ONLY=['Qualifier','Free Bet','Boost','Mug','Extra Place','2Up','MBAL','Cash Back','Cash Out','Arb'];
+const FREE_BET_TYPES=['Free Bet'];
+const EXCHANGES=['Betfair','Smarkets','Matchbook','Betdaq'];
+const BOOKIE_STATUSES=['Not Signed Up','Active','Restricted','Gubbed','Closed'];
+const DEFAULT_BOOKIES=[
+  '10bet','247bet','32Red','36 Vegas','7bet','888 Sport','Admiral Casino','Arrowbet',
+  'Bally Casino','Bella Casino','Bestodds','Bet UK','Bet442','Bet600','Betano','Betfair',
+  'Betfred','Betgoodwin','BetMGM','Betstgeorge','BetTom','Betvickers','Betvictor','Betway',
+  'Betwright','Betzone','Bingostars','Boyle','Bresbet','Buzz Casino','Bwin','Casumo',
+  'Copybet','Coral','Dabble','Dazn','Double Bubble','Dragonbet','Dream Vegas','Fabulous Vegas',
+  'Fairplay','Fanteam','Fitzbet','Fitzdares','Foxy','Fruit Kings','Gala Casino','Geoff Banks',
+  'Grosvenor','GRP','Highbet','Hollywoodbets','Hot Streak Casino','Jackpot Joy','Jackpot Mobile','Ken Howells',
+  'Kwiff','Ladbrokes','Leovegas','Livescorebet','LottoGo','Lottoland','Lottomart','Luckymate',
+  'Mecca Bingo','Mega Riches','Meta Betting','Midnite','Monopoly','MrQ','MrVegas','Netbet',
+  'Octobet','Paddy Power','Parimatch','Party Casino','Pink Casino','Planet Sport Bet','Planet Sports','Play Bingo',
+  'Priced Up','Puntit','Quick Bet','Quinnbet','Rainbow Riches','Regal Wins','Royale Lounge','Skybet',
+  'Slot Boss','Slot Planet','Smooth Spins','Spin & Win','Sporting Bet','Spreadex','Stakemate','Star Sports',
+  'Sun Vegas','Swifty Sports','Talksportbet','Tigerbet','Tombola Arcade','Unibet','Vbet','Video Slots',
+  'Virgin Bet','Virgin Games','William Hill'
+];
+
+function makeProfile(){const b={};DEFAULT_BOOKIES.forEach(x=>b[x]={bal:0,status:'Not Signed Up',notes:''});return{bookies:b,bank:0,transactions:[],freeBets:[]};}
+function freshState(){const ex={};EXCHANGES.forEach(x=>ex[x]=0);const st={exchanges:ex};PROFILES.forEach(pr=>st[pr]=makeProfile());return st;}
+const state=freshState();
+let casinoDeletedIds={me:[],wife:[],bp:[],rq:[]};
+let deletedTxIds={me:[],wife:[],bp:[],rq:[]};
+let lastServerState=null; // tracks last confirmed server state to avoid stale reads
+let saveInProgress=false;
+let pendingSave=null; // queues a save if one is already in progress
+function migrateLegacy(){
+  PROFILES.forEach(pr=>{
+    if(!state[pr])state[pr]=makeProfile();
+    if(!state[pr].transactions)state[pr].transactions=[];if(!state[pr].freeBets)state[pr].freeBets=[];
+    const bk=state[pr].bookies||{};
+    // Add any new bookies with Not Signed Up default
+    DEFAULT_BOOKIES.forEach(b=>{if(!bk[b])bk[b]={bal:0,status:'Not Signed Up',notes:''};});
+    const needsStatusReset=localStorage.getItem('mbe_status_reset')!=='v1';
+    Object.keys(bk).forEach(k=>{
+      if(typeof bk[k]==='number')bk[k]={bal:bk[k],status:'Not Signed Up',notes:''};
+      if(!bk[k].status)bk[k].status='Not Signed Up';
+      if(needsStatusReset&&bk[k].status==='Active')bk[k].status='Not Signed Up';
+      if(bk[k].notes===undefined)bk[k].notes='';
+    });
+    // Re-sort bookies alphabetically — only keep bookies in DEFAULT_BOOKIES
+    // (preserves balances, removes old/renamed entries)
+    const sorted={};
+    DEFAULT_BOOKIES.forEach(b=>{
+      if(bk[b]){sorted[b]=bk[b];}
+      else{sorted[b]={bal:0,status:'Not Signed Up',notes:''};}
+    });
+    state[pr].bookies=sorted;
+  });
+  if(!state.exchanges){state.exchanges={};EXCHANGES.forEach(e=>state.exchanges[e]=0);}
+  EXCHANGES.forEach(e=>{if(state.exchanges[e]===undefined)state.exchanges[e]=0;});
+  PROFILES.forEach(pr=>{if(!state[pr].casino)state[pr].casino=[];});
+  localStorage.setItem('mbe_status_reset','v1');
+  // If bookie list was cleaned up, save to server so KV gets updated
+  if(localStorage.getItem('mbe_bookie_cleaned')!=='v5'){
+    localStorage.setItem('mbe_bookie_cleaned','v5');
+    setTimeout(()=>saveData('bookieMigration'),2000);
+  }
+}
+
+let currentProfile='me',currentTab='dashboard',formAccount='me',selectedBetType='',exchTransferBank='me';
+let recentBookies=[]; // tracks last 8 used bookies
+let lastSavedTrade=null; // for quick duplicate after save
+let lastExchange=''; // tracks last used exchange
+let showMoreTypes=false; // toggle for extra bet types
+let showComm=false; // toggle for commission field
+
+function fmt(v){const n=parseFloat(v)||0;return(n<0?'-':'')+'£'+Math.abs(n).toFixed(2);}
+function fmtS(v){const n=parseFloat(v)||0;return(n>=0?'+':'-')+'£'+Math.abs(n).toFixed(2);}
+function totalBookie(p){return Object.values(state[p].bookies||{}).reduce((a,b)=>a+(b.bal||0),0);}
+function totalPnl(p){return(state[p].transactions||[]).filter(t=>t.type!=='Balance Amendment').reduce((a,t)=>a+(t.pnl||0),0);}
+function pendingAll(){return PROFILES.flatMap(p=>(state[p].transactions||[]).filter(t=>t.result==='Pending').map(t=>({...t,_acct:p})));}
+function parseDate(d){if(!d)return 0;const p=d.split('/');if(p.length===3)return new Date(+p[2],+p[1]-1,+p[0]).getTime();return 0;}
+function allTxs(){return PROFILES.flatMap(p=>(state[p].transactions||[]).map(t=>({...t,_acct:p}))).sort((a,b)=>{const dd=parseDate(b.date)-parseDate(a.date);return dd!==0?dd:b.id-a.id;});}
+function profileTxs(p){return p==='both'?allTxs():(state[p].transactions||[]).map(t=>({...t,_acct:p})).sort((a,b)=>{const dd=parseDate(b.date)-parseDate(a.date);return dd!==0?dd:b.id-a.id;});}
+function pillClass(t){return'pill pill-'+(t||'').toLowerCase().replace(/\s/g,'');}
+function acctPill(a){return`<span class="pill pill-${a}">${PROFILE_LABELS[a]||a}</span>`;}
+function todayStr(){const d=new Date();return[String(d.getDate()).padStart(2,'0'),String(d.getMonth()+1).padStart(2,'0'),d.getFullYear()].join('/');}
+function profileColor(p){return PROFILE_COLORS[p]||'#C8C5BF';}
+function profileLabel(p){return PROFILE_LABELS[p]||p;}
+function isFreeBet(type){return FREE_BET_TYPES.includes(type);}
+function casinoPnl(p){
+  return(state[p].casino||[]).reduce((a,s)=>{
+    // New format: has startBal and endBal
+    if(s.startBal!==undefined&&s.endBal!==undefined) return a+(s.endBal-s.startBal);
+    // Old format: has netProfit
+    return a+(s.netProfit||0);
+  },0);
+}
+function sportsPnl(p){return(state[p].transactions||[]).filter(t=>t.type!=='Balance Amendment').reduce((a,t)=>a+(t.pnl||0),0);}
+
+
+function getTypeColor(t){
+  const map={'Qualifier':'#7A4F00','Free Bet':'#14532D','Boost':'#5C3800','Mug':'#042C53'};
+  return map[t]||'#252629';
+}
+function getTypeTextColor(t){
+  const map={'Qualifier':'#F5C842','Free Bet':'#86EFAC','Boost':'#F0A500','Mug':'#F5C842'};
+  return map[t]||'#C8C5BF';
+}
+function toggleMoreTypes(){showMoreTypes=!showMoreTypes;const el=document.getElementById('main-content');if(el)el.innerHTML=renderAdd();}
+function toggleComm(){showComm=!showComm;const el=document.getElementById('main-content');if(el)el.innerHTML=renderAdd();}
+
+function statusBadge(s){
+  const cls={Active:'badge-active',Restricted:'badge-restricted',Gubbed:'badge-gubbed',Closed:'badge-closed','Not Signed Up':'badge-unsigned'}[s]||'badge-unsigned';
+  return`<span class="badge ${cls}">${s}</span>`;
+}
+
+function showToast(msg,type='success'){
+  const t=document.getElementById('toast');
+  t.innerHTML=`<span style="font-size:18px">${type==='success'?'✓':type==='error'?'✗':'ℹ'}</span> ${msg}`;
+  t.style.background=type==='success'?'#22C55E':type==='error'?'#F87171':'#252629';
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),3000);
+}
+
+function switchTab(t){
+  currentTab=t;
+  document.querySelectorAll('.tab').forEach(el=>el.classList.remove('active'));
+  const el=document.getElementById('tab-'+t);if(el)el.classList.add('active');
+  const pb=document.getElementById('profile-bar');
+  if(pb)pb.style.display=(t==='dashboard'||t==='risk'||t==='add'||t==='casino')?'none':'flex';
+  render();window.scrollTo(0,0);
+}
+
+function switchProfile(p){
+  currentProfile=p;
+  PROFILES.forEach(x=>{const b=document.getElementById('pbtn-'+x);if(b){b.className='profile-btn';if(x===p)b.classList.add('active-'+x);}});
+  const bb=document.getElementById('pbtn-both');if(bb){bb.className='profile-btn';if(p==='both')bb.classList.add('active-both');}
+  render();
+}
+
+function updateBadge(){
+  const n=pendingAll().length;
+  const b=document.getElementById('pending-badge');
+  if(b){b.textContent=n;b.style.display=n?'inline':'none';}
+}
+
+function render(){
+  const el=document.getElementById('main-content');
+  if(currentTab==='dashboard')el.innerHTML=renderDashboard();
+  else if(currentTab==='pending')el.innerHTML=renderPending();
+  else if(currentTab==='add')el.innerHTML=renderAdd();
+  else if(currentTab==='history')el.innerHTML=renderHistory();
+  else if(currentTab==='accounts')el.innerHTML=renderAccounts();
+  else if(currentTab==='reports')el.innerHTML=renderReports();
+  else if(currentTab==='risk')el.innerHTML=renderRisk();
+  else if(currentTab==='casino')el.innerHTML=renderCasino();
+  updateBadge();
+  if(currentTab==='add')bindFormEvents();
+}
+
+function monthlyPnl(txs){
+  const map={};
+  txs.forEach(t=>{if(!t.date||!t.pnl||t.type==='Balance Amendment')return;const pts=t.date.split('/');if(pts.length<3)return;const k=`${pts[2]}-${pts[1]}`;map[k]=(map[k]||0)+(t.pnl||0);});
+  return map;
+}
+
+function renderMonthBars(map,height=90){
+  const keys=Object.keys(map).sort();if(!keys.length)return`<div class="empty">No data yet</div>`;
+  const vals=keys.map(k=>map[k]);const maxAbs=Math.max(...vals.map(Math.abs),0.01);
+  const barH=height-40;
+  return`<div class="month-wrap" style="height:${height}px;align-items:flex-end;gap:4px">
+    ${keys.map(k=>{const v=map[k];const pct=Math.max(Math.abs(v)/maxAbs*barH,2);const col=v>=0?'pos':'neg';const[yr,mo]=k.split('-');const lbl=new Date(+yr,+mo-1).toLocaleString('default',{month:'short'});
+      return`<div class="month-col" style="min-width:40px"><div class="month-val ${col}" style="font-size:10px;font-weight:600">${fmtS(v)}</div><div class="month-bar ${col}" style="height:${pct}px;width:34px"></div><div class="month-lbl" style="font-size:10px;margin-top:2px">${lbl}</div></div>`;
+    }).join('')}
+  </div>`;
+}
+
+// ── DASHBOARD ────────────────────────────────────────────────────────────────
+function renderDashboardMonthly(){
+  const sportsByMonth={};
+  allTxs().forEach(t=>{
+    if(!t.date||t.type==='Balance Amendment')return;
+    const parts=t.date.split('/');
+    if(parts.length<3)return;
+    const key=parts[2]+'-'+parts[1].padStart(2,'0');
+    if(!sportsByMonth[key])sportsByMonth[key]=0;
+    sportsByMonth[key]+=(t.pnl||0);
+  });
+  const casinoByMonth={};
+  PROFILES.flatMap(p=>(state[p].casino||[]).map(s=>({...s,_acct:p}))).forEach(s=>{
+    const pnl=s.startBal!==undefined?s.endBal-s.startBal:s.netProfit||0;
+    const d=s.date||'';
+    const parts=d.split('/');
+    if(parts.length<3)return;
+    const key=parts[2]+'-'+parts[1].padStart(2,'0');
+    if(!casinoByMonth[key])casinoByMonth[key]=0;
+    casinoByMonth[key]+=pnl;
+  });
+  const allKeys=[...new Set([...Object.keys(sportsByMonth),...Object.keys(casinoByMonth)])].sort().reverse();
+  if(!allKeys.length)return'';
+  const rows=allKeys.map(k=>{
+    const yr=k.slice(0,4),mo=k.slice(5);
+    const label=new Date(+yr,+mo-1).toLocaleString('default',{month:'short'})+' '+yr;
+    const s=sportsByMonth[k]||0;
+    const c=casinoByMonth[k]||0;
+    const t=s+c;
+    return '<tr>'
+      +'<td style="font-size:11px;font-weight:500">'+label+'</td>'
+      +'<td style="text-align:right;font-size:11px;color:'+(s>=0?'#22C55E':'#F87171')+'">'+fmtS(s)+'</td>'
+      +'<td style="text-align:right;font-size:11px;color:'+(c>=0?'#22C55E':'#F87171')+'">'+fmtS(c)+'</td>'
+      +'<td style="text-align:right;font-size:11px;font-weight:500;color:'+(t>=0?'#22C55E':'#F87171')+'">'+fmtS(t)+'</td>'
+      +'</tr>';
+  }).join('');
+  return '<div class="card" style="margin-bottom:12px">'
+    +'<div class="card-header"><span class="card-title">Monthly P&L</span></div>'
+    +'<div style="overflow-x:auto;padding:8px 14px">'
+    +'<table class="data-table" style="width:100%">'
+    +'<thead><tr>'
+    +'<th>Month</th>'
+    +'<th style="text-align:right">Sports (£)</th>'
+    +'<th style="text-align:right">Casino (£)</th>'
+    +'<th style="text-align:right">Total (£)</th>'
+    +'</tr></thead>'
+    +'<tbody>'+rows+'</tbody>'
+    +'</table></div></div>';
+}
+
+function renderDashboard(){
+  const allMap=monthlyPnl(allTxs());
+  const totalTrades=PROFILES.reduce((a,p)=>a+(state[p].transactions||[]).length,0);
+  const combinedSports=PROFILES.reduce((a,p)=>a+sportsPnl(p),0);
+  const combinedCasino=PROFILES.reduce((a,p)=>a+casinoPnl(p),0);
+  const combinedPnl=combinedSports+combinedCasino;
+  const totalBank=PROFILES.reduce((a,p)=>a+(state[p].bank||0),0);
+  const totalBookies=PROFILES.reduce((a,p)=>a+totalBookie(p),0);
+  const totalExchanges=Object.values(state.exchanges||{}).reduce((a,v)=>a+(v||0),0);
+  const totalFunds=totalBank+totalBookies+totalExchanges;
+  return`
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+    <div class="metric-card" style="grid-column:span 2">
+      <div class="metric-label"><i class="ti ti-trending-up" aria-hidden="true"></i>Combined P&L</div>
+      <div class="metric-value ${combinedPnl>=0?'pos':'neg'}">${fmtS(combinedPnl)}</div>
+      <div class="metric-sub" style="display:flex;gap:10px;flex-wrap:wrap">
+        <span>All accounts · ${totalTrades} trades</span>
+        <span>Sports: <span style="color:${combinedSports>=0?'#22C55E':'#F87171'}">${fmtS(combinedSports)}</span></span>
+        <span>Casino: <span style="color:${combinedCasino>=0?'#22C55E':'#F87171'}">${fmtS(combinedCasino)}</span></span>
+      </div>
+    </div>
+    <div class="metric-card" style="grid-column:span 2">
+      <div class="metric-label"><i class="ti ti-cash" aria-hidden="true"></i>Total funds</div>
+      <div class="metric-value">${fmt(totalFunds)}</div>
+      <div class="metric-sub" style="display:flex;gap:10px;flex-wrap:wrap">
+        <span>Bank: ${fmt(totalBank)}</span>
+        <span>Bookies: ${fmt(totalBookies)}</span>
+        <span>Exchanges: ${fmt(totalExchanges)}</span>
+      </div>
+    </div>
+  </div>
+  <div class="acct-grid">
+    ${PROFILES.map(p=>{
+      const pnl=totalPnl(p);
+      return`<div class="acct-card">
+        <div class="acct-top">
+          <div class="acct-name"><div class="acct-dot dot-${p}"></div>${profileLabel(p)}</div>
+          <div class="acct-pnl ${pnl>=0?'pos':'neg'}">${fmtS(pnl)}</div>
+        </div>
+        <div class="acct-row">
+          <span class="acct-row-label"><i class="ti ti-building-bank" aria-hidden="true"></i>Bank</span>
+          <span class="acct-row-val">${fmt(state[p].bank)}</span>
+        </div>
+        <div class="acct-row">
+          <span class="acct-row-label"><i class="ti ti-wallet" aria-hidden="true"></i>Bookies</span>
+          <span class="acct-row-val">${fmt(totalBookie(p))}</span>
+        </div>
+      </div>`;
+    }).join('')}
+  </div>
+  ${renderDashboardMonthly()}
+  ${renderFreeBetsPanel()}
+`;}
+
+function renderFreeBetsPanel(){
+  const all=PROFILES.flatMap(pr=>(state[pr].freeBets||[]).map(fb=>({...fb,_pr:pr})));
+  const pending=all.filter(fb=>fb.status==='Pending');
+  const used=all.filter(fb=>fb.status==='Used');
+  if(all.length===0)return '';
+  return `<div class="card" style="margin-top:12px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div style="font-size:13px;font-weight:500;color:#F0F0F5">Free Bets</div>
+      ${pending.length>0?`<span style="font-size:11px;background:#0F6E56;color:#9FE1CB;padding:3px 8px;border-radius:20px">${pending.length} pending</span>`:''}
+    </div>
+    ${pending.length>0?`
+    <div style="margin-bottom:8px">
+      ${pending.map(fb=>`
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:0.5px solid rgba(255,255,255,0.08)">
+        <div>
+          <div style="font-size:13px;color:#F0F0F5">${fb.bookie}</div>
+          <div style="font-size:11px;color:#9A9590">${fb._pr.toUpperCase()} · ${fb.date}</div>
+        </div>
+        <button onclick="markFreeBetUsed('${fb._pr}','${fb.id}')" style="font-size:11px;padding:4px 10px;border-radius:6px;border:0.5px solid rgba(255,255,255,0.2);background:#3D4349;color:#F0F0F5;cursor:pointer">Mark used</button>
+      </div>`).join('')}
+    </div>`:''}
+    ${used.length>0?`
+    <details style="margin-top:4px">
+      <summary style="font-size:11px;color:#9A9590;cursor:pointer;list-style:none">▸ ${used.length} used</summary>
+      <div style="margin-top:6px">
+        ${used.map(fb=>`
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:0.5px solid rgba(255,255,255,0.06)">
+          <div>
+            <div style="font-size:12px;color:#888780;text-decoration:line-through">${fb.bookie}</div>
+            <div style="font-size:11px;color:#888780">${fb._pr.toUpperCase()} · ${fb.date}</div>
+          </div>
+          <span style="font-size:10px;color:#888780">Used</span>
+        </div>`).join('')}
+      </div>
+    </details>`:''}
+  </div>`;
+}
+
+function markFreeBetUsed(pr,id){
+  const fb=(state[pr].freeBets||[]).find(f=>String(f.id)===String(id));
+  if(fb){fb.status='Used';save('freeBetUsed');render();}
+}
+
+// ── PENDING ──────────────────────────────────────────────────────────────────
+function renderPending(){
+  const pending=pendingAll();
+  if(!pending.length)return`<div style="text-align:center;padding:60px 20px"><i class="ti ti-circle-check" style="font-size:48px;color:#22C55E" aria-hidden="true"></i><div style="font-size:15px;font-weight:500;margin-top:12px;color:#F0EDE8">All settled</div></div>`;
+  return`
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+    <div class="metric-card"><div class="metric-label">Pending</div><div class="metric-value warn">${pending.length}</div></div>
+    <div class="metric-card"><div class="metric-label">Expected P&L</div><div class="metric-value pos" style="font-size:20px">${fmtS(pending.reduce((a,t)=>a+(t.pnl||0),0))}</div></div>
+  </div>
+  ${pending.map(t=>{
+    const isFB=isFreeBet(t.type);
+    return`<div class="pending-card" id="pcard-${t.id}">
+      <div class="pending-event">${t.event||'Unnamed event'}</div>
+      <div class="pending-meta">
+        <span class="${pillClass(t.type)}">${t.type}</span>${acctPill(t._acct)}
+        <span style="font-size:11px;color:#C8C5BF">${t.date}</span>
+        <span style="font-size:11px;color:#C8C5BF">${t.bookie||'—'}</span>
+        ${isFB?'<span class="badge" style="background:#EAF3DE;color:#3B6D11">SNR</span>':''}
+      </div>
+      <div class="pending-info">
+        ${t.bstake?`<div class="pinfo-item"><span class="pinfo-label">Back</span><span class="pinfo-val">£${t.bstake} @ ${t.bodds}</span></div>`:''}
+        <div class="pinfo-item"><span class="pinfo-label">P&L</span><span class="pinfo-val pos">${fmtS(t.pnl||0)}</span></div>
+        <div style="margin-left:auto"><button class="btn-sm btn-sm-edit" onclick="editPnl('${t._acct}',${t.id})">Edit P&L</button></div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn-won" onclick="settleBet('${t._acct}',${t.id},'Won')"><i class="ti ti-check" aria-hidden="true"></i> Won</button>
+        <button class="btn-lost" onclick="settleBet('${t._acct}',${t.id},'Lost')"><i class="ti ti-x" aria-hidden="true"></i> Lost</button>
+      </div>
+    </div>`;
+  }).join('')}`;
+}
+
+function applyBalanceOnSettle(tx,p,result){
+  const isFB=isFreeBet(tx.type);
+  const bstake=tx.bstake||0,bodds=tx.bodds||0,pnl=tx.pnl||0,exchange=tx.exchange;
+  if(result==='Won'){
+    if(isFB){
+      // Free bet SNR: winnings only = (odds - 1) × stake. Stake not returned.
+      if(tx.bookie&&p.bookies[tx.bookie])
+        p.bookies[tx.bookie].bal=(p.bookies[tx.bookie].bal||0)+((bodds-1)*bstake);
+    }else{
+      // Normal bet won: full return = odds × stake (stake was deducted at log time)
+      if(tx.bookie&&p.bookies[tx.bookie])
+        p.bookies[tx.bookie].bal=(p.bookies[tx.bookie].bal||0)+(bodds*bstake);
+    }
+  }else if(result==='Lost'){
+    // Lost: lay profit goes to exchange. Bookie already reduced at log time for normal bets.
+    if(exchange&&state.exchanges[exchange]!==undefined)
+      state.exchanges[exchange]=(state.exchanges[exchange]||0)+pnl;
+  }
+}
+
+function applyBalanceAtLog(tx,p){
+  if(tx.result==='Pending'){
+    // Only deduct stake for normal bets — free bets don't use your money
+    if(!isFreeBet(tx.type)&&tx.bookie&&p.bookies[tx.bookie])
+      p.bookies[tx.bookie].bal=(p.bookies[tx.bookie].bal||0)-(tx.bstake||0);
+  }else{
+    // Logged as already settled — for normal bets deduct stake first, then apply result
+    if(!isFreeBet(tx.type)&&tx.result==='Lost'&&tx.bookie&&p.bookies[tx.bookie])
+      p.bookies[tx.bookie].bal=(p.bookies[tx.bookie].bal||0)-(tx.bstake||0);
+    applyBalanceOnSettle(tx,p,tx.result);
+  }
+}
+
+function settleBet(acct,id,result){
+  const p=state[acct];const tx=(p.transactions||[]).find(t=>t.id===id);if(!tx||tx.result!=='Pending')return;
+  tx.result=result;applyBalanceOnSettle(tx,p,result);if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('settle');
+  const card=document.getElementById('pcard-'+id);
+  if(card){card.style.transition='opacity .25s,transform .25s';card.style.opacity='0';card.style.transform='translateY(-6px)';setTimeout(()=>{card.remove();updateBadge();},260);}
+  showToast(`${result==='Won'?'Won':'Lost'} — ${fmtS(tx.pnl||0)}`,result==='Won'?'success':'error');
+  setTimeout(render,300);
+}
+
+function editPnl(acct,id){
+  const tx=state[acct].transactions.find(t=>t.id===id);if(!tx)return;
+  document.getElementById('modal-root').innerHTML=`
+  <div class="modal-bg" onclick="if(event.target===this)closeModal()">
+    <div class="modal">
+      <div class="modal-handle"></div>
+      <div class="modal-title">Edit P&L</div>
+      <div class="modal-sub">${tx.event||tx.bookie||'Transaction'} · ${tx.date}</div>
+      <div style="margin-bottom:12px">
+        <div class="form-label">Current P&L</div>
+        <div style="font-size:24px;font-weight:500;color:${(tx.pnl||0)>=0?'#22C55E':'#F87171'}">${fmtS(tx.pnl||0)}</div>
+      </div>
+      <div style="margin-bottom:4px">
+        <div class="form-label">New P&L (£)</div>
+        <input type="number" id="modal-pnl" step="0.01" value="${(tx.pnl||0).toFixed(2)}" inputmode="decimal" style="font-size:20px;font-weight:500;border-color:#22C55E;background:#f0faf5"/>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-primary" style="flex:1" onclick="confirmPnlEdit('${acct}',${id})">Save</button>
+        <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      </div>
+    </div>
+  </div>`;
+  setTimeout(()=>document.getElementById('modal-pnl')?.focus(),50);
+}
+
+function confirmPnlEdit(acct,id){
+  const newPnl=parseFloat(document.getElementById('modal-pnl')?.value);if(isNaN(newPnl))return;
+  const p=state[acct];const tx=p.transactions.find(t=>t.id===id);if(!tx)return;
+  const diff=newPnl-(tx.pnl||0);tx.pnl=newPnl;
+  // P&L edit only affects exchange (lay profit) not bookie balance
+  // Bookie balance is set from odds×stake on settlement, not from P&L
+  if(tx.result==='Lost'&&tx.exchange&&state.exchanges[tx.exchange]!==undefined)
+    state.exchanges[tx.exchange]=(state.exchanges[tx.exchange]||0)+diff;
+  if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('editPnl');closeModal();showToast(`P&L updated to ${fmtS(newPnl)}`);render();
+}
+
+function closeModal(){document.getElementById('modal-root').innerHTML='';}
+
+// ── ADD FORM ─────────────────────────────────────────────────────────────────
+function renderAdd(prefill){
+  const p=state[formAccount];const pf=prefill||{};
+  const exchOpts=EXCHANGES.map(e=>`<option${(pf.exchange||lastExchange)===e?' selected':''}>${e}</option>`).join('');
+  const topTypes=['Boost','Qualifier','Free Bet'];
+  const moreTypes=['Mug','Extra Place','2Up','MBAL','Cash Back','Cash Out','Arb'];
+  const isMoreSel=moreTypes.includes(selectedBetType);
+  return`
+  ${lastSavedTrade&&!prefill?`<div style="background:#2C3136;border:0.5px solid rgba(255,255,255,0.09);border-radius:12px;padding:12px 16px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:10px">
+    <div style="min-width:0">
+      <div style="font-size:10px;color:#9A9590;font-weight:500;text-transform:uppercase;letter-spacing:.3px;margin-bottom:3px">Last saved</div>
+      <div style="font-size:13px;font-weight:500;color:#F0EDE8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${lastSavedTrade.bookie}${lastSavedTrade.event?' · '+lastSavedTrade.event:''}</div>
+      <div style="font-size:11px;color:#9A9590;margin-top:2px">${lastSavedTrade.type} · ${PROFILE_LABELS[lastSavedTrade._acct]||lastSavedTrade._acct}</div>
+    </div>
+    <button onclick="duplicateTrade(lastSavedTrade._acct,null,lastSavedTrade)" style="flex-shrink:0;padding:8px 14px;border-radius:8px;border:0.5px solid #185FA5;background:#7A4F00;color:#F5C842;font-family:system-ui,-apple-system,sans-serif;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap"><i class="ti ti-copy"></i> Duplicate</button>
+  </div>`:''}
+  <div class="card">
+    <div class="card-header">
+      <div style="display:flex;align-items:center;gap:8px">
+        <div id="form-dot" style="width:8px;height:8px;border-radius:50%;background:${profileColor(formAccount)}"></div>
+        <span class="card-title">Log trade${prefill?' · duplicated':''}</span>
+      </div>
+    </div>
+    <div class="card-body" style="padding-bottom:80px">
+
+      <div class="form-section">
+        <div class="form-label">Account</div>
+        <div class="acct-selector">${PROFILES.map(pr=>`<button class="acct-sel-btn ${formAccount===pr?'active-'+pr:''}" id="facc-${pr}" onclick="setFormAccount('${pr}')">${profileLabel(pr)}</button>`).join('')}</div>
+      </div>
+
+      <div class="form-section">
+        <div class="form-label">Type</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">
+          ${topTypes.map(t=>`<button onclick="selectBetType('${t}')" style="flex:1;padding:10px 6px;border-radius:8px;border:0.5px solid ${selectedBetType===t?'transparent':'rgba(255,255,255,0.10)'};background:${selectedBetType===t?getTypeColor(t):'#252629'};color:${selectedBetType===t?getTypeTextColor(t):'#C8C5BF'};font-family:system-ui,-apple-system,sans-serif;font-size:13px;font-weight:500;cursor:pointer;transition:all .15s">${t}</button>`).join('')}
+        </div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center">
+          ${(showMoreTypes||isMoreSel||['Deposit','Withdrawal','Exchange Deposit','Exchange Withdrawal','Balance Amendment'].includes(selectedBetType))?[...moreTypes,'Deposit','Withdrawal','Exchange Deposit','Exchange Withdrawal','Balance Amendment'].map(t=>`<div class="type-pill${selectedBetType===t?' sel sel-'+t.toLowerCase().replace(/\s/g,''):''}" data-type="${t}" onclick="selectBetType('${t}')">${t}</div>`).join(''):''}
+          <div class="type-pill${showMoreTypes?' sel':''}" onclick="toggleMoreTypes()" style="${showMoreTypes?'background:#575A65;color:#B4B2A9;border-color:#9A9590':''}">${showMoreTypes?'Less ▲':'More ▼'}</div>
+        </div>
+      </div>
+
+      <div id="form-fields">
+        <div style="display:grid;grid-template-columns:100px 1fr 1fr;gap:8px;margin-bottom:8px">
+          <div class="form-group"><div class="form-label">Date</div><input type="text" id="f-date" placeholder="DD/MM/YYYY" value="${todayStr()}" style="font-size:12px;padding:7px 9px"/></div>
+          <div class="form-group" id="fg-bookie"><div class="form-label">Bookmaker</div>
+            <div style="position:relative">
+              <input type="text" id="f-bookie-search" placeholder="Search…" autocomplete="off" oninput="filterBookieDropdown(this.value)" onfocus="showBookieDropdown()" value="${pf.bookie||''}" style="padding-right:10px"/>
+              <input type="hidden" id="f-bookie" value="${pf.bookie||''}"/>
+              <div id="bookie-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:50;background:#3D4349;border:0.5px solid rgba(255,255,255,0.10);border-radius:8px;margin-top:3px;max-height:200px;overflow-y:auto;-webkit-overflow-scrolling:touch"></div>
+            </div>
+          </div>
+          <div class="form-group" id="fg-exchange"><div class="form-label">Exchange</div><select id="f-exchange"><option value="">—</option>${exchOpts}</select></div>
+        </div>
+
+        ${recentBookies.length?`<div id="fg-recent-bookies" style="margin-bottom:8px">
+          <div class="form-label">Recent</div>
+          <div style="display:flex;gap:5px;flex-wrap:wrap">${recentBookies.map(b=>`<button onclick="selectBookie('${b.replace(/'/g,"\\'")}');document.getElementById('f-bookie-search').value='${b.replace(/'/g,"\\'")}'" style="padding:4px 10px;border-radius:20px;border:0.5px solid rgba(255,255,255,0.09);background:#3D4349;color:#B4B2A9;font-family:system-ui,-apple-system,sans-serif;font-size:11px;cursor:pointer;white-space:nowrap">${b}</button>`).join('')}</div>
+        </div>`:''}
+
+        <div class="form-row single" id="fg-event"><div class="form-group"><div class="form-label" style="color:#9A9590">Event <span style="font-size:9px;text-transform:none;letter-spacing:0">(optional)</span></div><input type="text" id="f-event" placeholder="e.g. Arsenal vs Chelsea" value="${pf.event||''}" style="font-size:12px;padding:7px 10px;background:#4A4D58;border-color:rgba(255,255,255,0.09)"/></div></div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px" id="fg-stake-odds">
+          <div class="form-group" id="fg-bstake"><div class="form-label">Back stake (£)</div><input type="number" id="f-bstake" placeholder="0.00" step="0.01" inputmode="decimal" value="${pf.bstake||''}"/></div>
+          <div class="form-group" id="fg-bodds"><div class="form-label">Back odds</div><input type="number" id="f-bodds" placeholder="2.00" step="0.01" inputmode="decimal" value="${pf.bodds||''}"/></div>
+        </div>
+
+        <div style="margin-bottom:8px" id="fg-comm-toggle">
+          ${showComm?`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:end">
+            <div class="form-group"><div class="form-label">Commission (%)</div><input type="number" id="f-comm" placeholder="0" step="0.1" inputmode="decimal" value="${pf.comm||0}"/></div>
+            <button onclick="toggleComm()" style="padding:9px 12px;border-radius:8px;border:0.5px solid rgba(255,255,255,0.10);background:#3D4349;color:#9A9590;font-family:system-ui,-apple-system,sans-serif;font-size:11px;cursor:pointer;margin-bottom:1px">Remove</button>
+          </div>`
+          :`<button onclick="toggleComm()" style="padding:6px 12px;border-radius:20px;border:0.5px solid rgba(255,255,255,0.10);background:transparent;color:#9A9590;font-family:system-ui,-apple-system,sans-serif;font-size:11px;cursor:pointer"><input type="hidden" id="f-comm" value="0"/>+ Add commission</button>`}
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px" id="fg-result-pnl">
+          <div class="form-group" id="fg-result"><div class="form-label">Result</div><select id="f-result"><option value="Pending">Pending</option><option value="Won">Won</option><option value="Lost">Lost</option></select></div>
+          <div class="form-group" id="fg-pnl"><div class="form-label">P&L (£) <span style="color:#22C55E;font-size:10px">your figure</span></div><input type="number" id="f-pnl" placeholder="0.00" step="0.01" inputmode="decimal" value="${pf.pnl||''}"/></div>
+        </div>
+
+        <div class="form-row single" id="fg-amount" style="display:none"><div class="form-group"><div class="form-label">Amount (£)</div><input type="number" id="f-amount" placeholder="0.00" step="0.01" inputmode="decimal" oninput="updateFlowPreview()"/></div></div>
+        <div class="form-row single" id="fg-exchbank" style="display:none"><div class="form-group"><div class="form-label">Linked bank</div><div class="dest-selector">${PROFILES.map(pr=>`<button class="dest-btn ${exchTransferBank===pr?'active':''}" id="ebank-${pr}" onclick="setExchBank('${pr}')">${profileLabel(pr)}</button>`).join('')}</div></div></div>
+        <div class="form-row single" id="fg-amend-target" style="display:none"><div class="form-group"><div class="form-label">Amend</div><select id="f-amend-target" onchange="updateAmendCurrent()"><option value="">— select —</option><option value="bank">Bank account</option><optgroup label="Bookmakers">${Object.keys(p.bookies||{}).map(b=>`<option value="bookie:${b}">${b}</option>`).join('')}</optgroup></select></div></div>
+        <div class="form-row" id="fg-amend-bal">
+          <div class="form-group" id="fg-amend-current" style="display:none"><div class="form-label">Current balance</div><input type="text" id="f-amend-current" readonly style="color:#9A9590"/></div>
+          <div class="form-group" id="fg-amend-new" style="display:none"><div class="form-label">New balance (£)</div><input type="number" id="f-amend-new" placeholder="0.00" step="0.01" inputmode="decimal"/></div>
+        </div>
+        <div class="form-row single" id="fg-amend-reason" style="display:none"><div class="form-group"><div class="form-label">Reason</div><input type="text" id="f-amend-reason" placeholder="e.g. Casino offer, correction…"/></div></div>
+        <div class="form-row single" id="fg-notes"><div class="form-group"><div class="form-label" style="color:#9A9590">Notes <span style="font-size:9px;text-transform:none;letter-spacing:0">(optional)</span></div><input type="text" id="f-notes" placeholder="Any extra details…" value="${pf.notes||''}" style="font-size:12px;padding:7px 10px;background:#4A4D58;border-color:rgba(255,255,255,0.09)"/></div></div>
+      </div>
+
+      <div id="flow-preview" style="display:none" class="flow-preview"><i class="ti ti-arrows-exchange" aria-hidden="true"></i><span id="flow-text"></span></div>
+      <div id="form-msg" style="margin-bottom:6px;font-size:12px;text-align:center;color:#F87171"></div>
+    </div>
+  </div>
+  <div style="position:fixed;bottom:calc(58px + env(safe-area-inset-bottom));left:0;right:0;padding:10px 16px;background:#343A40;border-top:0.5px solid rgba(255,255,255,0.08);display:flex;gap:8px;z-index:90;max-width:680px;margin:0 auto">
+    <button class="btn btn-ghost" onclick="resetForm()" style="width:72px;flex-shrink:0">Clear</button>
+    <button class="btn btn-primary btn-full" onclick="submitTx()"><i class="ti ti-check" aria-hidden="true"></i> Save trade</button>
+  </div>`;
+}
+
+function setFormAccount(a){
+  formAccount=a;
+  PROFILES.forEach(pr=>{const b=document.getElementById('facc-'+pr);if(b)b.className='acct-sel-btn'+(a===pr?' active-'+pr:'');});
+  const dot=document.getElementById('form-dot');if(dot)dot.style.background=profileColor(a);
+  // Clear bookie search when account changes
+  const bsearch=document.getElementById('f-bookie-search');
+  if(bsearch){bsearch.value='';const bh=document.getElementById('f-bookie');if(bh)bh.value='';}
+  const dd=document.getElementById('bookie-dropdown');if(dd)dd.style.display='none';
+}
+function setExchBank(b){exchTransferBank=b;PROFILES.forEach(pr=>{const el=document.getElementById('ebank-'+pr);if(el)el.className='dest-btn'+(b===pr?' active':'');});updateFlowPreview();}
+function selectBetType(t){
+  selectedBetType=t;
+  // Re-render form so top-type buttons update
+  const mc=document.getElementById('main-content');
+  if(mc&&currentTab==='add'){
+    const keepBookie=document.getElementById('f-bookie-search')?.value||'';
+    const keepBookieVal=document.getElementById('f-bookie')?.value||'';
+    const keepExchange=document.getElementById('f-exchange')?.value||'';
+    const keepEvent=document.getElementById('f-event')?.value||'';
+    const keepStake=document.getElementById('f-bstake')?.value||'';
+    const keepOdds=document.getElementById('f-bodds')?.value||'';
+    const keepPnl=document.getElementById('f-pnl')?.value||'';
+    mc.innerHTML=renderAdd();
+    setTimeout(()=>{
+      const bs=document.getElementById('f-bookie-search');if(bs)bs.value=keepBookie;
+      const bh=document.getElementById('f-bookie');if(bh)bh.value=keepBookieVal;
+      const fe=document.getElementById('f-exchange');if(fe&&keepExchange)fe.value=keepExchange;
+      const fev=document.getElementById('f-event');if(fev)fev.value=keepEvent;
+      const fst=document.getElementById('f-bstake');if(fst)fst.value=keepStake;
+      const fod=document.getElementById('f-bodds');if(fod)fod.value=keepOdds;
+      const fp=document.getElementById('f-pnl');if(fp)fp.value=keepPnl;
+      updateFormFields();bindFormEvents();
+    },10);
+  }else{
+    document.querySelectorAll('.type-pill').forEach(el=>{el.className='type-pill';if(el.dataset.type===t)el.classList.add('sel','sel-'+t.toLowerCase().replace(/\s/g,''));});
+    updateFormFields();
+  }
+}
+function updateFormFields(){
+  const isBookieT=BOOKIE_TRANSFER.includes(selectedBetType),isExchT=EXCHANGE_TRANSFER.includes(selectedBetType),isBet=BET_ONLY.includes(selectedBetType),isAmend=selectedBetType==='Balance Amendment';
+  sh('fg-bookie',isBet||isBookieT);sh('fg-exchange',isBet||isExchT);
+  sh('fg-exchbank',isExchT);sh('fg-event',isBet);
+  sh('fg-stake-odds',isBet);sh('fg-bstake',isBet);sh('fg-bodds',isBet);
+  sh('fg-comm-toggle',isBet);sh('fg-result-pnl',isBet);sh('fg-result',isBet);sh('fg-pnl',isBet);
+  sh('fg-amount',isBookieT||isExchT);
+  sh('fg-amend-target',isAmend);sh('fg-amend-bal',isAmend);
+  sh('fg-amend-current',isAmend);sh('fg-amend-new',isAmend);sh('fg-amend-reason',isAmend);
+  sh('fg-notes',!isAmend);
+  const fp=document.getElementById('flow-preview');if(fp)fp.style.display=isExchT?'flex':'none';
+  if(isExchT)updateFlowPreview();
+}
+function sh(id,v){const el=document.getElementById(id);if(el)el.style.display=v?(el.classList.contains('form-row')||el.classList.contains('form-group')?'flex':'flex'):'none';}
+function updateAmendCurrent(){
+  const target=document.getElementById('f-amend-target')?.value,ac=document.getElementById('f-amend-current');if(!ac)return;
+  const p=state[formAccount];
+  if(target==='bank')ac.value=p.bank.toFixed(2);
+  else if(target?.startsWith('bookie:'))ac.value=((p.bookies||{})[target.slice(7)]?.bal||0).toFixed(2);
+  else ac.value='';
+}
+function updateFlowPreview(){
+  const ft=document.getElementById('flow-text'),fp=document.getElementById('flow-preview');if(!ft||!fp)return;
+  const isExchDep=selectedBetType==='Exchange Deposit',amt=parseFloat(document.getElementById('f-amount')?.value)||0,exch=document.getElementById('f-exchange')?.value||'exchange',bankLabel=`${profileLabel(exchTransferBank)}'s bank`;
+  ft.textContent=isExchDep?(amt?`${bankLabel} −£${amt.toFixed(2)} → ${exch} +£${amt.toFixed(2)}`:`${bankLabel} → ${exch}`):(amt?`${exch} −£${amt.toFixed(2)} → ${bankLabel} +£${amt.toFixed(2)}`:`${exch} → ${bankLabel}`);
+}
+function bindFormEvents(){const exchSel=document.getElementById('f-exchange');if(exchSel)exchSel.addEventListener('change',updateFlowPreview);}
+function resetForm(){
+  selectedBetType='';exchTransferBank='me';showMoreTypes=false;showComm=false;
+  // Re-render the form completely for a clean slate
+  const mc=document.getElementById('main-content');
+  if(mc&&currentTab==='add')mc.innerHTML=renderAdd();
+  updateFormFields();bindFormEvents();
+}
+
+function submitTx(){
+  const msg=document.getElementById('form-msg');
+  if(!selectedBetType){msg.textContent='Please select a transaction type.';return;}
+  const isBookieT=BOOKIE_TRANSFER.includes(selectedBetType),isExchT=EXCHANGE_TRANSFER.includes(selectedBetType),isBet=BET_ONLY.includes(selectedBetType),isAmend=selectedBetType==='Balance Amendment';
+  const date=document.getElementById('f-date').value||todayStr(),notes=document.getElementById('f-notes')?.value||'';
+  if(isAmend){
+    const target=document.getElementById('f-amend-target')?.value,newValStr=document.getElementById('f-amend-new')?.value,reason=document.getElementById('f-amend-reason')?.value||'Balance Amendment';
+    if(!target){msg.textContent='Select what to amend.';return;}
+    if(!newValStr){msg.textContent='Enter a new balance.';return;}
+    const newVal=parseFloat(newValStr);if(isNaN(newVal))return;
+    const p=state[formAccount];let oldVal,targetLabel;
+    if(target==='bank'){oldVal=p.bank;p.bank=newVal;targetLabel='Bank';}
+    else{const name=target.slice(7);oldVal=(p.bookies||{})[name]?.bal||0;p.bookies[name].bal=newVal;targetLabel=name;}
+    const diff=newVal-oldVal;if(!p.transactions)p.transactions=[];
+    p.transactions.push({id:Date.now(),date,type:'Balance Amendment',target:targetLabel,oldVal,newVal,diff,pnl:diff,notes:reason,result:'—',_acct:formAccount});
+    if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('balanceAmend');showToast(`${targetLabel} → ${fmt(newVal)}`);msg.textContent='';resetForm();setTimeout(render,100);return;
+  }
+  const bookie=document.getElementById('f-bookie')?.value||(document.getElementById('f-bookie-search')?.value||''),exchange=document.getElementById('f-exchange')?.value,event=document.getElementById('f-event')?.value||'';
+  const bstake=parseFloat(document.getElementById('f-bstake')?.value)||0,bodds=parseFloat(document.getElementById('f-bodds')?.value)||0,comm=parseFloat(document.getElementById('f-comm')?.value)||0;
+  const result=document.getElementById('f-result')?.value||'Pending',pnl=parseFloat(document.getElementById('f-pnl')?.value)||0,amount=parseFloat(document.getElementById('f-amount')?.value)||0;
+  if(isBookieT){
+    if(!bookie){msg.textContent='Select a bookmaker.';return;}
+    if(!amount){msg.textContent='Enter an amount.';return;}
+    const p=state[formAccount];
+    if(!p.bookies[bookie])p.bookies[bookie]={bal:0,status:'Active',notes:''};
+    if(selectedBetType==='Deposit'){p.bookies[bookie].bal=(p.bookies[bookie].bal||0)+amount;p.bank-=amount;}
+    else{p.bookies[bookie].bal=(p.bookies[bookie].bal||0)-amount;p.bank+=amount;}
+    if(!p.transactions)p.transactions=[];
+    p.transactions.push({id:Date.now(),date,type:selectedBetType,bookie,amount,pnl:0,notes,result:'—',_acct:formAccount});
+  }else if(isExchT){
+    if(!exchange){msg.textContent='Select an exchange.';return;}
+    if(!amount){msg.textContent='Enter an amount.';return;}
+    const ba=state[exchTransferBank];
+    if(selectedBetType==='Exchange Deposit'){state.exchanges[exchange]=(state.exchanges[exchange]||0)+amount;ba.bank-=amount;}
+    else{state.exchanges[exchange]=(state.exchanges[exchange]||0)-amount;ba.bank+=amount;}
+    if(!ba.transactions)ba.transactions=[];
+    ba.transactions.push({id:Date.now(),date,type:selectedBetType,exchange,amount,pnl:0,notes,result:'—',_acct:exchTransferBank});
+  }else if(isBet){
+    if(!bookie){msg.textContent='Select a bookmaker.';return;}
+    if(!bstake||!bodds){msg.textContent='Enter back stake and odds.';return;}
+    const p=state[formAccount];
+    if(!p.bookies[bookie])p.bookies[bookie]={bal:0,status:'Active',notes:''};
+    if(!p.transactions)p.transactions=[];
+    const tx={id:Date.now(),date,type:selectedBetType,bookie,exchange,event,bstake,bodds,comm,result,pnl,notes,_acct:formAccount};
+    p.transactions.push(tx);applyBalanceAtLog(tx,p);
+    if(selectedBetType==='Qualifier'){
+      if(!p.freeBets)p.freeBets=[];
+      p.freeBets.push({id:Date.now()+Math.random(),date,bookie,acct:formAccount,status:'Pending'});
+    }
+  }
+  // Track recent bookies and last exchange
+  const usedBookie=document.getElementById('f-bookie')?.value||(document.getElementById('f-bookie-search')?.value||'');
+  const usedExchange=document.getElementById('f-exchange')?.value||'';
+  if(usedBookie){recentBookies=([usedBookie,...recentBookies.filter(b=>b!==usedBookie)]).slice(0,8);}
+  if(usedExchange)lastExchange=usedExchange;
+  // Store last saved tx for quick duplicate
+  const lastTx={type:selectedBetType,bookie:document.getElementById('f-bookie')?.value||(document.getElementById('f-bookie-search')?.value||''),exchange:document.getElementById('f-exchange')?.value||'',event:document.getElementById('f-event')?.value||'',bstake:document.getElementById('f-bstake')?.value||'',bodds:document.getElementById('f-bodds')?.value||'',pnl:document.getElementById('f-pnl')?.value||'',_acct:formAccount};
+  lastSavedTrade=lastTx;
+  if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('logTrade');showToast('✓ Trade saved');msg.textContent='';
+  // Stay on form — keep type, bookie, exchange; clear event/stake/odds/pnl
+  const keepBookie=document.getElementById('f-bookie-search')?.value||'';
+  const keepBookieVal=document.getElementById('f-bookie')?.value||'';
+  const keepExchange=document.getElementById('f-exchange')?.value||'';
+  // Re-render keeping context
+  const mc=document.getElementById('main-content');
+  if(mc&&currentTab==='add'){
+    mc.innerHTML=renderAdd();
+    setTimeout(()=>{
+      if(keepBookie){const bs=document.getElementById('f-bookie-search');if(bs)bs.value=keepBookie;}
+      const bh=document.getElementById('f-bookie');if(bh)bh.value=keepBookieVal;
+      const fe=document.getElementById('f-exchange');if(fe&&keepExchange)fe.value=keepExchange;
+      updateFormFields();bindFormEvents();
+    },10);
+  }
+}
+
+function duplicateTrade(acct,id,rawTx){
+  const tx=rawTx||(state[acct]?.transactions||[]).find(t=>t.id===id);if(!tx)return;
+  formAccount=acct;selectedBetType=tx.type||'';
+  currentTab='add';document.querySelectorAll('.tab').forEach(el=>el.classList.remove('active'));
+  document.getElementById('tab-add')?.classList.add('active');
+  document.getElementById('profile-bar').style.display='none';
+  document.getElementById('main-content').innerHTML=renderAdd(tx);
+  updateBadge();bindFormEvents();updateFormFields();
+  document.querySelectorAll('.type-pill').forEach(el=>{el.className='type-pill';if(el.dataset.type===tx.type)el.classList.add('sel','sel-'+tx.type.toLowerCase().replace(/\s/g,''));});
+  const fb=document.getElementById('f-bookie');if(fb&&tx.bookie)fb.value=tx.bookie;
+  const fe=document.getElementById('f-exchange');if(fe&&tx.exchange)fe.value=tx.exchange;
+  showToast('Duplicated — edit and save');window.scrollTo(0,0);
+}
+
+// ── HISTORY ──────────────────────────────────────────────────────────────────
+function renderHistory(){
+  const txs=profileTxs(currentProfile),showAll=currentProfile==='both';
+  return`
+  <div class="filter-row">
+    <select class="filter-select" onchange="render()"><option value="">All types</option>${BET_TYPES.map(t=>`<option>${t}</option>`).join('')}</select>
+    <select class="filter-select" onchange="render()"><option value="">All results</option><option>Won</option><option>Lost</option><option>Pending</option></select>
+    <button class="btn-sm" onclick="exportCSV()" style="margin-left:auto"><i class="ti ti-download" aria-hidden="true"></i> CSV</button>
+  </div>
+  <div style="font-size:11px;color:#C8C5BF;margin-bottom:10px">${txs.length} transactions</div>
+  ${renderTxTable(txs,showAll)}`;
+}
+
+function renderTxTable(txs,showAcct){
+  if(!txs.length)return`<div class="empty">No transactions yet</div>`;
+  return`<div class="table-wrap"><table class="data-table"><thead><tr>
+    <th>Date</th>${showAcct?'<th>Acct</th>':''}<th>Type</th><th>Bookie</th><th>Event</th><th>Result</th><th>P&L</th><th></th>
+  </tr></thead><tbody>
+  ${txs.map(t=>{
+    const isBookieT=BOOKIE_TRANSFER.includes(t.type),isExchT=EXCHANGE_TRANSFER.includes(t.type),isAmend=t.type==='Balance Amendment',isBet=BET_ONLY.includes(t.type);
+    const pnlStr=t.result==='Pending'?`<span class="warn">pending</span>`:`<span class="${(t.pnl||0)>=0?'pos':'neg'}">${fmtS(t.pnl||0)}</span>`;
+    const resStr=t.result==='Won'?'<span class="pos">Won</span>':t.result==='Lost'?'<span class="neg">Lost</span>':t.result==='—'?'<span class="muted">—</span>':'<span class="warn">pending</span>';
+    return`<tr>
+      <td style="white-space:nowrap;font-size:11px;color:#C8C5BF">${t.date}</td>
+      ${showAcct?`<td>${acctPill(t._acct)}</td>`:''}
+      <td><span class="${pillClass(t.type)}">${t.type}</span></td>
+      <td style="font-weight:500">${isAmend?t.target:(isExchT?t.exchange:t.bookie)||'—'}</td>
+      <td style="max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#C8C5BF;font-size:11px">${t.event||t.notes||'—'}</td>
+      <td>${resStr}</td>
+      <td><div style="display:flex;align-items:center;gap:4px">${pnlStr}<button class="btn-sm btn-sm-edit" onclick="editPnl('${t._acct}',${t.id})" style="padding:3px 7px;font-size:10px"><i class="ti ti-edit" aria-hidden="true"></i></button></div></td>
+      <td style="white-space:nowrap">
+        ${isBet?`<button class="btn-sm btn-sm-dupe" onclick="duplicateTrade('${t._acct}',${t.id})" style="padding:3px 7px;font-size:10px"><i class="ti ti-copy" aria-hidden="true"></i></button> `:''}
+        <button class="btn-sm btn-sm-danger" onclick="deleteTx('${t._acct}',${t.id})" style="padding:3px 7px;font-size:10px"><i class="ti ti-trash" aria-hidden="true"></i></button>
+      </td>
+    </tr>`;
+  }).join('')}</tbody></table></div>`;
+}
+
+function deleteTx(acct,id){
+  if(!confirm('Delete this transaction? Balances will be reversed.'))return;
+  const tx=(state[acct].transactions||[]).find(t=>t.id===id);
+  if(!tx){state[acct].transactions=state[acct].transactions.filter(t=>t.id!==id);if(!deletedTxIds[acct])deletedTxIds[acct]=[];deletedTxIds[acct].push(id);if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('quickDeleteTx');render();return;}
+  const p=state[acct];
+  const isFB=isFreeBet(tx.type);
+  const bstake=tx.bstake||0,bodds=tx.bodds||0,pnl=tx.pnl||0;
+  // Reverse the balance changes that were applied when this tx was logged/settled
+  if(BET_ONLY.includes(tx.type)){
+    if(tx.result==='Pending'){
+      // Was deducted at log time — restore stake to bookie
+      if(!isFB&&tx.bookie&&p.bookies[tx.bookie])
+        p.bookies[tx.bookie].bal=(p.bookies[tx.bookie].bal||0)+bstake;
+    }else if(tx.result==='Won'){
+      // Return was added — reverse it
+      if(isFB){
+        if(tx.bookie&&p.bookies[tx.bookie])
+          p.bookies[tx.bookie].bal=(p.bookies[tx.bookie].bal||0)-((bodds-1)*bstake);
+      }else{
+        if(tx.bookie&&p.bookies[tx.bookie])
+          p.bookies[tx.bookie].bal=(p.bookies[tx.bookie].bal||0)-(bodds*bstake);
+      }
+    }else if(tx.result==='Lost'){
+      // Stake was deducted, lay profit went to exchange — reverse exchange
+      if(!isFB&&tx.bookie&&p.bookies[tx.bookie])
+        p.bookies[tx.bookie].bal=(p.bookies[tx.bookie].bal||0)+bstake;
+      if(tx.exchange&&state.exchanges[tx.exchange]!==undefined)
+        state.exchanges[tx.exchange]=(state.exchanges[tx.exchange]||0)-pnl;
+    }
+  }else if(tx.type==='Deposit'){
+    // Reverse: bookie −deposit, bank +deposit
+    if(tx.bookie&&p.bookies[tx.bookie])p.bookies[tx.bookie].bal=(p.bookies[tx.bookie].bal||0)-(tx.amount||0);
+    p.bank+=(tx.amount||0);
+  }else if(tx.type==='Withdrawal'){
+    if(tx.bookie&&p.bookies[tx.bookie])p.bookies[tx.bookie].bal=(p.bookies[tx.bookie].bal||0)+(tx.amount||0);
+    p.bank-=(tx.amount||0);
+  }else if(tx.type==='Exchange Deposit'){
+    if(tx.exchange&&state.exchanges[tx.exchange]!==undefined)state.exchanges[tx.exchange]=(state.exchanges[tx.exchange]||0)-(tx.amount||0);
+    p.bank+=(tx.amount||0);
+  }else if(tx.type==='Exchange Withdrawal'){
+    if(tx.exchange&&state.exchanges[tx.exchange]!==undefined)state.exchanges[tx.exchange]=(state.exchanges[tx.exchange]||0)+(tx.amount||0);
+    p.bank-=(tx.amount||0);
+  }
+  // Balance Amendment — reverse the diff
+  else if(tx.type==='Balance Amendment'){
+    const target=tx.target;
+    if(target==='Bank'){p.bank-=(tx.diff||0);}
+    else if(target&&p.bookies[target]){p.bookies[target].bal=(p.bookies[target].bal||0)-(tx.diff||0);}
+  }
+  state[acct].transactions=state[acct].transactions.filter(t=>t.id!==id);
+  if(!deletedTxIds[acct])deletedTxIds[acct]=[];
+  deletedTxIds[acct].push(id);
+  if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}
+  saveData('deleteTx');showToast('Transaction deleted & balances reversed');render();
+}
+
+function exportCSV(){
+  const txs=allTxs();
+  const headers=['Date','Account','Type','Bookmaker','Exchange','Event','Back Stake','Back Odds','Commission %','Result','P&L','Notes'];
+  const rows=txs.map(t=>[t.date||'',profileLabel(t._acct),t.type||'',t.bookie||'',t.exchange||'',t.event||t.notes||'',t.bstake||'',t.bodds||'',t.comm!==undefined?t.comm:'',t.result||'',t.pnl!==undefined?t.pnl.toFixed(2):'',t.notes||'']);
+  const csv=[headers,...rows].map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob=new Blob([csv],{type:'text/csv'}),url=URL.createObjectURL(blob),a=document.createElement('a');
+  a.href=url;a.download=`mbempire_${todayStr().replace(/\//g,'-')}.csv`;a.click();URL.revokeObjectURL(url);showToast('CSV exported!');
+}
+
+// ── REPORTS ──────────────────────────────────────────────────────────────────
+function renderReports(){
+  const allMap=monthlyPnl(allTxs());
+  const bookiePnl={};allTxs().forEach(t=>{if(!t.bookie||!t.pnl||t.type==='Balance Amendment')return;bookiePnl[t.bookie]=(bookiePnl[t.bookie]||0)+t.pnl;});
+  const topBookies=Object.entries(bookiePnl).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  const typePnl={};allTxs().forEach(t=>{if(!t.type||!t.pnl||t.type==='Balance Amendment')return;typePnl[t.type]=(typePnl[t.type]||0)+t.pnl;});
+  return`
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+    <div style="font-size:16px;font-weight:500;color:#F0EDE8">Reports</div>
+    <button class="btn-sm" onclick="exportCSV()"><i class="ti ti-download" aria-hidden="true"></i> Export CSV</button>
+  </div>
+  <div class="card" style="margin-bottom:12px">
+    <div class="card-header"><span class="card-title">Monthly P&L — Sports (All Accounts)</span></div>
+    <div style="padding:6px 10px;overflow-x:auto">${renderMonthBars(allMap)}</div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+    ${PROFILES.map(p=>`<div class="card"><div class="card-header"><span class="card-title" style="color:${profileColor(p)}">${profileLabel(p)}</span></div><div style="padding:6px 8px;overflow-x:auto">${renderMonthBars(monthlyPnl(state[p].transactions||[]),80)}</div></div>`).join('')}
+  </div>
+  <div class="card"><div class="card-header"><span class="card-title">Top bookies by P&L</span></div>
+    ${topBookies.length?topBookies.map(([name,pnl])=>`<div class="list-row"><div class="list-row-left"><div class="list-row-title">${name}</div></div><div class="list-row-right ${pnl>=0?'pos':'neg'}">${fmtS(pnl)}</div></div>`).join(''):'<div class="empty">No data yet</div>'}
+  </div>
+  <div class="card"><div class="card-header"><span class="card-title">P&L by type</span></div>
+    ${Object.entries(typePnl).sort((a,b)=>b[1]-a[1]).map(([type,pnl])=>`<div class="list-row"><div class="list-row-left"><span class="${pillClass(type)}">${type}</span></div><div class="list-row-right ${pnl>=0?'pos':'neg'}">${fmtS(pnl)}</div></div>`).join('')||'<div class="empty">No data yet</div>'}
+  </div>`;
+}
+
+// ── ACCOUNTS ─────────────────────────────────────────────────────────────────
+function renderAccounts(){
+  const acct=currentProfile==='both'?'me':currentProfile,p=state[acct];
+  return`
+  <div style="margin-bottom:14px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div style="font-size:13px;font-weight:500;color:#F0EDE8">Bookmakers — <span style="color:${profileColor(acct)}">${profileLabel(acct)}</span> <span style="color:#C8C5BF;font-weight:400">(${Object.keys(p.bookies||{}).length})</span></div>
+      <select class="filter-select" id="status-filter" onchange="render()"><option value="">All</option>${BOOKIE_STATUSES.map(s=>`<option>${s}</option>`).join('')}</select>
+    </div>
+    <div class="card">
+      <input class="search-input" type="text" placeholder="Search bookmakers…" oninput="filterBookies(this.value,'${acct}')"/>
+      <div id="bookie-list" style="max-height:380px;overflow-y:auto;-webkit-overflow-scrolling:touch">${renderBookieList(acct,'','')}</div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <input type="text" id="new-bookie-name" placeholder="Add new bookmaker…" style="flex:1"/>
+      <button class="btn btn-primary" style="padding:10px 16px;font-size:13px" onclick="addBookie('${acct}')">Add</button>
+    </div>
+  </div>
+  <div style="font-size:13px;font-weight:500;color:#F0EDE8;margin-bottom:10px">Bank accounts</div>
+  <div class="card" style="margin-bottom:14px">
+    ${PROFILES.map(pr=>`<div class="list-row">
+      <div class="list-row-left"><div class="list-row-title" style="display:flex;align-items:center;gap:7px"><div class="acct-dot dot-${pr}"></div>${profileLabel(pr)}'s bank</div></div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div class="list-row-right ${state[pr].bank>=0?'pos':'neg'}">${fmt(state[pr].bank)}</div>
+        <button class="btn-sm" onclick="showAmendModal('bank','${pr}',null)">Edit</button>
+      </div>
+    </div>`).join('')}
+  </div>
+  <div style="font-size:13px;font-weight:500;color:#F0EDE8;margin-bottom:10px">Exchanges (shared)</div>
+  <div class="card">
+    ${EXCHANGES.map(e=>`<div class="list-row">
+      <div class="list-row-left"><div class="list-row-title">${e}</div></div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div class="list-row-right ${state.exchanges[e]>0?'pos':state.exchanges[e]<0?'neg':''}">${fmt(state.exchanges[e])}</div>
+        <button class="btn-sm" onclick="adjustExch('${e}')">Edit</button>
+      </div>
+    </div>`).join('')}
+  </div>`;
+}
+
+function renderBookieList(acct,search,statusFilter){
+  const p=state[acct];let keys=Object.keys(p.bookies||{});
+  if(search)keys=keys.filter(b=>b.toLowerCase().includes(search.toLowerCase()));
+  if(statusFilter)keys=keys.filter(b=>p.bookies[b].status===statusFilter);
+  if(!keys.length)return`<div class="empty">No results</div>`;
+  return keys.map(b=>{const bk=p.bookies[b];
+    return`<div class="list-row" style="flex-direction:column;align-items:stretch;gap:6px;padding:10px 16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+        <div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span style="font-size:13px;font-weight:500;color:#F0EDE8">${b}</span>
+            ${statusBadge(bk.status||'Active')}
+          </div>
+          ${bk.notes?`<div style="font-size:11px;color:#C8C5BF;margin-top:2px">${bk.notes}</div>`:''}
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+          <div style="font-size:13px;font-weight:500;color:${(bk.bal||0)>0?'#22C55E':(bk.bal||0)<0?'#F87171':'#C8C5BF'}">${fmt(bk.bal||0)}</div>
+          <button class="btn-sm" onclick="showBookieModal('${acct}','${b}')">Edit</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function filterBookies(q,acct){
+  const sf=document.getElementById('status-filter')?.value||'';
+  const el=document.getElementById('bookie-list');if(el)el.innerHTML=renderBookieList(acct,q,sf);
+}
+
+function showBookieModal(acct,name){
+  const bk=state[acct].bookies[name];
+  document.getElementById('modal-root').innerHTML=`
+  <div class="modal-bg" onclick="if(event.target===this)closeModal()">
+    <div class="modal">
+      <div class="modal-handle"></div>
+      <div class="modal-title">${name}</div>
+      <div class="modal-sub">${profileLabel(acct)}'s account</div>
+      <div style="margin-bottom:12px"><div class="form-label">Balance (£)</div><input type="number" id="modal-bal" step="0.01" value="${(bk.bal||0).toFixed(2)}" inputmode="decimal" style="font-size:18px;font-weight:500"/></div>
+      <div style="margin-bottom:12px"><div class="form-label">Status</div><select id="modal-status">${BOOKIE_STATUSES.map(s=>`<option${bk.status===s?' selected':''}>${s}</option>`).join('')}</select></div>
+      <div style="margin-bottom:12px"><div class="form-label">Notes</div><textarea id="modal-notes" placeholder="e.g. Max stake £5, email verified…">${bk.notes||''}</textarea></div>
+      <div style="margin-bottom:4px"><div class="form-label">Reason for balance change</div><input type="text" id="modal-reason" placeholder="e.g. Casino offer, correction…"/></div>
+      <div class="modal-actions">
+        <button class="btn btn-primary" style="flex:1" onclick="confirmBookieEdit('${acct}','${name}')">Save</button>
+        <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      </div>
+    </div>
+  </div>`;}
+
+function confirmBookieEdit(acct,name){
+  const newBal=parseFloat(document.getElementById('modal-bal')?.value),newStatus=document.getElementById('modal-status')?.value||'Active',newNotes=document.getElementById('modal-notes')?.value||'',reason=document.getElementById('modal-reason')?.value||'Manual edit';
+  const bk=state[acct].bookies[name],oldBal=bk.bal||0;bk.status=newStatus;bk.notes=newNotes;
+  if(!isNaN(newBal)&&newBal!==oldBal){const diff=newBal-oldBal;bk.bal=newBal;if(!state[acct].transactions)state[acct].transactions=[];state[acct].transactions.push({id:Date.now(),date:todayStr(),type:'Balance Amendment',target:name,oldVal:oldBal,newVal:newBal,diff,pnl:diff,notes:reason,result:'—',_acct:acct});}
+  if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('bookieEdit');closeModal();showToast(`${name} updated`);render();
+}
+
+function showAmendModal(type,acct,name){
+  const label=type==='bank'?`${profileLabel(acct)}'s bank`:name,cur=type==='bank'?state[acct].bank:(state[acct].bookies[name]?.bal||0);
+  document.getElementById('modal-root').innerHTML=`
+  <div class="modal-bg" onclick="if(event.target===this)closeModal()">
+    <div class="modal">
+      <div class="modal-handle"></div>
+      <div class="modal-title">Edit balance</div>
+      <div class="modal-sub">${label} · Current: ${fmt(cur)}</div>
+      <div style="margin-bottom:12px"><div class="form-label">New balance (£)</div><input type="number" id="modal-val" step="0.01" value="${cur.toFixed(2)}" inputmode="decimal" style="font-size:20px;font-weight:500"/></div>
+      <div style="margin-bottom:4px"><div class="form-label">Reason (logged)</div><input type="text" id="modal-reason" placeholder="e.g. Casino offer, correction…"/></div>
+      <div class="modal-actions">
+        <button class="btn btn-primary" style="flex:1" onclick="confirmAmend('${type}','${acct}','${name||''}')">Save</button>
+        <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      </div>
+    </div>
+  </div>`;
+  setTimeout(()=>document.getElementById('modal-val')?.focus(),100);
+}
+
+function confirmAmend(type,acct,name){
+  const newVal=parseFloat(document.getElementById('modal-val')?.value),reason=document.getElementById('modal-reason')?.value||'Manual amendment';if(isNaN(newVal))return;
+  const p=state[acct];let oldVal,targetLabel;
+  if(type==='bank'){oldVal=p.bank;p.bank=newVal;targetLabel='Bank';}else{oldVal=p.bookies[name]?.bal||0;p.bookies[name].bal=newVal;targetLabel=name;}
+  const diff=newVal-oldVal;if(!p.transactions)p.transactions=[];
+  p.transactions.push({id:Date.now(),date:todayStr(),type:'Balance Amendment',target:targetLabel,oldVal,newVal,diff,pnl:diff,notes:reason,result:'—',_acct:acct});
+  if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}
+  saveData();closeModal();showToast(`${targetLabel} → ${fmt(newVal)}`);render();
+}
+
+function adjustExch(name){const cur=state.exchanges[name],val=prompt(`Set balance for ${name}:`,cur.toFixed(2));if(val===null)return;const n=parseFloat(val);if(isNaN(n))return;state.exchanges[name]=n;save('adjustExch');render();}
+function addBookie(acct){
+  const inp=document.getElementById('new-bookie-name'),name=inp?.value?.trim();if(!name)return;
+  if(!state[acct].bookies)state[acct].bookies={};
+  if(state[acct].bookies[name]){showToast('Already exists','error');return;}
+  state[acct].bookies[name]={bal:0,status:'Active',notes:''};save();inp.value='';render();
+}
+
+// ── BOOKIE SEARCH ────────────────────────────────────────────────────────────
+function getBookieList(){
+  return Object.keys(state[formAccount].bookies||{}).sort();
+}
+
+function renderBookieDropdownItems(items){
+  const dd=document.getElementById('bookie-dropdown');if(!dd)return;
+  if(!items.length){dd.innerHTML='<div style="padding:10px 12px;font-size:12px;color:#9A9590">No results</div>';return;}
+  dd.innerHTML=items.slice(0,20).map(b=>`<div onclick="selectBookie('${b.replace(/'/g,"\\'")}') " style="padding:10px 12px;font-size:13px;color:#F0EDE8;cursor:pointer;border-bottom:0.5px solid rgba(255,255,255,0.05)" onmouseenter="this.style.background='#2e2f33'" onmouseleave="this.style.background=''">${b}</div>`).join('');
+}
+
+function showBookieDropdown(){
+  const dd=document.getElementById('bookie-dropdown');if(!dd)return;
+  const q=document.getElementById('f-bookie-search')?.value||'';
+  const list=getBookieList();
+  const filtered=q?list.filter(b=>b.toLowerCase().includes(q.toLowerCase())):list;
+  renderBookieDropdownItems(filtered);
+  dd.style.display='block';
+  // Close on outside click
+  setTimeout(()=>document.addEventListener('click',closeBookieDropdownOutside,{once:true}),10);
+}
+
+function closeBookieDropdownOutside(e){
+  const dd=document.getElementById('bookie-dropdown');
+  const inp=document.getElementById('f-bookie-search');
+  if(dd&&!dd.contains(e.target)&&e.target!==inp){dd.style.display='none';}
+  else if(dd&&dd.style.display!=='none'){document.addEventListener('click',closeBookieDropdownOutside,{once:true});}
+}
+
+function filterBookieDropdown(q){
+  const dd=document.getElementById('bookie-dropdown');if(!dd)return;
+  const list=getBookieList();
+  const filtered=q?list.filter(b=>b.toLowerCase().includes(q.toLowerCase())):list;
+  renderBookieDropdownItems(filtered);
+  dd.style.display='block';
+  // Clear the hidden value if user is typing a new search
+  const bh=document.getElementById('f-bookie');if(bh)bh.value='';
+}
+
+function selectBookie(name){
+  const inp=document.getElementById('f-bookie-search');if(inp)inp.value=name;
+  const bh=document.getElementById('f-bookie');if(bh)bh.value=name;
+  const dd=document.getElementById('bookie-dropdown');if(dd)dd.style.display='none';
+}
+
+// ── GUBBING RISK TRACKER ─────────────────────────────────────────────────────
+function calcBookieRisk(acct, bookieName){
+  const txs=(state[acct].transactions||[]).filter(t=>t.bookie===bookieName&&BET_ONLY.includes(t.type));
+  const settled=txs.filter(t=>t.result==='Won'||t.result==='Lost');
+  if(settled.length<2)return null;
+
+  // Mug bets — low odds bets to appear as normal punter
+  const mugBets=txs.filter(t=>t.type==='Mug').length;
+  const mugRatio=txs.length>0?mugBets/txs.length:0;
+
+  // Free bet ratio — using every offer looks automated
+  const freeBets=txs.filter(t=>t.type==='Free Bet').length;
+  const freeBetRatio=txs.length>0?freeBets/txs.length:0;
+
+  // Average back odds — always betting high odds looks like a sharp
+  const oddsArr=txs.filter(t=>t.bodds>0).map(t=>t.bodds);
+  const avgOdds=oddsArr.length?oddsArr.reduce((a,b)=>a+b,0)/oddsArr.length:0;
+  const hasLowOddsBets=oddsArr.some(o=>o<=2.0);
+  const allHighOdds=oddsArr.length>4&&!hasLowOddsBets;
+
+  // Bets per week — very high frequency looks automated
+  const dates=txs.map(t=>{const p=t.date?.split('/');return p?.length===3?new Date(+p[2],+p[1]-1,+p[0]):null;}).filter(Boolean);
+  let betsPerWeek=0;
+  if(dates.length>1){
+    const spanWeeks=Math.max((Math.max(...dates)-Math.min(...dates))/(1000*60*60*24*7),0.1);
+    betsPerWeek=txs.length/spanWeeks;
+  }
+
+  // Total P&L — very profitable accounts get restricted faster
+  const totalPnl=settled.reduce((a,t)=>a+(t.pnl||0),0);
+
+  // Score: 0 (safe) to 100 (high risk)
+  let score=0;
+  const flags=[];
+
+  // 1. Mug bet ratio — biggest factor
+  if(mugRatio===0&&txs.length>4){
+    score+=40;flags.push('No mug bets logged on this bookie');
+  } else if(mugRatio<0.1&&txs.length>4){
+    score+=25;flags.push(`Very low mug bet ratio (${Math.round(mugRatio*100)}%)`);
+  } else if(mugRatio<0.2&&txs.length>6){
+    score+=12;flags.push(`Low mug bet ratio (${Math.round(mugRatio*100)}%)`);
+  }
+
+  // 2. Always high odds — no low-odds bets ever placed
+  if(allHighOdds){
+    score+=25;flags.push(`Always high odds — avg ${avgOdds.toFixed(2)}, no bets under 2.0`);
+  } else if(avgOdds>3.5&&txs.length>5){
+    score+=12;flags.push(`High average odds (${avgOdds.toFixed(2)}) — add some low-odds bets`);
+  }
+
+  // 3. High free bet ratio — looks like pure bonus hunting
+  if(freeBetRatio>0.65&&txs.length>4){
+    score+=20;flags.push(`Mostly free bets (${Math.round(freeBetRatio*100)}%) — mix in qualifiers`);
+  } else if(freeBetRatio>0.45&&txs.length>4){
+    score+=10;flags.push(`High free bet ratio (${Math.round(freeBetRatio*100)}%)`);
+  }
+
+  // 4. High P&L — very profitable accounts attract attention
+  if(totalPnl>500){
+    score+=15;flags.push(`High profit on this bookie (£${totalPnl.toFixed(0)})`);
+  } else if(totalPnl>250){
+    score+=8;flags.push(`Good profit (£${totalPnl.toFixed(0)}) — monitor`);
+  }
+
+  // 5. Very high bet frequency
+  if(betsPerWeek>20){
+    score+=10;flags.push(`Very high frequency (${betsPerWeek.toFixed(1)} bets/week)`);
+  } else if(betsPerWeek>10){
+    score+=5;flags.push(`High frequency (${betsPerWeek.toFixed(1)} bets/week)`);
+  }
+
+  score=Math.min(score,100);
+  const level=score>=55?'red':score>=25?'amber':'green';
+  return{score,level,flags,txCount:txs.length,settled:settled.length,mugRatio,freeBetRatio,avgOdds,hasLowOddsBets,betsPerWeek,totalPnl};
+}
+
+function renderRisk(){
+  // Gather all bookies across all accounts with enough data
+  const allRisks=[];
+  PROFILES.forEach(acct=>{
+    Object.keys(state[acct].bookies||{}).forEach(bookie=>{
+      const risk=calcBookieRisk(acct,bookie);
+      if(risk)allRisks.push({acct,bookie,risk});
+    });
+  });
+
+  if(!allRisks.length)return`<div style="text-align:center;padding:60px 20px"><i class="ti ti-shield" style="font-size:48px;color:#9A9590" aria-hidden="true"></i><div style="font-size:15px;font-weight:500;margin-top:12px;color:#F0EDE8">No risk data yet</div><div style="font-size:13px;color:#9A9590;margin-top:6px">Log at least 2 settled bets per bookie to see risk analysis</div></div>`;
+
+  const red=allRisks.filter(r=>r.risk.level==='red');
+  const amber=allRisks.filter(r=>r.risk.level==='amber');
+  const green=allRisks.filter(r=>r.risk.level==='green');
+
+  // Sort: red first, then amber, then green, within each by score desc
+  const sorted=[...red,...amber,...green].sort((a,b)=>{
+    const order={red:0,amber:1,green:2};
+    if(order[a.risk.level]!==order[b.risk.level])return order[a.risk.level]-order[b.risk.level];
+    return b.risk.score-a.risk.score;
+  });
+
+  return`
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px">
+    <div class="metric-card" style="background:#791F1F">
+      <div class="metric-label" style="color:#F09595"><i class="ti ti-shield-x" aria-hidden="true"></i>High risk</div>
+      <div class="metric-value" style="color:#F09595">${red.length}</div>
+      <div class="metric-sub" style="color:#F09595">bookies</div>
+    </div>
+    <div class="metric-card" style="background:#5C3800">
+      <div class="metric-label" style="color:#F0A500"><i class="ti ti-shield-half" aria-hidden="true"></i>Medium</div>
+      <div class="metric-value" style="color:#F0A500">${amber.length}</div>
+      <div class="metric-sub" style="color:#F0A500">bookies</div>
+    </div>
+    <div class="metric-card" style="background:#14532D">
+      <div class="metric-label" style="color:#86EFAC"><i class="ti ti-shield-check" aria-hidden="true"></i>Low risk</div>
+      <div class="metric-value" style="color:#86EFAC">${green.length}</div>
+      <div class="metric-sub" style="color:#86EFAC">bookies</div>
+    </div>
+  </div>
+
+  ${red.length?`<div style="font-size:11px;font-weight:500;color:#F09595;letter-spacing:.3px;text-transform:uppercase;margin-bottom:8px"><i class="ti ti-alert-triangle" aria-hidden="true"></i> Action needed</div>
+  ${red.map(r=>renderRiskCard(r)).join('')}`:''}
+
+  ${amber.length?`<div style="font-size:11px;font-weight:500;color:#F0A500;letter-spacing:.3px;text-transform:uppercase;margin:12px 0 8px"><i class="ti ti-alert-circle" aria-hidden="true"></i> Monitor closely</div>
+  ${amber.map(r=>renderRiskCard(r)).join('')}`:''}
+
+  ${green.length?`<div style="font-size:11px;font-weight:500;color:#86EFAC;letter-spacing:.3px;text-transform:uppercase;margin:12px 0 8px"><i class="ti ti-circle-check" aria-hidden="true"></i> Looking good</div>
+  ${green.map(r=>renderRiskCard(r)).join('')}`:''}`;
+}
+
+function renderRiskCard(r){
+  const {acct,bookie,risk}=r;
+  const levelColors={
+    red:{bg:'#791F1F',border:'#A32D2D',text:'#F09595',badge:'#A32D2D'},
+    amber:{bg:'#5C3800',border:'#854F0B',text:'#F0A500',badge:'#854F0B'},
+    green:{bg:'#14532D',border:'#3B6D11',text:'#86EFAC',badge:'#3B6D11'},
+  }[risk.level];
+  const levelLabel={red:'High risk',amber:'Medium risk',green:'Low risk'}[risk.level];
+  const barWidth=Math.round(risk.score);
+
+  return`<div style="background:#2C3136;border:0.5px solid rgba(255,255,255,0.09);border-left:2px solid ${levelColors.border};border-radius:12px;padding:14px;margin-bottom:8px">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px">
+      <div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+          <span style="font-size:14px;font-weight:500;color:#F0EDE8">${bookie}</span>
+          ${acctPill(acct)}
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <span style="font-size:11px;color:#9A9590">${risk.txCount} bets</span>
+          <span style="font-size:11px;color:#9A9590">${Math.round(risk.mugRatio*100)}% mugged</span>
+          ${risk.avgOdds>0?`<span style="font-size:11px;color:#9A9590">avg odds ${risk.avgOdds.toFixed(2)}</span>`:''}
+          <span style="font-size:11px;color:#9A9590">£${risk.totalPnl.toFixed(0)} profit</span>
+        </div>
+      </div>
+      <span style="background:${levelColors.bg};color:${levelColors.text};border:0.5px solid ${levelColors.border};padding:3px 10px;border-radius:20px;font-size:11px;font-weight:500;flex-shrink:0">${levelLabel}</span>
+    </div>
+
+    <div style="background:#3D4349;border-radius:4px;height:4px;margin-bottom:10px;overflow:hidden">
+      <div style="background:${levelColors.text};height:100%;width:${barWidth}%;border-radius:4px;transition:width .5s"></div>
+    </div>
+
+    ${risk.flags.length?`<div style="display:flex;flex-direction:column;gap:4px">
+      ${risk.flags.map(f=>`<div style="font-size:11px;color:${levelColors.text};display:flex;align-items:center;gap:5px"><i class="ti ti-point-filled" style="font-size:8px" aria-hidden="true"></i>${f}</div>`).join('')}
+    </div>`:''}
+
+    ${risk.level!=='green'?`<div style="margin-top:10px;padding-top:10px;border-top:0.5px solid rgba(255,255,255,0.08)">
+      <div style="font-size:11px;color:#9A9590;margin-bottom:5px;font-weight:500;text-transform:uppercase;letter-spacing:.3px">Suggested action</div>
+      <div style="font-size:12px;color:#B4B2A9">${getRiskAdvice(risk)}</div>
+    </div>`:''}
+  </div>`;
+}
+
+function getRiskAdvice(risk){
+  const tips=[];
+  if(risk.mugRatio<0.2)tips.push('Log more mug bets on this bookie — aim for 1 mug per 3–4 matched bets');
+  if(!risk.hasLowOddsBets||risk.avgOdds>3.5)tips.push('Place some bets at lower odds (1.3–2.0) to look like a normal punter');
+  if(risk.freeBetRatio>0.5)tips.push('Mix in more qualifying and mug bets alongside free bet usage');
+  if(risk.totalPnl>300)tips.push('Consider a gradual withdrawal to avoid drawing attention');
+  if(risk.betsPerWeek>15)tips.push('Reduce bet frequency — spread bets across more days');
+  return tips.length?tips.join(' · '):'Keep logging mug bets regularly to maintain a natural pattern';
+}
+
+
+// ── CASINO ───────────────────────────────────────────────────────────────────
+const CASINO_OFFER_TYPES=['Reload','Welcome','Free Spins','Cashback','Other'];
+let casinoFormAcct='me';
+let casinoView='log';
+let casinoOfferType='';
+let casinoPendingSpins=false;
+let casinoHasDeposit=false;
+let casinoOperator='JG';
+
+function renderCasino(){
+  const allSessions=PROFILES.flatMap(p=>(state[p].casino||[]).map(s=>({...s,_acct:p}))).sort((a,b)=>b.id-a.id);
+  const totalCasino=PROFILES.reduce((a,p)=>a+casinoPnl(p),0);
+  const jgPnl=allSessions.reduce((a,s)=>{
+    if(s.operator!=='JG')return a;
+    return a+(s.startBal!==undefined?s.endBal-s.startBal:s.netProfit||0);
+  },0);
+  const jpPnl=allSessions.reduce((a,s)=>{
+    if(s.operator!=='JP')return a;
+    return a+(s.startBal!==undefined?s.endBal-s.startBal:s.netProfit||0);
+  },0);
+  const profilePnlHtml=PROFILES.map(p=>'<span>'+profileLabel(p)+': <span style="color:'+(casinoPnl(p)>=0?'#22C55E':'#F87171')+'">'+fmtS(casinoPnl(p))+'</span></span>').join('');
+
+  // Render view content separately so tabs work correctly
+  let viewHtml='';
+  if(casinoView==='log')viewHtml=renderCasinoForm();
+  else if(casinoView==='history')viewHtml=renderCasinoHistory();
+  else if(casinoView==='monthly')viewHtml=renderCasinoMonthly();
+  else viewHtml=renderCasinoSummaryView();
+
+  return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">'
+    +'<div class="metric-card" style="grid-column:span 2">'
+    +'<div class="metric-label"><i class="ti ti-cards" aria-hidden="true"></i>Casino P&L</div>'
+    +'<div class="metric-value '+(totalCasino>=0?'pos':'neg')+'">'+fmtS(totalCasino)+'</div>'
+    +'<div class="metric-sub" style="display:flex;gap:10px;flex-wrap:wrap">'+profilePnlHtml+'</div>'
+    +'<div style="margin-top:6px;padding-top:6px;border-top:0.5px solid rgba(255,255,255,0.08);display:flex;gap:10px">'
+    +'<span style="font-size:11px">JG: <span style="color:'+(jgPnl>=0?'#22C55E':'#F87171')+';font-weight:500">'+fmtS(jgPnl)+'</span></span>'
+    +'<span style="font-size:11px">JP: <span style="color:'+(jpPnl>=0?'#22C55E':'#F87171')+';font-weight:500">'+fmtS(jpPnl)+'</span></span>'
+    +'</div></div></div>'
+    +'<div style="display:flex;gap:8px;margin-bottom:14px">'
+    +'<button onclick="setCasinoView(0)" class="btn '+(casinoView==='log'?'btn-primary':'btn-ghost')+'" style="flex:1;padding:10px">Log</button>'
+    +'<button onclick="setCasinoView(1)" class="btn '+(casinoView==='history'?'btn-primary':'btn-ghost')+'" style="flex:1;padding:10px">History</button>'
+    +'<button onclick="setCasinoView(2)" class="btn '+(casinoView==='monthly'?'btn-primary':'btn-ghost')+'" style="flex:1;padding:10px">Monthly</button>'
+    +'<button onclick="setCasinoView(3)" class="btn '+(casinoView==='summary'?'btn-primary':'btn-ghost')+'" style="flex:1;padding:10px">Summary</button>'
+    +'</div>'
+    +'<div id="casino-view">'+viewHtml+'</div>';
+}
+
+
+function renderCasinoMonthly(){
+  const allSessions=PROFILES.flatMap(p=>(state[p].casino||[]).map(s=>({...s,_acct:p})));
+  const newSessions=allSessions.filter(s=>s.startBal!==undefined&&s.endBal!==undefined);
+  const monthlyMap={};
+  newSessions.forEach(s=>{
+    const d=s.date||'';
+    const parts=d.split('/');
+    if(parts.length<3)return;
+    const key=parts[2]+'-'+parts[1].padStart(2,'0');
+    if(!monthlyMap[key])monthlyMap[key]={JG:0,JP:0,total:0};
+    const pnl=s.endBal-s.startBal;
+    monthlyMap[key][s.operator||'JG']+=pnl;
+    monthlyMap[key].total+=pnl;
+  });
+  const histTotal=allSessions.filter(s=>s.startBal===undefined).reduce((a,s)=>a+(s.netProfit||0),0);
+  const monthKeys=Object.keys(monthlyMap).sort().reverse();
+  if(!monthKeys.length&&histTotal===0)return '<div class="empty">No casino sessions yet</div>';
+  const rows=monthKeys.map(k=>{
+    const mo=monthlyMap[k];
+    const label=k.slice(0,4)+'/'+k.slice(5);
+    return '<tr>'
+      +'<td style="font-size:12px">'+label+'</td>'
+      +'<td style="text-align:right;font-size:12px;color:'+(mo.JG>=0?'#22C55E':'#F87171')+'">'+fmtS(mo.JG)+'</td>'
+      +'<td style="text-align:right;font-size:12px;color:'+(mo.JP>=0?'#22C55E':'#F87171')+'">'+fmtS(mo.JP)+'</td>'
+      +'<td style="text-align:right;font-size:12px;font-weight:500;color:'+(mo.total>=0?'#22C55E':'#F87171')+'">'+fmtS(mo.total)+'</td>'
+      +'</tr>';
+  }).join('');
+  const histRow=histTotal!==0
+    ?'<tr style="border-top:1px solid rgba(255,255,255,0.10)">'
+      +'<td style="font-size:11px;color:#9A9590">Historical</td>'
+      +'<td style="text-align:right;font-size:11px;color:#9A9590">—</td>'
+      +'<td style="text-align:right;font-size:11px;color:#9A9590">—</td>'
+      +'<td style="text-align:right;font-size:11px;color:'+(histTotal>=0?'#22C55E':'#F87171')+'">'+fmtS(histTotal)+'</td>'
+      +'</tr>'
+    :'';
+  return '<div class="card">'
+    +'<div class="card-header"><span class="card-title">Monthly Casino P&L by Operator</span></div>'
+    +'<div style="overflow-x:auto">'
+    +'<table class="data-table" style="width:100%">'
+    +'<thead><tr><th>Month</th><th style="text-align:right">JG (£)</th><th style="text-align:right">JP (£)</th><th style="text-align:right">Total (£)</th></tr></thead>'
+    +'<tbody>'+rows+histRow+'</tbody>'
+    +'</table></div></div>';
+}
+
+
+function renderCasinoSummaryView(){
+  const allSessions=PROFILES.flatMap(p=>(state[p].casino||[]).map(s=>({...s,_acct:p})));
+  const sessionPnl=s=>s.startBal!==undefined?s.endBal-s.startBal:s.netProfit||0;
+
+  // Split by operator
+  const jgSessions=allSessions.filter(s=>(s.operator||'JG')==='JG');
+  const jpSessions=allSessions.filter(s=>s.operator==='JP');
+  const jgPnl=jgSessions.reduce((a,s)=>a+sessionPnl(s),0);
+  const jpPnl=jpSessions.reduce((a,s)=>a+sessionPnl(s),0);
+  const totalPnl=jgPnl+jpPnl;
+  const totalSessions=allSessions.length;
+
+  // By casino
+  const casinoMap={};
+  allSessions.forEach(s=>{
+    if(!s.casino)return;
+    casinoMap[s.casino]=(casinoMap[s.casino]||0)+sessionPnl(s);
+  });
+  const entries=Object.entries(casinoMap).sort((a,b)=>b[1]-a[1]);
+  if(!entries.length)return '<div class="empty">No casino sessions yet</div>';
+
+  const rows=entries.map(([casino,pnl])=>'<tr>'
+    +'<td style="font-size:12px;word-break:break-word">'+(casino||'Unknown')+'</td>'
+    +'<td style="text-align:right;font-size:12px;font-weight:500;white-space:nowrap;color:'+(pnl>=0?'#22C55E':'#F87171')+'">'+fmtS(pnl)+'</td>'
+    +'</tr>').join('');
+
+  return '<div class="metric-card" style="margin-bottom:12px">'
+    +'<div class="metric-label"><i class="ti ti-cards" aria-hidden="true"></i>Combined Casino Summary</div>'
+    +'<div class="metric-value '+(totalPnl>=0?'pos':'neg')+'">'+fmtS(totalPnl)+'</div>'
+    +'<div class="metric-sub">'+totalSessions+' total sessions</div>'
+    +'<div style="margin-top:8px;padding-top:8px;border-top:0.5px solid rgba(255,255,255,0.08);display:grid;grid-template-columns:1fr 1fr;gap:8px">'
+    +'<div style="background:rgba(255,255,255,0.05);border-radius:8px;padding:10px">'
+    +'<div style="font-size:10px;color:#9A9590;margin-bottom:4px">JG</div>'
+    +'<div style="font-size:16px;font-weight:500;color:'+(jgPnl>=0?'#22C55E':'#F87171')+'">'+fmtS(jgPnl)+'</div>'
+    +'<div style="font-size:11px;color:#9A9590;margin-top:2px">'+jgSessions.length+' sessions</div>'
+    +'</div>'
+    +'<div style="background:rgba(255,255,255,0.05);border-radius:8px;padding:10px">'
+    +'<div style="font-size:10px;color:#9A9590;margin-bottom:4px">JP</div>'
+    +'<div style="font-size:16px;font-weight:500;color:'+(jpPnl>=0?'#22C55E':'#F87171')+'">'+fmtS(jpPnl)+'</div>'
+    +'<div style="font-size:11px;color:#9A9590;margin-top:2px">'+jpSessions.length+' sessions</div>'
+    +'</div>'
+    +'</div></div>'
+    +'<div class="card">'
+    +'<div class="card-header"><span class="card-title">P&L by Casino</span></div>'
+    +'<table class="data-table" style="width:100%">'
+    +'<thead><tr><th>Casino / Bookie</th><th style="text-align:right;white-space:nowrap">P&L (£)</th></tr></thead>'
+    +'<tbody>'+rows+'</tbody>'
+    +'</table></div>';
+}
+
+
+function renderCasinoHistory(){
+  const sessions=PROFILES.flatMap(p=>(state[p].casino||[])
+    .filter(s=>s.startBal!==undefined&&s.endBal!==undefined)
+    .map(s=>({...s,_acct:p}))).sort((a,b)=>b.id-a.id);
+  if(!sessions.length)return '<div class="empty">No new casino sessions yet — log one above</div>';
+  const rows=sessions.map(s=>{
+    const pnl=s.endBal-s.startBal;
+    return '<tr>'
+      +'<td style="font-size:11px;white-space:nowrap">'+(s.date||'')+'</td>'
+      +'<td style="text-align:center"><span class="dot-'+s._acct+'" style="display:inline-block;width:6px;height:6px;border-radius:50%"></span> '+profileLabel(s._acct)+'</td>'
+      +'<td style="text-align:center;font-size:11px">'+(s.operator||'JG')+'</td>'
+      +'<td style="font-size:11px">'+(s.casino||'')+'</td>'
+      +'<td style="text-align:right;font-size:12px">'+fmt(s.startBal)+'</td>'
+      +'<td style="text-align:right;font-size:12px">'+fmt(s.endBal)+'</td>'
+      +'<td style="text-align:right;font-size:12px;font-weight:500;color:'+(pnl>=0?'#22C55E':'#F87171')+'">'+fmtS(pnl)+'</td>'
+      +'<td><button onclick="deleteCasinoSession(\x27'+s._acct+'\x27,'+s.id+')" style="background:none;border:none;color:#F87171;cursor:pointer;padding:4px"><i class="ti ti-trash" style="font-size:13px"></i></button></td>'
+      +'</tr>';
+  }).join('');
+  return '<div class="card"><div class="card-header"><span class="card-title">Casino History</span></div>'
+    +'<div style="overflow-x:auto">'
+    +'<table class="data-table" style="width:100%;min-width:500px">'
+    +'<thead><tr>'
+    +'<th>Date</th><th>Acct</th><th>Op</th><th>Casino</th>'
+    +'<th style="text-align:right">Start (£)</th><th style="text-align:right">End (£)</th>'
+    +'<th style="text-align:right">P&L (£)</th><th></th>'
+    +'</tr></thead>'
+    +'<tbody>'+rows+'</tbody>'
+    +'</table></div></div>';
+}
+
+
+function renderDashboardMonthly(){
+  const sportsByMonth={};
+  allTxs().forEach(t=>{
+    if(!t.date||t.type==='Balance Amendment')return;
+    const parts=t.date.split('/');
+    if(parts.length<3)return;
+    const key=parts[2]+'-'+parts[1].padStart(2,'0');
+    if(!sportsByMonth[key])sportsByMonth[key]=0;
+    sportsByMonth[key]+=(t.pnl||0);
+  });
+  const casinoByMonth={};
+  PROFILES.flatMap(p=>(state[p].casino||[]).map(s=>({...s,_acct:p}))).forEach(s=>{
+    const pnl=s.startBal!==undefined?s.endBal-s.startBal:s.netProfit||0;
+    const d=s.date||'';
+    const parts=d.split('/');
+    if(parts.length<3)return;
+    const key=parts[2]+'-'+parts[1].padStart(2,'0');
+    if(!casinoByMonth[key])casinoByMonth[key]=0;
+    casinoByMonth[key]+=pnl;
+  });
+  const allKeys=[...new Set([...Object.keys(sportsByMonth),...Object.keys(casinoByMonth)])].sort().reverse();
+  if(!allKeys.length)return'';
+  const rows=allKeys.map(k=>{
+    const yr=k.slice(0,4),mo=k.slice(5);
+    const label=new Date(+yr,+mo-1).toLocaleString('default',{month:'short'})+' '+yr;
+    const s=sportsByMonth[k]||0;
+    const c=casinoByMonth[k]||0;
+    const t=s+c;
+    return '<tr>'
+      +'<td style="font-size:11px;font-weight:500">'+label+'</td>'
+      +'<td style="text-align:right;font-size:11px;color:'+(s>=0?'#22C55E':'#F87171')+'">'+fmtS(s)+'</td>'
+      +'<td style="text-align:right;font-size:11px;color:'+(c>=0?'#22C55E':'#F87171')+'">'+fmtS(c)+'</td>'
+      +'<td style="text-align:right;font-size:11px;font-weight:500;color:'+(t>=0?'#22C55E':'#F87171')+'">'+fmtS(t)+'</td>'
+      +'</tr>';
+  }).join('');
+  return '<div class="card" style="margin-bottom:12px">'
+    +'<div class="card-header"><span class="card-title">Monthly P&L</span></div>'
+    +'<div style="overflow-x:auto;padding:8px 14px">'
+    +'<table class="data-table" style="width:100%">'
+    +'<thead><tr>'
+    +'<th>Month</th>'
+    +'<th style="text-align:right">Sports (£)</th>'
+    +'<th style="text-align:right">Casino (£)</th>'
+    +'<th style="text-align:right">Total (£)</th>'
+    +'</tr></thead>'
+    +'<tbody>'+rows+'</tbody>'
+    +'</table></div></div>';
+}
+
+function renderDashboard(){
+  const allMap=monthlyPnl(allTxs());
+  const totalTrades=PROFILES.reduce((a,p)=>a+(state[p].transactions||[]).length,0);
+  const combinedSports=PROFILES.reduce((a,p)=>a+sportsPnl(p),0);
+  const combinedCasino=PROFILES.reduce((a,p)=>a+casinoPnl(p),0);
+  const combinedPnl=combinedSports+combinedCasino;
+  const totalBank=PROFILES.reduce((a,p)=>a+(state[p].bank||0),0);
+  const totalBookies=PROFILES.reduce((a,p)=>a+totalBookie(p),0);
+  const totalExchanges=Object.values(state.exchanges||{}).reduce((a,v)=>a+(v||0),0);
+  const totalFunds=totalBank+totalBookies+totalExchanges;
+  return`
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+    <div class="metric-card" style="grid-column:span 2">
+      <div class="metric-label"><i class="ti ti-trending-up" aria-hidden="true"></i>Combined P&L</div>
+      <div class="metric-value ${combinedPnl>=0?'pos':'neg'}">${fmtS(combinedPnl)}</div>
+      <div class="metric-sub" style="display:flex;gap:10px;flex-wrap:wrap">
+        <span>All accounts · ${totalTrades} trades</span>
+        <span>Sports: <span style="color:${combinedSports>=0?'#22C55E':'#F87171'}">${fmtS(combinedSports)}</span></span>
+        <span>Casino: <span style="color:${combinedCasino>=0?'#22C55E':'#F87171'}">${fmtS(combinedCasino)}</span></span>
+      </div>
+    </div>
+    <div class="metric-card" style="grid-column:span 2">
+      <div class="metric-label"><i class="ti ti-cash" aria-hidden="true"></i>Total funds</div>
+      <div class="metric-value">${fmt(totalFunds)}</div>
+      <div class="metric-sub" style="display:flex;gap:10px;flex-wrap:wrap">
+        <span>Bank: ${fmt(totalBank)}</span>
+        <span>Bookies: ${fmt(totalBookies)}</span>
+        <span>Exchanges: ${fmt(totalExchanges)}</span>
+      </div>
+    </div>
+  </div>
+  <div class="acct-grid">
+    ${PROFILES.map(p=>{
+      const pnl=totalPnl(p);
+      return`<div class="acct-card">
+        <div class="acct-top">
+          <div class="acct-name"><div class="acct-dot dot-${p}"></div>${profileLabel(p)}</div>
+          <div class="acct-pnl ${pnl>=0?'pos':'neg'}">${fmtS(pnl)}</div>
+        </div>
+        <div class="acct-row">
+          <span class="acct-row-label"><i class="ti ti-building-bank" aria-hidden="true"></i>Bank</span>
+          <span class="acct-row-val">${fmt(state[p].bank)}</span>
+        </div>
+        <div class="acct-row">
+          <span class="acct-row-label"><i class="ti ti-wallet" aria-hidden="true"></i>Bookies</span>
+          <span class="acct-row-val">${fmt(totalBookie(p))}</span>
+        </div>
+      </div>`;
+    }).join('')}
+  </div>
+  ${renderDashboardMonthly()}
+  ${renderFreeBetsPanel()}
+`;}
+
+function renderFreeBetsPanel(){
+  const all=PROFILES.flatMap(pr=>(state[pr].freeBets||[]).map(fb=>({...fb,_pr:pr})));
+  const pending=all.filter(fb=>fb.status==='Pending');
+  const used=all.filter(fb=>fb.status==='Used');
+  if(all.length===0)return '';
+  return `<div class="card" style="margin-top:12px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div style="font-size:13px;font-weight:500;color:#F0F0F5">Free Bets</div>
+      ${pending.length>0?`<span style="font-size:11px;background:#0F6E56;color:#9FE1CB;padding:3px 8px;border-radius:20px">${pending.length} pending</span>`:''}
+    </div>
+    ${pending.length>0?`
+    <div style="margin-bottom:8px">
+      ${pending.map(fb=>`
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:0.5px solid rgba(255,255,255,0.08)">
+        <div>
+          <div style="font-size:13px;color:#F0F0F5">${fb.bookie}</div>
+          <div style="font-size:11px;color:#9A9590">${fb._pr.toUpperCase()} · ${fb.date}</div>
+        </div>
+        <button onclick="markFreeBetUsed('${fb._pr}','${fb.id}')" style="font-size:11px;padding:4px 10px;border-radius:6px;border:0.5px solid rgba(255,255,255,0.2);background:#3D4349;color:#F0F0F5;cursor:pointer">Mark used</button>
+      </div>`).join('')}
+    </div>`:''}
+    ${used.length>0?`
+    <details style="margin-top:4px">
+      <summary style="font-size:11px;color:#9A9590;cursor:pointer;list-style:none">▸ ${used.length} used</summary>
+      <div style="margin-top:6px">
+        ${used.map(fb=>`
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:0.5px solid rgba(255,255,255,0.06)">
+          <div>
+            <div style="font-size:12px;color:#888780;text-decoration:line-through">${fb.bookie}</div>
+            <div style="font-size:11px;color:#888780">${fb._pr.toUpperCase()} · ${fb.date}</div>
+          </div>
+          <span style="font-size:10px;color:#888780">Used</span>
+        </div>`).join('')}
+      </div>
+    </details>`:''}
+  </div>`;
+}
+
+function markFreeBetUsed(pr,id){
+  const fb=(state[pr].freeBets||[]).find(f=>String(f.id)===String(id));
+  if(fb){fb.status='Used';save('freeBetUsed');render();}
+}
+
+// ── PENDING ──────────────────────────────────────────────────────────────────
+function renderPending(){
+  const pending=pendingAll();
+  if(!pending.length)return`<div style="text-align:center;padding:60px 20px"><i class="ti ti-circle-check" style="font-size:48px;color:#22C55E" aria-hidden="true"></i><div style="font-size:15px;font-weight:500;margin-top:12px;color:#F0EDE8">All settled</div></div>`;
+  return`
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+    <div class="metric-card"><div class="metric-label">Pending</div><div class="metric-value warn">${pending.length}</div></div>
+    <div class="metric-card"><div class="metric-label">Expected P&L</div><div class="metric-value pos" style="font-size:20px">${fmtS(pending.reduce((a,t)=>a+(t.pnl||0),0))}</div></div>
+  </div>
+  ${pending.map(t=>{
+    const isFB=isFreeBet(t.type);
+    return`<div class="pending-card" id="pcard-${t.id}">
+      <div class="pending-event">${t.event||'Unnamed event'}</div>
+      <div class="pending-meta">
+        <span class="${pillClass(t.type)}">${t.type}</span>${acctPill(t._acct)}
+        <span style="font-size:11px;color:#C8C5BF">${t.date}</span>
+        <span style="font-size:11px;color:#C8C5BF">${t.bookie||'—'}</span>
+        ${isFB?'<span class="badge" style="background:#EAF3DE;color:#3B6D11">SNR</span>':''}
+      </div>
+      <div class="pending-info">
+        ${t.bstake?`<div class="pinfo-item"><span class="pinfo-label">Back</span><span class="pinfo-val">£${t.bstake} @ ${t.bodds}</span></div>`:''}
+        <div class="pinfo-item"><span class="pinfo-label">P&L</span><span class="pinfo-val pos">${fmtS(t.pnl||0)}</span></div>
+        <div style="margin-left:auto"><button class="btn-sm btn-sm-edit" onclick="editPnl('${t._acct}',${t.id})">Edit P&L</button></div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn-won" onclick="settleBet('${t._acct}',${t.id},'Won')"><i class="ti ti-check" aria-hidden="true"></i> Won</button>
+        <button class="btn-lost" onclick="settleBet('${t._acct}',${t.id},'Lost')"><i class="ti ti-x" aria-hidden="true"></i> Lost</button>
+      </div>
+    </div>`;
+  }).join('')}`;
+}
+
+function applyBalanceOnSettle(tx,p,result){
+  const isFB=isFreeBet(tx.type);
+  const bstake=tx.bstake||0,bodds=tx.bodds||0,pnl=tx.pnl||0,exchange=tx.exchange;
+  if(result==='Won'){
+    if(isFB){
+      // Free bet SNR: winnings only = (odds - 1) × stake. Stake not returned.
+      if(tx.bookie&&p.bookies[tx.bookie])
+        p.bookies[tx.bookie].bal=(p.bookies[tx.bookie].bal||0)+((bodds-1)*bstake);
+    }else{
+      // Normal bet won: full return = odds × stake (stake was deducted at log time)
+      if(tx.bookie&&p.bookies[tx.bookie])
+        p.bookies[tx.bookie].bal=(p.bookies[tx.bookie].bal||0)+(bodds*bstake);
+    }
+  }else if(result==='Lost'){
+    // Lost: lay profit goes to exchange. Bookie already reduced at log time for normal bets.
+    if(exchange&&state.exchanges[exchange]!==undefined)
+      state.exchanges[exchange]=(state.exchanges[exchange]||0)+pnl;
+  }
+}
+
+function applyBalanceAtLog(tx,p){
+  if(tx.result==='Pending'){
+    // Only deduct stake for normal bets — free bets don't use your money
+    if(!isFreeBet(tx.type)&&tx.bookie&&p.bookies[tx.bookie])
+      p.bookies[tx.bookie].bal=(p.bookies[tx.bookie].bal||0)-(tx.bstake||0);
+  }else{
+    // Logged as already settled — for normal bets deduct stake first, then apply result
+    if(!isFreeBet(tx.type)&&tx.result==='Lost'&&tx.bookie&&p.bookies[tx.bookie])
+      p.bookies[tx.bookie].bal=(p.bookies[tx.bookie].bal||0)-(tx.bstake||0);
+    applyBalanceOnSettle(tx,p,tx.result);
+  }
+}
+
+function settleBet(acct,id,result){
+  const p=state[acct];const tx=(p.transactions||[]).find(t=>t.id===id);if(!tx||tx.result!=='Pending')return;
+  tx.result=result;applyBalanceOnSettle(tx,p,result);if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('settle');
+  const card=document.getElementById('pcard-'+id);
+  if(card){card.style.transition='opacity .25s,transform .25s';card.style.opacity='0';card.style.transform='translateY(-6px)';setTimeout(()=>{card.remove();updateBadge();},260);}
+  showToast(`${result==='Won'?'Won':'Lost'} — ${fmtS(tx.pnl||0)}`,result==='Won'?'success':'error');
+  setTimeout(render,300);
+}
+
+function editPnl(acct,id){
+  const tx=state[acct].transactions.find(t=>t.id===id);if(!tx)return;
+  document.getElementById('modal-root').innerHTML=`
+  <div class="modal-bg" onclick="if(event.target===this)closeModal()">
+    <div class="modal">
+      <div class="modal-handle"></div>
+      <div class="modal-title">Edit P&L</div>
+      <div class="modal-sub">${tx.event||tx.bookie||'Transaction'} · ${tx.date}</div>
+      <div style="margin-bottom:12px">
+        <div class="form-label">Current P&L</div>
+        <div style="font-size:24px;font-weight:500;color:${(tx.pnl||0)>=0?'#22C55E':'#F87171'}">${fmtS(tx.pnl||0)}</div>
+      </div>
+      <div style="margin-bottom:4px">
+        <div class="form-label">New P&L (£)</div>
+        <input type="number" id="modal-pnl" step="0.01" value="${(tx.pnl||0).toFixed(2)}" inputmode="decimal" style="font-size:20px;font-weight:500;border-color:#22C55E;background:#f0faf5"/>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-primary" style="flex:1" onclick="confirmPnlEdit('${acct}',${id})">Save</button>
+        <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      </div>
+    </div>
+  </div>`;
+  setTimeout(()=>document.getElementById('modal-pnl')?.focus(),50);
+}
+
+function confirmPnlEdit(acct,id){
+  const newPnl=parseFloat(document.getElementById('modal-pnl')?.value);if(isNaN(newPnl))return;
+  const p=state[acct];const tx=p.transactions.find(t=>t.id===id);if(!tx)return;
+  const diff=newPnl-(tx.pnl||0);tx.pnl=newPnl;
+  // P&L edit only affects exchange (lay profit) not bookie balance
+  // Bookie balance is set from odds×stake on settlement, not from P&L
+  if(tx.result==='Lost'&&tx.exchange&&state.exchanges[tx.exchange]!==undefined)
+    state.exchanges[tx.exchange]=(state.exchanges[tx.exchange]||0)+diff;
+  if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('editPnl');closeModal();showToast(`P&L updated to ${fmtS(newPnl)}`);render();
+}
+
+function closeModal(){document.getElementById('modal-root').innerHTML='';}
+
+// ── ADD FORM ─────────────────────────────────────────────────────────────────
+function renderAdd(prefill){
+  const p=state[formAccount];const pf=prefill||{};
+  const exchOpts=EXCHANGES.map(e=>`<option${(pf.exchange||lastExchange)===e?' selected':''}>${e}</option>`).join('');
+  const topTypes=['Boost','Qualifier','Free Bet'];
+  const moreTypes=['Mug','Extra Place','2Up','MBAL','Cash Back','Cash Out','Arb'];
+  const isMoreSel=moreTypes.includes(selectedBetType);
+  return`
+  ${lastSavedTrade&&!prefill?`<div style="background:#2C3136;border:0.5px solid rgba(255,255,255,0.09);border-radius:12px;padding:12px 16px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:10px">
+    <div style="min-width:0">
+      <div style="font-size:10px;color:#9A9590;font-weight:500;text-transform:uppercase;letter-spacing:.3px;margin-bottom:3px">Last saved</div>
+      <div style="font-size:13px;font-weight:500;color:#F0EDE8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${lastSavedTrade.bookie}${lastSavedTrade.event?' · '+lastSavedTrade.event:''}</div>
+      <div style="font-size:11px;color:#9A9590;margin-top:2px">${lastSavedTrade.type} · ${PROFILE_LABELS[lastSavedTrade._acct]||lastSavedTrade._acct}</div>
+    </div>
+    <button onclick="duplicateTrade(lastSavedTrade._acct,null,lastSavedTrade)" style="flex-shrink:0;padding:8px 14px;border-radius:8px;border:0.5px solid #185FA5;background:#7A4F00;color:#F5C842;font-family:system-ui,-apple-system,sans-serif;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap"><i class="ti ti-copy"></i> Duplicate</button>
+  </div>`:''}
+  <div class="card">
+    <div class="card-header">
+      <div style="display:flex;align-items:center;gap:8px">
+        <div id="form-dot" style="width:8px;height:8px;border-radius:50%;background:${profileColor(formAccount)}"></div>
+        <span class="card-title">Log trade${prefill?' · duplicated':''}</span>
+      </div>
+    </div>
+    <div class="card-body" style="padding-bottom:80px">
+
+      <div class="form-section">
+        <div class="form-label">Account</div>
+        <div class="acct-selector">${PROFILES.map(pr=>`<button class="acct-sel-btn ${formAccount===pr?'active-'+pr:''}" id="facc-${pr}" onclick="setFormAccount('${pr}')">${profileLabel(pr)}</button>`).join('')}</div>
+      </div>
+
+      <div class="form-section">
+        <div class="form-label">Type</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">
+          ${topTypes.map(t=>`<button onclick="selectBetType('${t}')" style="flex:1;padding:10px 6px;border-radius:8px;border:0.5px solid ${selectedBetType===t?'transparent':'rgba(255,255,255,0.10)'};background:${selectedBetType===t?getTypeColor(t):'#252629'};color:${selectedBetType===t?getTypeTextColor(t):'#C8C5BF'};font-family:system-ui,-apple-system,sans-serif;font-size:13px;font-weight:500;cursor:pointer;transition:all .15s">${t}</button>`).join('')}
+        </div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center">
+          ${(showMoreTypes||isMoreSel||['Deposit','Withdrawal','Exchange Deposit','Exchange Withdrawal','Balance Amendment'].includes(selectedBetType))?[...moreTypes,'Deposit','Withdrawal','Exchange Deposit','Exchange Withdrawal','Balance Amendment'].map(t=>`<div class="type-pill${selectedBetType===t?' sel sel-'+t.toLowerCase().replace(/\s/g,''):''}" data-type="${t}" onclick="selectBetType('${t}')">${t}</div>`).join(''):''}
+          <div class="type-pill${showMoreTypes?' sel':''}" onclick="toggleMoreTypes()" style="${showMoreTypes?'background:#575A65;color:#B4B2A9;border-color:#9A9590':''}">${showMoreTypes?'Less ▲':'More ▼'}</div>
+        </div>
+      </div>
+
+      <div id="form-fields">
+        <div style="display:grid;grid-template-columns:100px 1fr 1fr;gap:8px;margin-bottom:8px">
+          <div class="form-group"><div class="form-label">Date</div><input type="text" id="f-date" placeholder="DD/MM/YYYY" value="${todayStr()}" style="font-size:12px;padding:7px 9px"/></div>
+          <div class="form-group" id="fg-bookie"><div class="form-label">Bookmaker</div>
+            <div style="position:relative">
+              <input type="text" id="f-bookie-search" placeholder="Search…" autocomplete="off" oninput="filterBookieDropdown(this.value)" onfocus="showBookieDropdown()" value="${pf.bookie||''}" style="padding-right:10px"/>
+              <input type="hidden" id="f-bookie" value="${pf.bookie||''}"/>
+              <div id="bookie-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:50;background:#3D4349;border:0.5px solid rgba(255,255,255,0.10);border-radius:8px;margin-top:3px;max-height:200px;overflow-y:auto;-webkit-overflow-scrolling:touch"></div>
+            </div>
+          </div>
+          <div class="form-group" id="fg-exchange"><div class="form-label">Exchange</div><select id="f-exchange"><option value="">—</option>${exchOpts}</select></div>
+        </div>
+
+        ${recentBookies.length?`<div id="fg-recent-bookies" style="margin-bottom:8px">
+          <div class="form-label">Recent</div>
+          <div style="display:flex;gap:5px;flex-wrap:wrap">${recentBookies.map(b=>`<button onclick="selectBookie('${b.replace(/'/g,"\\'")}');document.getElementById('f-bookie-search').value='${b.replace(/'/g,"\\'")}'" style="padding:4px 10px;border-radius:20px;border:0.5px solid rgba(255,255,255,0.09);background:#3D4349;color:#B4B2A9;font-family:system-ui,-apple-system,sans-serif;font-size:11px;cursor:pointer;white-space:nowrap">${b}</button>`).join('')}</div>
+        </div>`:''}
+
+        <div class="form-row single" id="fg-event"><div class="form-group"><div class="form-label" style="color:#9A9590">Event <span style="font-size:9px;text-transform:none;letter-spacing:0">(optional)</span></div><input type="text" id="f-event" placeholder="e.g. Arsenal vs Chelsea" value="${pf.event||''}" style="font-size:12px;padding:7px 10px;background:#4A4D58;border-color:rgba(255,255,255,0.09)"/></div></div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px" id="fg-stake-odds">
+          <div class="form-group" id="fg-bstake"><div class="form-label">Back stake (£)</div><input type="number" id="f-bstake" placeholder="0.00" step="0.01" inputmode="decimal" value="${pf.bstake||''}"/></div>
+          <div class="form-group" id="fg-bodds"><div class="form-label">Back odds</div><input type="number" id="f-bodds" placeholder="2.00" step="0.01" inputmode="decimal" value="${pf.bodds||''}"/></div>
+        </div>
+
+        <div style="margin-bottom:8px" id="fg-comm-toggle">
+          ${showComm?`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:end">
+            <div class="form-group"><div class="form-label">Commission (%)</div><input type="number" id="f-comm" placeholder="0" step="0.1" inputmode="decimal" value="${pf.comm||0}"/></div>
+            <button onclick="toggleComm()" style="padding:9px 12px;border-radius:8px;border:0.5px solid rgba(255,255,255,0.10);background:#3D4349;color:#9A9590;font-family:system-ui,-apple-system,sans-serif;font-size:11px;cursor:pointer;margin-bottom:1px">Remove</button>
+          </div>`
+          :`<button onclick="toggleComm()" style="padding:6px 12px;border-radius:20px;border:0.5px solid rgba(255,255,255,0.10);background:transparent;color:#9A9590;font-family:system-ui,-apple-system,sans-serif;font-size:11px;cursor:pointer"><input type="hidden" id="f-comm" value="0"/>+ Add commission</button>`}
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px" id="fg-result-pnl">
+          <div class="form-group" id="fg-result"><div class="form-label">Result</div><select id="f-result"><option value="Pending">Pending</option><option value="Won">Won</option><option value="Lost">Lost</option></select></div>
+          <div class="form-group" id="fg-pnl"><div class="form-label">P&L (£) <span style="color:#22C55E;font-size:10px">your figure</span></div><input type="number" id="f-pnl" placeholder="0.00" step="0.01" inputmode="decimal" value="${pf.pnl||''}"/></div>
+        </div>
+
+        <div class="form-row single" id="fg-amount" style="display:none"><div class="form-group"><div class="form-label">Amount (£)</div><input type="number" id="f-amount" placeholder="0.00" step="0.01" inputmode="decimal" oninput="updateFlowPreview()"/></div></div>
+        <div class="form-row single" id="fg-exchbank" style="display:none"><div class="form-group"><div class="form-label">Linked bank</div><div class="dest-selector">${PROFILES.map(pr=>`<button class="dest-btn ${exchTransferBank===pr?'active':''}" id="ebank-${pr}" onclick="setExchBank('${pr}')">${profileLabel(pr)}</button>`).join('')}</div></div></div>
+        <div class="form-row single" id="fg-amend-target" style="display:none"><div class="form-group"><div class="form-label">Amend</div><select id="f-amend-target" onchange="updateAmendCurrent()"><option value="">— select —</option><option value="bank">Bank account</option><optgroup label="Bookmakers">${Object.keys(p.bookies||{}).map(b=>`<option value="bookie:${b}">${b}</option>`).join('')}</optgroup></select></div></div>
+        <div class="form-row" id="fg-amend-bal">
+          <div class="form-group" id="fg-amend-current" style="display:none"><div class="form-label">Current balance</div><input type="text" id="f-amend-current" readonly style="color:#9A9590"/></div>
+          <div class="form-group" id="fg-amend-new" style="display:none"><div class="form-label">New balance (£)</div><input type="number" id="f-amend-new" placeholder="0.00" step="0.01" inputmode="decimal"/></div>
+        </div>
+        <div class="form-row single" id="fg-amend-reason" style="display:none"><div class="form-group"><div class="form-label">Reason</div><input type="text" id="f-amend-reason" placeholder="e.g. Casino offer, correction…"/></div></div>
+        <div class="form-row single" id="fg-notes"><div class="form-group"><div class="form-label" style="color:#9A9590">Notes <span style="font-size:9px;text-transform:none;letter-spacing:0">(optional)</span></div><input type="text" id="f-notes" placeholder="Any extra details…" value="${pf.notes||''}" style="font-size:12px;padding:7px 10px;background:#4A4D58;border-color:rgba(255,255,255,0.09)"/></div></div>
+      </div>
+
+      <div id="flow-preview" style="display:none" class="flow-preview"><i class="ti ti-arrows-exchange" aria-hidden="true"></i><span id="flow-text"></span></div>
+      <div id="form-msg" style="margin-bottom:6px;font-size:12px;text-align:center;color:#F87171"></div>
+    </div>
+  </div>
+  <div style="position:fixed;bottom:calc(58px + env(safe-area-inset-bottom));left:0;right:0;padding:10px 16px;background:#343A40;border-top:0.5px solid rgba(255,255,255,0.08);display:flex;gap:8px;z-index:90;max-width:680px;margin:0 auto">
+    <button class="btn btn-ghost" onclick="resetForm()" style="width:72px;flex-shrink:0">Clear</button>
+    <button class="btn btn-primary btn-full" onclick="submitTx()"><i class="ti ti-check" aria-hidden="true"></i> Save trade</button>
+  </div>`;
+}
+
+function setFormAccount(a){
+  formAccount=a;
+  PROFILES.forEach(pr=>{const b=document.getElementById('facc-'+pr);if(b)b.className='acct-sel-btn'+(a===pr?' active-'+pr:'');});
+  const dot=document.getElementById('form-dot');if(dot)dot.style.background=profileColor(a);
+  // Clear bookie search when account changes
+  const bsearch=document.getElementById('f-bookie-search');
+  if(bsearch){bsearch.value='';const bh=document.getElementById('f-bookie');if(bh)bh.value='';}
+  const dd=document.getElementById('bookie-dropdown');if(dd)dd.style.display='none';
+}
+function setExchBank(b){exchTransferBank=b;PROFILES.forEach(pr=>{const el=document.getElementById('ebank-'+pr);if(el)el.className='dest-btn'+(b===pr?' active':'');});updateFlowPreview();}
+function selectBetType(t){
+  selectedBetType=t;
+  // Re-render form so top-type buttons update
+  const mc=document.getElementById('main-content');
+  if(mc&&currentTab==='add'){
+    const keepBookie=document.getElementById('f-bookie-search')?.value||'';
+    const keepBookieVal=document.getElementById('f-bookie')?.value||'';
+    const keepExchange=document.getElementById('f-exchange')?.value||'';
+    const keepEvent=document.getElementById('f-event')?.value||'';
+    const keepStake=document.getElementById('f-bstake')?.value||'';
+    const keepOdds=document.getElementById('f-bodds')?.value||'';
+    const keepPnl=document.getElementById('f-pnl')?.value||'';
+    mc.innerHTML=renderAdd();
+    setTimeout(()=>{
+      const bs=document.getElementById('f-bookie-search');if(bs)bs.value=keepBookie;
+      const bh=document.getElementById('f-bookie');if(bh)bh.value=keepBookieVal;
+      const fe=document.getElementById('f-exchange');if(fe&&keepExchange)fe.value=keepExchange;
+      const fev=document.getElementById('f-event');if(fev)fev.value=keepEvent;
+      const fst=document.getElementById('f-bstake');if(fst)fst.value=keepStake;
+      const fod=document.getElementById('f-bodds');if(fod)fod.value=keepOdds;
+      const fp=document.getElementById('f-pnl');if(fp)fp.value=keepPnl;
+      updateFormFields();bindFormEvents();
+    },10);
+  }else{
+    document.querySelectorAll('.type-pill').forEach(el=>{el.className='type-pill';if(el.dataset.type===t)el.classList.add('sel','sel-'+t.toLowerCase().replace(/\s/g,''));});
+    updateFormFields();
+  }
+}
+function updateFormFields(){
+  const isBookieT=BOOKIE_TRANSFER.includes(selectedBetType),isExchT=EXCHANGE_TRANSFER.includes(selectedBetType),isBet=BET_ONLY.includes(selectedBetType),isAmend=selectedBetType==='Balance Amendment';
+  sh('fg-bookie',isBet||isBookieT);sh('fg-exchange',isBet||isExchT);
+  sh('fg-exchbank',isExchT);sh('fg-event',isBet);
+  sh('fg-stake-odds',isBet);sh('fg-bstake',isBet);sh('fg-bodds',isBet);
+  sh('fg-comm-toggle',isBet);sh('fg-result-pnl',isBet);sh('fg-result',isBet);sh('fg-pnl',isBet);
+  sh('fg-amount',isBookieT||isExchT);
+  sh('fg-amend-target',isAmend);sh('fg-amend-bal',isAmend);
+  sh('fg-amend-current',isAmend);sh('fg-amend-new',isAmend);sh('fg-amend-reason',isAmend);
+  sh('fg-notes',!isAmend);
+  const fp=document.getElementById('flow-preview');if(fp)fp.style.display=isExchT?'flex':'none';
+  if(isExchT)updateFlowPreview();
+}
+function sh(id,v){const el=document.getElementById(id);if(el)el.style.display=v?(el.classList.contains('form-row')||el.classList.contains('form-group')?'flex':'flex'):'none';}
+function updateAmendCurrent(){
+  const target=document.getElementById('f-amend-target')?.value,ac=document.getElementById('f-amend-current');if(!ac)return;
+  const p=state[formAccount];
+  if(target==='bank')ac.value=p.bank.toFixed(2);
+  else if(target?.startsWith('bookie:'))ac.value=((p.bookies||{})[target.slice(7)]?.bal||0).toFixed(2);
+  else ac.value='';
+}
+function updateFlowPreview(){
+  const ft=document.getElementById('flow-text'),fp=document.getElementById('flow-preview');if(!ft||!fp)return;
+  const isExchDep=selectedBetType==='Exchange Deposit',amt=parseFloat(document.getElementById('f-amount')?.value)||0,exch=document.getElementById('f-exchange')?.value||'exchange',bankLabel=`${profileLabel(exchTransferBank)}'s bank`;
+  ft.textContent=isExchDep?(amt?`${bankLabel} −£${amt.toFixed(2)} → ${exch} +£${amt.toFixed(2)}`:`${bankLabel} → ${exch}`):(amt?`${exch} −£${amt.toFixed(2)} → ${bankLabel} +£${amt.toFixed(2)}`:`${exch} → ${bankLabel}`);
+}
+function bindFormEvents(){const exchSel=document.getElementById('f-exchange');if(exchSel)exchSel.addEventListener('change',updateFlowPreview);}
+function resetForm(){
+  selectedBetType='';exchTransferBank='me';showMoreTypes=false;showComm=false;
+  // Re-render the form completely for a clean slate
+  const mc=document.getElementById('main-content');
+  if(mc&&currentTab==='add')mc.innerHTML=renderAdd();
+  updateFormFields();bindFormEvents();
+}
+
+function submitTx(){
+  const msg=document.getElementById('form-msg');
+  if(!selectedBetType){msg.textContent='Please select a transaction type.';return;}
+  const isBookieT=BOOKIE_TRANSFER.includes(selectedBetType),isExchT=EXCHANGE_TRANSFER.includes(selectedBetType),isBet=BET_ONLY.includes(selectedBetType),isAmend=selectedBetType==='Balance Amendment';
+  const date=document.getElementById('f-date').value||todayStr(),notes=document.getElementById('f-notes')?.value||'';
+  if(isAmend){
+    const target=document.getElementById('f-amend-target')?.value,newValStr=document.getElementById('f-amend-new')?.value,reason=document.getElementById('f-amend-reason')?.value||'Balance Amendment';
+    if(!target){msg.textContent='Select what to amend.';return;}
+    if(!newValStr){msg.textContent='Enter a new balance.';return;}
+    const newVal=parseFloat(newValStr);if(isNaN(newVal))return;
+    const p=state[formAccount];let oldVal,targetLabel;
+    if(target==='bank'){oldVal=p.bank;p.bank=newVal;targetLabel='Bank';}
+    else{const name=target.slice(7);oldVal=(p.bookies||{})[name]?.bal||0;p.bookies[name].bal=newVal;targetLabel=name;}
+    const diff=newVal-oldVal;if(!p.transactions)p.transactions=[];
+    p.transactions.push({id:Date.now(),date,type:'Balance Amendment',target:targetLabel,oldVal,newVal,diff,pnl:diff,notes:reason,result:'—',_acct:formAccount});
+    if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('balanceAmend');showToast(`${targetLabel} → ${fmt(newVal)}`);msg.textContent='';resetForm();setTimeout(render,100);return;
+  }
+  const bookie=document.getElementById('f-bookie')?.value||(document.getElementById('f-bookie-search')?.value||''),exchange=document.getElementById('f-exchange')?.value,event=document.getElementById('f-event')?.value||'';
+  const bstake=parseFloat(document.getElementById('f-bstake')?.value)||0,bodds=parseFloat(document.getElementById('f-bodds')?.value)||0,comm=parseFloat(document.getElementById('f-comm')?.value)||0;
+  const result=document.getElementById('f-result')?.value||'Pending',pnl=parseFloat(document.getElementById('f-pnl')?.value)||0,amount=parseFloat(document.getElementById('f-amount')?.value)||0;
+  if(isBookieT){
+    if(!bookie){msg.textContent='Select a bookmaker.';return;}
+    if(!amount){msg.textContent='Enter an amount.';return;}
+    const p=state[formAccount];
+    if(!p.bookies[bookie])p.bookies[bookie]={bal:0,status:'Active',notes:''};
+    if(selectedBetType==='Deposit'){p.bookies[bookie].bal=(p.bookies[bookie].bal||0)+amount;p.bank-=amount;}
+    else{p.bookies[bookie].bal=(p.bookies[bookie].bal||0)-amount;p.bank+=amount;}
+    if(!p.transactions)p.transactions=[];
+    p.transactions.push({id:Date.now(),date,type:selectedBetType,bookie,amount,pnl:0,notes,result:'—',_acct:formAccount});
+  }else if(isExchT){
+    if(!exchange){msg.textContent='Select an exchange.';return;}
+    if(!amount){msg.textContent='Enter an amount.';return;}
+    const ba=state[exchTransferBank];
+    if(selectedBetType==='Exchange Deposit'){state.exchanges[exchange]=(state.exchanges[exchange]||0)+amount;ba.bank-=amount;}
+    else{state.exchanges[exchange]=(state.exchanges[exchange]||0)-amount;ba.bank+=amount;}
+    if(!ba.transactions)ba.transactions=[];
+    ba.transactions.push({id:Date.now(),date,type:selectedBetType,exchange,amount,pnl:0,notes,result:'—',_acct:exchTransferBank});
+  }else if(isBet){
+    if(!bookie){msg.textContent='Select a bookmaker.';return;}
+    if(!bstake||!bodds){msg.textContent='Enter back stake and odds.';return;}
+    const p=state[formAccount];
+    if(!p.bookies[bookie])p.bookies[bookie]={bal:0,status:'Active',notes:''};
+    if(!p.transactions)p.transactions=[];
+    const tx={id:Date.now(),date,type:selectedBetType,bookie,exchange,event,bstake,bodds,comm,result,pnl,notes,_acct:formAccount};
+    p.transactions.push(tx);applyBalanceAtLog(tx,p);
+    if(selectedBetType==='Qualifier'){
+      if(!p.freeBets)p.freeBets=[];
+      p.freeBets.push({id:Date.now()+Math.random(),date,bookie,acct:formAccount,status:'Pending'});
+    }
+  }
+  // Track recent bookies and last exchange
+  const usedBookie=document.getElementById('f-bookie')?.value||(document.getElementById('f-bookie-search')?.value||'');
+  const usedExchange=document.getElementById('f-exchange')?.value||'';
+  if(usedBookie){recentBookies=([usedBookie,...recentBookies.filter(b=>b!==usedBookie)]).slice(0,8);}
+  if(usedExchange)lastExchange=usedExchange;
+  // Store last saved tx for quick duplicate
+  const lastTx={type:selectedBetType,bookie:document.getElementById('f-bookie')?.value||(document.getElementById('f-bookie-search')?.value||''),exchange:document.getElementById('f-exchange')?.value||'',event:document.getElementById('f-event')?.value||'',bstake:document.getElementById('f-bstake')?.value||'',bodds:document.getElementById('f-bodds')?.value||'',pnl:document.getElementById('f-pnl')?.value||'',_acct:formAccount};
+  lastSavedTrade=lastTx;
+  if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('logTrade');showToast('✓ Trade saved');msg.textContent='';
+  // Stay on form — keep type, bookie, exchange; clear event/stake/odds/pnl
+  const keepBookie=document.getElementById('f-bookie-search')?.value||'';
+  const keepBookieVal=document.getElementById('f-bookie')?.value||'';
+  const keepExchange=document.getElementById('f-exchange')?.value||'';
+  // Re-render keeping context
+  const mc=document.getElementById('main-content');
+  if(mc&&currentTab==='add'){
+    mc.innerHTML=renderAdd();
+    setTimeout(()=>{
+      if(keepBookie){const bs=document.getElementById('f-bookie-search');if(bs)bs.value=keepBookie;}
+      const bh=document.getElementById('f-bookie');if(bh)bh.value=keepBookieVal;
+      const fe=document.getElementById('f-exchange');if(fe&&keepExchange)fe.value=keepExchange;
+      updateFormFields();bindFormEvents();
+    },10);
+  }
+}
+
+function duplicateTrade(acct,id,rawTx){
+  const tx=rawTx||(state[acct]?.transactions||[]).find(t=>t.id===id);if(!tx)return;
+  formAccount=acct;selectedBetType=tx.type||'';
+  currentTab='add';document.querySelectorAll('.tab').forEach(el=>el.classList.remove('active'));
+  document.getElementById('tab-add')?.classList.add('active');
+  document.getElementById('profile-bar').style.display='none';
+  document.getElementById('main-content').innerHTML=renderAdd(tx);
+  updateBadge();bindFormEvents();updateFormFields();
+  document.querySelectorAll('.type-pill').forEach(el=>{el.className='type-pill';if(el.dataset.type===tx.type)el.classList.add('sel','sel-'+tx.type.toLowerCase().replace(/\s/g,''));});
+  const fb=document.getElementById('f-bookie');if(fb&&tx.bookie)fb.value=tx.bookie;
+  const fe=document.getElementById('f-exchange');if(fe&&tx.exchange)fe.value=tx.exchange;
+  showToast('Duplicated — edit and save');window.scrollTo(0,0);
+}
+
+// ── HISTORY ──────────────────────────────────────────────────────────────────
+function renderHistory(){
+  const txs=profileTxs(currentProfile),showAll=currentProfile==='both';
+  return`
+  <div class="filter-row">
+    <select class="filter-select" onchange="render()"><option value="">All types</option>${BET_TYPES.map(t=>`<option>${t}</option>`).join('')}</select>
+    <select class="filter-select" onchange="render()"><option value="">All results</option><option>Won</option><option>Lost</option><option>Pending</option></select>
+    <button class="btn-sm" onclick="exportCSV()" style="margin-left:auto"><i class="ti ti-download" aria-hidden="true"></i> CSV</button>
+  </div>
+  <div style="font-size:11px;color:#C8C5BF;margin-bottom:10px">${txs.length} transactions</div>
+  ${renderTxTable(txs,showAll)}`;
+}
+
+function renderTxTable(txs,showAcct){
+  if(!txs.length)return`<div class="empty">No transactions yet</div>`;
+  return`<div class="table-wrap"><table class="data-table"><thead><tr>
+    <th>Date</th>${showAcct?'<th>Acct</th>':''}<th>Type</th><th>Bookie</th><th>Event</th><th>Result</th><th>P&L</th><th></th>
+  </tr></thead><tbody>
+  ${txs.map(t=>{
+    const isBookieT=BOOKIE_TRANSFER.includes(t.type),isExchT=EXCHANGE_TRANSFER.includes(t.type),isAmend=t.type==='Balance Amendment',isBet=BET_ONLY.includes(t.type);
+    const pnlStr=t.result==='Pending'?`<span class="warn">pending</span>`:`<span class="${(t.pnl||0)>=0?'pos':'neg'}">${fmtS(t.pnl||0)}</span>`;
+    const resStr=t.result==='Won'?'<span class="pos">Won</span>':t.result==='Lost'?'<span class="neg">Lost</span>':t.result==='—'?'<span class="muted">—</span>':'<span class="warn">pending</span>';
+    return`<tr>
+      <td style="white-space:nowrap;font-size:11px;color:#C8C5BF">${t.date}</td>
+      ${showAcct?`<td>${acctPill(t._acct)}</td>`:''}
+      <td><span class="${pillClass(t.type)}">${t.type}</span></td>
+      <td style="font-weight:500">${isAmend?t.target:(isExchT?t.exchange:t.bookie)||'—'}</td>
+      <td style="max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#C8C5BF;font-size:11px">${t.event||t.notes||'—'}</td>
+      <td>${resStr}</td>
+      <td><div style="display:flex;align-items:center;gap:4px">${pnlStr}<button class="btn-sm btn-sm-edit" onclick="editPnl('${t._acct}',${t.id})" style="padding:3px 7px;font-size:10px"><i class="ti ti-edit" aria-hidden="true"></i></button></div></td>
+      <td style="white-space:nowrap">
+        ${isBet?`<button class="btn-sm btn-sm-dupe" onclick="duplicateTrade('${t._acct}',${t.id})" style="padding:3px 7px;font-size:10px"><i class="ti ti-copy" aria-hidden="true"></i></button> `:''}
+        <button class="btn-sm btn-sm-danger" onclick="deleteTx('${t._acct}',${t.id})" style="padding:3px 7px;font-size:10px"><i class="ti ti-trash" aria-hidden="true"></i></button>
+      </td>
+    </tr>`;
+  }).join('')}</tbody></table></div>`;
+}
+
+function deleteTx(acct,id){
+  if(!confirm('Delete this transaction? Balances will be reversed.'))return;
+  const tx=(state[acct].transactions||[]).find(t=>t.id===id);
+  if(!tx){state[acct].transactions=state[acct].transactions.filter(t=>t.id!==id);if(!deletedTxIds[acct])deletedTxIds[acct]=[];deletedTxIds[acct].push(id);if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('quickDeleteTx');render();return;}
+  const p=state[acct];
+  const isFB=isFreeBet(tx.type);
+  const bstake=tx.bstake||0,bodds=tx.bodds||0,pnl=tx.pnl||0;
+  // Reverse the balance changes that were applied when this tx was logged/settled
+  if(BET_ONLY.includes(tx.type)){
+    if(tx.result==='Pending'){
+      // Was deducted at log time — restore stake to bookie
+      if(!isFB&&tx.bookie&&p.bookies[tx.bookie])
+        p.bookies[tx.bookie].bal=(p.bookies[tx.bookie].bal||0)+bstake;
+    }else if(tx.result==='Won'){
+      // Return was added — reverse it
+      if(isFB){
+        if(tx.bookie&&p.bookies[tx.bookie])
+          p.bookies[tx.bookie].bal=(p.bookies[tx.bookie].bal||0)-((bodds-1)*bstake);
+      }else{
+        if(tx.bookie&&p.bookies[tx.bookie])
+          p.bookies[tx.bookie].bal=(p.bookies[tx.bookie].bal||0)-(bodds*bstake);
+      }
+    }else if(tx.result==='Lost'){
+      // Stake was deducted, lay profit went to exchange — reverse exchange
+      if(!isFB&&tx.bookie&&p.bookies[tx.bookie])
+        p.bookies[tx.bookie].bal=(p.bookies[tx.bookie].bal||0)+bstake;
+      if(tx.exchange&&state.exchanges[tx.exchange]!==undefined)
+        state.exchanges[tx.exchange]=(state.exchanges[tx.exchange]||0)-pnl;
+    }
+  }else if(tx.type==='Deposit'){
+    // Reverse: bookie −deposit, bank +deposit
+    if(tx.bookie&&p.bookies[tx.bookie])p.bookies[tx.bookie].bal=(p.bookies[tx.bookie].bal||0)-(tx.amount||0);
+    p.bank+=(tx.amount||0);
+  }else if(tx.type==='Withdrawal'){
+    if(tx.bookie&&p.bookies[tx.bookie])p.bookies[tx.bookie].bal=(p.bookies[tx.bookie].bal||0)+(tx.amount||0);
+    p.bank-=(tx.amount||0);
+  }else if(tx.type==='Exchange Deposit'){
+    if(tx.exchange&&state.exchanges[tx.exchange]!==undefined)state.exchanges[tx.exchange]=(state.exchanges[tx.exchange]||0)-(tx.amount||0);
+    p.bank+=(tx.amount||0);
+  }else if(tx.type==='Exchange Withdrawal'){
+    if(tx.exchange&&state.exchanges[tx.exchange]!==undefined)state.exchanges[tx.exchange]=(state.exchanges[tx.exchange]||0)+(tx.amount||0);
+    p.bank-=(tx.amount||0);
+  }
+  // Balance Amendment — reverse the diff
+  else if(tx.type==='Balance Amendment'){
+    const target=tx.target;
+    if(target==='Bank'){p.bank-=(tx.diff||0);}
+    else if(target&&p.bookies[target]){p.bookies[target].bal=(p.bookies[target].bal||0)-(tx.diff||0);}
+  }
+  state[acct].transactions=state[acct].transactions.filter(t=>t.id!==id);
+  if(!deletedTxIds[acct])deletedTxIds[acct]=[];
+  deletedTxIds[acct].push(id);
+  if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}
+  saveData('deleteTx');showToast('Transaction deleted & balances reversed');render();
+}
+
+function exportCSV(){
+  const txs=allTxs();
+  const headers=['Date','Account','Type','Bookmaker','Exchange','Event','Back Stake','Back Odds','Commission %','Result','P&L','Notes'];
+  const rows=txs.map(t=>[t.date||'',profileLabel(t._acct),t.type||'',t.bookie||'',t.exchange||'',t.event||t.notes||'',t.bstake||'',t.bodds||'',t.comm!==undefined?t.comm:'',t.result||'',t.pnl!==undefined?t.pnl.toFixed(2):'',t.notes||'']);
+  const csv=[headers,...rows].map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob=new Blob([csv],{type:'text/csv'}),url=URL.createObjectURL(blob),a=document.createElement('a');
+  a.href=url;a.download=`mbempire_${todayStr().replace(/\//g,'-')}.csv`;a.click();URL.revokeObjectURL(url);showToast('CSV exported!');
+}
+
+// ── REPORTS ──────────────────────────────────────────────────────────────────
+function renderReports(){
+  const allMap=monthlyPnl(allTxs());
+  const bookiePnl={};allTxs().forEach(t=>{if(!t.bookie||!t.pnl||t.type==='Balance Amendment')return;bookiePnl[t.bookie]=(bookiePnl[t.bookie]||0)+t.pnl;});
+  const topBookies=Object.entries(bookiePnl).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  const typePnl={};allTxs().forEach(t=>{if(!t.type||!t.pnl||t.type==='Balance Amendment')return;typePnl[t.type]=(typePnl[t.type]||0)+t.pnl;});
+  return`
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+    <div style="font-size:16px;font-weight:500;color:#F0EDE8">Reports</div>
+    <button class="btn-sm" onclick="exportCSV()"><i class="ti ti-download" aria-hidden="true"></i> Export CSV</button>
+  </div>
+  <div class="card" style="margin-bottom:12px">
+    <div class="card-header"><span class="card-title">Monthly P&L — Sports (All Accounts)</span></div>
+    <div style="padding:6px 10px;overflow-x:auto">${renderMonthBars(allMap)}</div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+    ${PROFILES.map(p=>`<div class="card"><div class="card-header"><span class="card-title" style="color:${profileColor(p)}">${profileLabel(p)}</span></div><div style="padding:6px 8px;overflow-x:auto">${renderMonthBars(monthlyPnl(state[p].transactions||[]),80)}</div></div>`).join('')}
+  </div>
+  <div class="card"><div class="card-header"><span class="card-title">Top bookies by P&L</span></div>
+    ${topBookies.length?topBookies.map(([name,pnl])=>`<div class="list-row"><div class="list-row-left"><div class="list-row-title">${name}</div></div><div class="list-row-right ${pnl>=0?'pos':'neg'}">${fmtS(pnl)}</div></div>`).join(''):'<div class="empty">No data yet</div>'}
+  </div>
+  <div class="card"><div class="card-header"><span class="card-title">P&L by type</span></div>
+    ${Object.entries(typePnl).sort((a,b)=>b[1]-a[1]).map(([type,pnl])=>`<div class="list-row"><div class="list-row-left"><span class="${pillClass(type)}">${type}</span></div><div class="list-row-right ${pnl>=0?'pos':'neg'}">${fmtS(pnl)}</div></div>`).join('')||'<div class="empty">No data yet</div>'}
+  </div>`;
+}
+
+// ── ACCOUNTS ─────────────────────────────────────────────────────────────────
+function renderAccounts(){
+  const acct=currentProfile==='both'?'me':currentProfile,p=state[acct];
+  return`
+  <div style="margin-bottom:14px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div style="font-size:13px;font-weight:500;color:#F0EDE8">Bookmakers — <span style="color:${profileColor(acct)}">${profileLabel(acct)}</span> <span style="color:#C8C5BF;font-weight:400">(${Object.keys(p.bookies||{}).length})</span></div>
+      <select class="filter-select" id="status-filter" onchange="render()"><option value="">All</option>${BOOKIE_STATUSES.map(s=>`<option>${s}</option>`).join('')}</select>
+    </div>
+    <div class="card">
+      <input class="search-input" type="text" placeholder="Search bookmakers…" oninput="filterBookies(this.value,'${acct}')"/>
+      <div id="bookie-list" style="max-height:380px;overflow-y:auto;-webkit-overflow-scrolling:touch">${renderBookieList(acct,'','')}</div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <input type="text" id="new-bookie-name" placeholder="Add new bookmaker…" style="flex:1"/>
+      <button class="btn btn-primary" style="padding:10px 16px;font-size:13px" onclick="addBookie('${acct}')">Add</button>
+    </div>
+  </div>
+  <div style="font-size:13px;font-weight:500;color:#F0EDE8;margin-bottom:10px">Bank accounts</div>
+  <div class="card" style="margin-bottom:14px">
+    ${PROFILES.map(pr=>`<div class="list-row">
+      <div class="list-row-left"><div class="list-row-title" style="display:flex;align-items:center;gap:7px"><div class="acct-dot dot-${pr}"></div>${profileLabel(pr)}'s bank</div></div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div class="list-row-right ${state[pr].bank>=0?'pos':'neg'}">${fmt(state[pr].bank)}</div>
+        <button class="btn-sm" onclick="showAmendModal('bank','${pr}',null)">Edit</button>
+      </div>
+    </div>`).join('')}
+  </div>
+  <div style="font-size:13px;font-weight:500;color:#F0EDE8;margin-bottom:10px">Exchanges (shared)</div>
+  <div class="card">
+    ${EXCHANGES.map(e=>`<div class="list-row">
+      <div class="list-row-left"><div class="list-row-title">${e}</div></div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div class="list-row-right ${state.exchanges[e]>0?'pos':state.exchanges[e]<0?'neg':''}">${fmt(state.exchanges[e])}</div>
+        <button class="btn-sm" onclick="adjustExch('${e}')">Edit</button>
+      </div>
+    </div>`).join('')}
+  </div>`;
+}
+
+function renderBookieList(acct,search,statusFilter){
+  const p=state[acct];let keys=Object.keys(p.bookies||{});
+  if(search)keys=keys.filter(b=>b.toLowerCase().includes(search.toLowerCase()));
+  if(statusFilter)keys=keys.filter(b=>p.bookies[b].status===statusFilter);
+  if(!keys.length)return`<div class="empty">No results</div>`;
+  return keys.map(b=>{const bk=p.bookies[b];
+    return`<div class="list-row" style="flex-direction:column;align-items:stretch;gap:6px;padding:10px 16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+        <div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span style="font-size:13px;font-weight:500;color:#F0EDE8">${b}</span>
+            ${statusBadge(bk.status||'Active')}
+          </div>
+          ${bk.notes?`<div style="font-size:11px;color:#C8C5BF;margin-top:2px">${bk.notes}</div>`:''}
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+          <div style="font-size:13px;font-weight:500;color:${(bk.bal||0)>0?'#22C55E':(bk.bal||0)<0?'#F87171':'#C8C5BF'}">${fmt(bk.bal||0)}</div>
+          <button class="btn-sm" onclick="showBookieModal('${acct}','${b}')">Edit</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function filterBookies(q,acct){
+  const sf=document.getElementById('status-filter')?.value||'';
+  const el=document.getElementById('bookie-list');if(el)el.innerHTML=renderBookieList(acct,q,sf);
+}
+
+function showBookieModal(acct,name){
+  const bk=state[acct].bookies[name];
+  document.getElementById('modal-root').innerHTML=`
+  <div class="modal-bg" onclick="if(event.target===this)closeModal()">
+    <div class="modal">
+      <div class="modal-handle"></div>
+      <div class="modal-title">${name}</div>
+      <div class="modal-sub">${profileLabel(acct)}'s account</div>
+      <div style="margin-bottom:12px"><div class="form-label">Balance (£)</div><input type="number" id="modal-bal" step="0.01" value="${(bk.bal||0).toFixed(2)}" inputmode="decimal" style="font-size:18px;font-weight:500"/></div>
+      <div style="margin-bottom:12px"><div class="form-label">Status</div><select id="modal-status">${BOOKIE_STATUSES.map(s=>`<option${bk.status===s?' selected':''}>${s}</option>`).join('')}</select></div>
+      <div style="margin-bottom:12px"><div class="form-label">Notes</div><textarea id="modal-notes" placeholder="e.g. Max stake £5, email verified…">${bk.notes||''}</textarea></div>
+      <div style="margin-bottom:4px"><div class="form-label">Reason for balance change</div><input type="text" id="modal-reason" placeholder="e.g. Casino offer, correction…"/></div>
+      <div class="modal-actions">
+        <button class="btn btn-primary" style="flex:1" onclick="confirmBookieEdit('${acct}','${name}')">Save</button>
+        <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      </div>
+    </div>
+  </div>`;}
+
+function confirmBookieEdit(acct,name){
+  const newBal=parseFloat(document.getElementById('modal-bal')?.value),newStatus=document.getElementById('modal-status')?.value||'Active',newNotes=document.getElementById('modal-notes')?.value||'',reason=document.getElementById('modal-reason')?.value||'Manual edit';
+  const bk=state[acct].bookies[name],oldBal=bk.bal||0;bk.status=newStatus;bk.notes=newNotes;
+  if(!isNaN(newBal)&&newBal!==oldBal){const diff=newBal-oldBal;bk.bal=newBal;if(!state[acct].transactions)state[acct].transactions=[];state[acct].transactions.push({id:Date.now(),date:todayStr(),type:'Balance Amendment',target:name,oldVal:oldBal,newVal:newBal,diff,pnl:diff,notes:reason,result:'—',_acct:acct});}
+  if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('bookieEdit');closeModal();showToast(`${name} updated`);render();
+}
+
+function showAmendModal(type,acct,name){
+  const label=type==='bank'?`${profileLabel(acct)}'s bank`:name,cur=type==='bank'?state[acct].bank:(state[acct].bookies[name]?.bal||0);
+  document.getElementById('modal-root').innerHTML=`
+  <div class="modal-bg" onclick="if(event.target===this)closeModal()">
+    <div class="modal">
+      <div class="modal-handle"></div>
+      <div class="modal-title">Edit balance</div>
+      <div class="modal-sub">${label} · Current: ${fmt(cur)}</div>
+      <div style="margin-bottom:12px"><div class="form-label">New balance (£)</div><input type="number" id="modal-val" step="0.01" value="${cur.toFixed(2)}" inputmode="decimal" style="font-size:20px;font-weight:500"/></div>
+      <div style="margin-bottom:4px"><div class="form-label">Reason (logged)</div><input type="text" id="modal-reason" placeholder="e.g. Casino offer, correction…"/></div>
+      <div class="modal-actions">
+        <button class="btn btn-primary" style="flex:1" onclick="confirmAmend('${type}','${acct}','${name||''}')">Save</button>
+        <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      </div>
+    </div>
+  </div>`;
+  setTimeout(()=>document.getElementById('modal-val')?.focus(),100);
+}
+
+function confirmAmend(type,acct,name){
+  const newVal=parseFloat(document.getElementById('modal-val')?.value),reason=document.getElementById('modal-reason')?.value||'Manual amendment';if(isNaN(newVal))return;
+  const p=state[acct];let oldVal,targetLabel;
+  if(type==='bank'){oldVal=p.bank;p.bank=newVal;targetLabel='Bank';}else{oldVal=p.bookies[name]?.bal||0;p.bookies[name].bal=newVal;targetLabel=name;}
+  const diff=newVal-oldVal;if(!p.transactions)p.transactions=[];
+  p.transactions.push({id:Date.now(),date:todayStr(),type:'Balance Amendment',target:targetLabel,oldVal,newVal,diff,pnl:diff,notes:reason,result:'—',_acct:acct});
+  if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}
+  saveData();closeModal();showToast(`${targetLabel} → ${fmt(newVal)}`);render();
+}
+
+function adjustExch(name){const cur=state.exchanges[name],val=prompt(`Set balance for ${name}:`,cur.toFixed(2));if(val===null)return;const n=parseFloat(val);if(isNaN(n))return;state.exchanges[name]=n;save('adjustExch');render();}
+function addBookie(acct){
+  const inp=document.getElementById('new-bookie-name'),name=inp?.value?.trim();if(!name)return;
+  if(!state[acct].bookies)state[acct].bookies={};
+  if(state[acct].bookies[name]){showToast('Already exists','error');return;}
+  state[acct].bookies[name]={bal:0,status:'Active',notes:''};save();inp.value='';render();
+}
+
+// ── BOOKIE SEARCH ────────────────────────────────────────────────────────────
+function getBookieList(){
+  return Object.keys(state[formAccount].bookies||{}).sort();
+}
+
+function renderBookieDropdownItems(items){
+  const dd=document.getElementById('bookie-dropdown');if(!dd)return;
+  if(!items.length){dd.innerHTML='<div style="padding:10px 12px;font-size:12px;color:#9A9590">No results</div>';return;}
+  dd.innerHTML=items.slice(0,20).map(b=>`<div onclick="selectBookie('${b.replace(/'/g,"\\'")}') " style="padding:10px 12px;font-size:13px;color:#F0EDE8;cursor:pointer;border-bottom:0.5px solid rgba(255,255,255,0.05)" onmouseenter="this.style.background='#2e2f33'" onmouseleave="this.style.background=''">${b}</div>`).join('');
+}
+
+function showBookieDropdown(){
+  const dd=document.getElementById('bookie-dropdown');if(!dd)return;
+  const q=document.getElementById('f-bookie-search')?.value||'';
+  const list=getBookieList();
+  const filtered=q?list.filter(b=>b.toLowerCase().includes(q.toLowerCase())):list;
+  renderBookieDropdownItems(filtered);
+  dd.style.display='block';
+  // Close on outside click
+  setTimeout(()=>document.addEventListener('click',closeBookieDropdownOutside,{once:true}),10);
+}
+
+function closeBookieDropdownOutside(e){
+  const dd=document.getElementById('bookie-dropdown');
+  const inp=document.getElementById('f-bookie-search');
+  if(dd&&!dd.contains(e.target)&&e.target!==inp){dd.style.display='none';}
+  else if(dd&&dd.style.display!=='none'){document.addEventListener('click',closeBookieDropdownOutside,{once:true});}
+}
+
+function filterBookieDropdown(q){
+  const dd=document.getElementById('bookie-dropdown');if(!dd)return;
+  const list=getBookieList();
+  const filtered=q?list.filter(b=>b.toLowerCase().includes(q.toLowerCase())):list;
+  renderBookieDropdownItems(filtered);
+  dd.style.display='block';
+  // Clear the hidden value if user is typing a new search
+  const bh=document.getElementById('f-bookie');if(bh)bh.value='';
+}
+
+function selectBookie(name){
+  const inp=document.getElementById('f-bookie-search');if(inp)inp.value=name;
+  const bh=document.getElementById('f-bookie');if(bh)bh.value=name;
+  const dd=document.getElementById('bookie-dropdown');if(dd)dd.style.display='none';
+}
+
+// ── GUBBING RISK TRACKER ─────────────────────────────────────────────────────
+function calcBookieRisk(acct, bookieName){
+  const txs=(state[acct].transactions||[]).filter(t=>t.bookie===bookieName&&BET_ONLY.includes(t.type));
+  const settled=txs.filter(t=>t.result==='Won'||t.result==='Lost');
+  if(settled.length<2)return null;
+
+  // Mug bets — low odds bets to appear as normal punter
+  const mugBets=txs.filter(t=>t.type==='Mug').length;
+  const mugRatio=txs.length>0?mugBets/txs.length:0;
+
+  // Free bet ratio — using every offer looks automated
+  const freeBets=txs.filter(t=>t.type==='Free Bet').length;
+  const freeBetRatio=txs.length>0?freeBets/txs.length:0;
+
+  // Average back odds — always betting high odds looks like a sharp
+  const oddsArr=txs.filter(t=>t.bodds>0).map(t=>t.bodds);
+  const avgOdds=oddsArr.length?oddsArr.reduce((a,b)=>a+b,0)/oddsArr.length:0;
+  const hasLowOddsBets=oddsArr.some(o=>o<=2.0);
+  const allHighOdds=oddsArr.length>4&&!hasLowOddsBets;
+
+  // Bets per week — very high frequency looks automated
+  const dates=txs.map(t=>{const p=t.date?.split('/');return p?.length===3?new Date(+p[2],+p[1]-1,+p[0]):null;}).filter(Boolean);
+  let betsPerWeek=0;
+  if(dates.length>1){
+    const spanWeeks=Math.max((Math.max(...dates)-Math.min(...dates))/(1000*60*60*24*7),0.1);
+    betsPerWeek=txs.length/spanWeeks;
+  }
+
+  // Total P&L — very profitable accounts get restricted faster
+  const totalPnl=settled.reduce((a,t)=>a+(t.pnl||0),0);
+
+  // Score: 0 (safe) to 100 (high risk)
+  let score=0;
+  const flags=[];
+
+  // 1. Mug bet ratio — biggest factor
+  if(mugRatio===0&&txs.length>4){
+    score+=40;flags.push('No mug bets logged on this bookie');
+  } else if(mugRatio<0.1&&txs.length>4){
+    score+=25;flags.push(`Very low mug bet ratio (${Math.round(mugRatio*100)}%)`);
+  } else if(mugRatio<0.2&&txs.length>6){
+    score+=12;flags.push(`Low mug bet ratio (${Math.round(mugRatio*100)}%)`);
+  }
+
+  // 2. Always high odds — no low-odds bets ever placed
+  if(allHighOdds){
+    score+=25;flags.push(`Always high odds — avg ${avgOdds.toFixed(2)}, no bets under 2.0`);
+  } else if(avgOdds>3.5&&txs.length>5){
+    score+=12;flags.push(`High average odds (${avgOdds.toFixed(2)}) — add some low-odds bets`);
+  }
+
+  // 3. High free bet ratio — looks like pure bonus hunting
+  if(freeBetRatio>0.65&&txs.length>4){
+    score+=20;flags.push(`Mostly free bets (${Math.round(freeBetRatio*100)}%) — mix in qualifiers`);
+  } else if(freeBetRatio>0.45&&txs.length>4){
+    score+=10;flags.push(`High free bet ratio (${Math.round(freeBetRatio*100)}%)`);
+  }
+
+  // 4. High P&L — very profitable accounts attract attention
+  if(totalPnl>500){
+    score+=15;flags.push(`High profit on this bookie (£${totalPnl.toFixed(0)})`);
+  } else if(totalPnl>250){
+    score+=8;flags.push(`Good profit (£${totalPnl.toFixed(0)}) — monitor`);
+  }
+
+  // 5. Very high bet frequency
+  if(betsPerWeek>20){
+    score+=10;flags.push(`Very high frequency (${betsPerWeek.toFixed(1)} bets/week)`);
+  } else if(betsPerWeek>10){
+    score+=5;flags.push(`High frequency (${betsPerWeek.toFixed(1)} bets/week)`);
+  }
+
+  score=Math.min(score,100);
+  const level=score>=55?'red':score>=25?'amber':'green';
+  return{score,level,flags,txCount:txs.length,settled:settled.length,mugRatio,freeBetRatio,avgOdds,hasLowOddsBets,betsPerWeek,totalPnl};
+}
+
+function renderRisk(){
+  // Gather all bookies across all accounts with enough data
+  const allRisks=[];
+  PROFILES.forEach(acct=>{
+    Object.keys(state[acct].bookies||{}).forEach(bookie=>{
+      const risk=calcBookieRisk(acct,bookie);
+      if(risk)allRisks.push({acct,bookie,risk});
+    });
+  });
+
+  if(!allRisks.length)return`<div style="text-align:center;padding:60px 20px"><i class="ti ti-shield" style="font-size:48px;color:#9A9590" aria-hidden="true"></i><div style="font-size:15px;font-weight:500;margin-top:12px;color:#F0EDE8">No risk data yet</div><div style="font-size:13px;color:#9A9590;margin-top:6px">Log at least 2 settled bets per bookie to see risk analysis</div></div>`;
+
+  const red=allRisks.filter(r=>r.risk.level==='red');
+  const amber=allRisks.filter(r=>r.risk.level==='amber');
+  const green=allRisks.filter(r=>r.risk.level==='green');
+
+  // Sort: red first, then amber, then green, within each by score desc
+  const sorted=[...red,...amber,...green].sort((a,b)=>{
+    const order={red:0,amber:1,green:2};
+    if(order[a.risk.level]!==order[b.risk.level])return order[a.risk.level]-order[b.risk.level];
+    return b.risk.score-a.risk.score;
+  });
+
+  return`
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px">
+    <div class="metric-card" style="background:#791F1F">
+      <div class="metric-label" style="color:#F09595"><i class="ti ti-shield-x" aria-hidden="true"></i>High risk</div>
+      <div class="metric-value" style="color:#F09595">${red.length}</div>
+      <div class="metric-sub" style="color:#F09595">bookies</div>
+    </div>
+    <div class="metric-card" style="background:#5C3800">
+      <div class="metric-label" style="color:#F0A500"><i class="ti ti-shield-half" aria-hidden="true"></i>Medium</div>
+      <div class="metric-value" style="color:#F0A500">${amber.length}</div>
+      <div class="metric-sub" style="color:#F0A500">bookies</div>
+    </div>
+    <div class="metric-card" style="background:#14532D">
+      <div class="metric-label" style="color:#86EFAC"><i class="ti ti-shield-check" aria-hidden="true"></i>Low risk</div>
+      <div class="metric-value" style="color:#86EFAC">${green.length}</div>
+      <div class="metric-sub" style="color:#86EFAC">bookies</div>
+    </div>
+  </div>
+
+  ${red.length?`<div style="font-size:11px;font-weight:500;color:#F09595;letter-spacing:.3px;text-transform:uppercase;margin-bottom:8px"><i class="ti ti-alert-triangle" aria-hidden="true"></i> Action needed</div>
+  ${red.map(r=>renderRiskCard(r)).join('')}`:''}
+
+  ${amber.length?`<div style="font-size:11px;font-weight:500;color:#F0A500;letter-spacing:.3px;text-transform:uppercase;margin:12px 0 8px"><i class="ti ti-alert-circle" aria-hidden="true"></i> Monitor closely</div>
+  ${amber.map(r=>renderRiskCard(r)).join('')}`:''}
+
+  ${green.length?`<div style="font-size:11px;font-weight:500;color:#86EFAC;letter-spacing:.3px;text-transform:uppercase;margin:12px 0 8px"><i class="ti ti-circle-check" aria-hidden="true"></i> Looking good</div>
+  ${green.map(r=>renderRiskCard(r)).join('')}`:''}`;
+}
+
+function renderRiskCard(r){
+  const {acct,bookie,risk}=r;
+  const levelColors={
+    red:{bg:'#791F1F',border:'#A32D2D',text:'#F09595',badge:'#A32D2D'},
+    amber:{bg:'#5C3800',border:'#854F0B',text:'#F0A500',badge:'#854F0B'},
+    green:{bg:'#14532D',border:'#3B6D11',text:'#86EFAC',badge:'#3B6D11'},
+  }[risk.level];
+  const levelLabel={red:'High risk',amber:'Medium risk',green:'Low risk'}[risk.level];
+  const barWidth=Math.round(risk.score);
+
+  return`<div style="background:#2C3136;border:0.5px solid rgba(255,255,255,0.09);border-left:2px solid ${levelColors.border};border-radius:12px;padding:14px;margin-bottom:8px">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px">
+      <div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+          <span style="font-size:14px;font-weight:500;color:#F0EDE8">${bookie}</span>
+          ${acctPill(acct)}
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <span style="font-size:11px;color:#9A9590">${risk.txCount} bets</span>
+          <span style="font-size:11px;color:#9A9590">${Math.round(risk.mugRatio*100)}% mugged</span>
+          ${risk.avgOdds>0?`<span style="font-size:11px;color:#9A9590">avg odds ${risk.avgOdds.toFixed(2)}</span>`:''}
+          <span style="font-size:11px;color:#9A9590">£${risk.totalPnl.toFixed(0)} profit</span>
+        </div>
+      </div>
+      <span style="background:${levelColors.bg};color:${levelColors.text};border:0.5px solid ${levelColors.border};padding:3px 10px;border-radius:20px;font-size:11px;font-weight:500;flex-shrink:0">${levelLabel}</span>
+    </div>
+
+    <div style="background:#3D4349;border-radius:4px;height:4px;margin-bottom:10px;overflow:hidden">
+      <div style="background:${levelColors.text};height:100%;width:${barWidth}%;border-radius:4px;transition:width .5s"></div>
+    </div>
+
+    ${risk.flags.length?`<div style="display:flex;flex-direction:column;gap:4px">
+      ${risk.flags.map(f=>`<div style="font-size:11px;color:${levelColors.text};display:flex;align-items:center;gap:5px"><i class="ti ti-point-filled" style="font-size:8px" aria-hidden="true"></i>${f}</div>`).join('')}
+    </div>`:''}
+
+    ${risk.level!=='green'?`<div style="margin-top:10px;padding-top:10px;border-top:0.5px solid rgba(255,255,255,0.08)">
+      <div style="font-size:11px;color:#9A9590;margin-bottom:5px;font-weight:500;text-transform:uppercase;letter-spacing:.3px">Suggested action</div>
+      <div style="font-size:12px;color:#B4B2A9">${getRiskAdvice(risk)}</div>
+    </div>`:''}
+  </div>`;
+}
+
+function getRiskAdvice(risk){
+  const tips=[];
+  if(risk.mugRatio<0.2)tips.push('Log more mug bets on this bookie — aim for 1 mug per 3–4 matched bets');
+  if(!risk.hasLowOddsBets||risk.avgOdds>3.5)tips.push('Place some bets at lower odds (1.3–2.0) to look like a normal punter');
+  if(risk.freeBetRatio>0.5)tips.push('Mix in more qualifying and mug bets alongside free bet usage');
+  if(risk.totalPnl>300)tips.push('Consider a gradual withdrawal to avoid drawing attention');
+  if(risk.betsPerWeek>15)tips.push('Reduce bet frequency — spread bets across more days');
+  return tips.length?tips.join(' · '):'Keep logging mug bets regularly to maintain a natural pattern';
+}
+
+
+// ── CASINO FORM FUNCTIONS ─────────────────────────────────────────────────────
+function setCasinoView(i){
+  casinoView=['log','history','monthly','summary'][i];
+  render();
+}
+
+function switchCasinoView(v){
+  casinoView=v;
+  const el=document.getElementById('casino-view');
+  if(!el)return;
+  if(v==='log')el.innerHTML=renderCasinoForm();
+  else if(v==='history')el.innerHTML=renderCasinoHistory();
+  else if(v==='monthly')el.innerHTML=renderCasinoMonthly();
+  else el.innerHTML=renderCasinoSummaryView();
+}
+
+function renderCasinoForm(){
+  const acctBtns=PROFILES.map(pr=>`<button class="acct-sel-btn ${casinoFormAcct===pr?'active-'+pr:''}" onclick="casinoFormAcct='${pr}';switchCasinoView('log')">${profileLabel(pr)}</button>`).join('');
+  return `<div class="card"><div class="card-header">
+    <div style="display:flex;align-items:center;gap:8px">
+      <div style="width:8px;height:8px;border-radius:50%;background:${profileColor(casinoFormAcct)}"></div>
+      <span class="card-title">Log casino session</span>
+    </div>
+  </div>
+  <div class="card-body" style="padding-bottom:80px">
+    <div class="form-section"><div class="form-label">Account</div>
+      <div class="acct-selector">${acctBtns}</div>
+    </div>
+    <div style="margin-bottom:10px"><div class="form-label">Operator</div>
+      <div style="display:flex;gap:6px">
+        <button onclick="casinoOperator='JG';switchCasinoView('log')" style="flex:1;padding:9px;border-radius:8px;border:0.5px solid rgba(255,255,255,0.09);background:${casinoOperator==='JG'?'#7A4F00':'#4E5260'};color:${casinoOperator==='JG'?'#F5C842':'#C8C5BF'};font-family:system-ui,-apple-system,sans-serif;font-size:13px;font-weight:500;cursor:pointer">JG</button>
+        <button onclick="casinoOperator='JP';switchCasinoView('log')" style="flex:1;padding:9px;border-radius:8px;border:0.5px solid rgba(255,255,255,0.09);background:${casinoOperator==='JP'?'#14532D':'#4E5260'};color:${casinoOperator==='JP'?'#86EFAC':'#C8C5BF'};font-family:system-ui,-apple-system,sans-serif;font-size:13px;font-weight:500;cursor:pointer">JP</button>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:120px 1fr;gap:8px;margin-bottom:8px">
+      <div class="form-group"><div class="form-label">Date</div><input type="text" id="c-date" value="${todayStr()}" style="font-size:12px;padding:7px 9px"/></div>
+      <div class="form-group"><div class="form-label">Casino / Bookie</div>
+        <div style="position:relative">
+          <input type="text" id="c-casino-search" placeholder="Search…" autocomplete="off" oninput="filterCasinoBookies(this.value)" onfocus="showCasinoBookies()" style="padding-right:10px"/>
+          <input type="hidden" id="c-casino" value=""/>
+          <div id="casino-bookie-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:50;background:#3D4349;border:0.5px solid rgba(255,255,255,0.10);border-radius:8px;margin-top:3px;max-height:180px;overflow-y:auto"></div>
+        </div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+      <div class="form-group"><div class="form-label">Starting Balance (£)</div><input type="number" id="c-start-bal" placeholder="0.00" step="0.01" inputmode="decimal" oninput="updateCasinoNet()"/></div>
+      <div class="form-group"><div class="form-label">Ending Balance (£)</div><input type="number" id="c-end-bal" placeholder="0.00" step="0.01" inputmode="decimal" oninput="updateCasinoNet()"/></div>
+    </div>
+    <div style="background:#3D4349;border-radius:8px;padding:12px;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:12px;color:#C8C5BF">P&L (Ending − Starting)</span>
+        <span id="c-net" style="font-size:20px;font-weight:500;color:#22C55E">£0.00</span>
+      </div>
+      <div style="font-size:10px;color:#9A9590;margin-top:3px">Updates bookie balance automatically</div>
+    </div>
+    <div class="form-group" style="margin-bottom:4px"><div class="form-label">Notes <span style="font-size:9px;color:#9A9590;text-transform:none">optional</span></div><input type="text" id="c-notes" placeholder="optional"/></div>
+    <div id="c-msg" style="font-size:12px;color:#F87171;margin-top:6px;text-align:center"></div>
+  </div>
+  <div style="position:fixed;bottom:calc(58px + env(safe-area-inset-bottom));left:0;right:0;padding:10px 16px;background:#343A40;border-top:0.5px solid rgba(255,255,255,0.08);display:flex;gap:8px;z-index:90;max-width:680px;margin:0 auto">
+    <button class="btn btn-ghost" onclick="resetCasinoForm()" style="width:72px;flex-shrink:0">Clear</button>
+    <button class="btn btn-primary btn-full" onclick="saveCasinoSession()"><i class="ti ti-check" aria-hidden="true"></i> Save session</button>
+  </div>
+  </div>`;
+}
+
+
+function updateCasinoNet(){
+  const startBal=parseFloat(document.getElementById('c-start-bal')?.value)||0;
+  const endBal=parseFloat(document.getElementById('c-end-bal')?.value)||0;
+  const net=endBal-startBal;
+  const el=document.getElementById('c-net');
+  if(el){el.textContent=fmtS(net);el.style.color=net>=0?'#22C55E':'#F87171';}
+}
+
+function saveCasinoSession(){
+  const msg=document.getElementById('c-msg');
+  const casino=document.getElementById('c-casino')?.value||(document.getElementById('c-casino-search')?.value?.trim()||'');
+  if(!casino){if(msg)msg.textContent='Select a casino / bookie.';return;}
+  const startBal=parseFloat(document.getElementById('c-start-bal')?.value)||0;
+  const endBal=parseFloat(document.getElementById('c-end-bal')?.value)||0;
+  const net=endBal-startBal;
+  const p=state[casinoFormAcct];
+  if(!p.bookies[casino])p.bookies[casino]={bal:0,status:'Active',notes:''};
+  p.bookies[casino].bal=(p.bookies[casino].bal||0)+net;
+  if(!p.casino)p.casino=[];
+  p.casino.push({
+    id:Date.now(),
+    date:document.getElementById('c-date')?.value||todayStr(),
+    casino,
+    operator:casinoOperator,
+    startBal,
+    endBal,
+    netProfit:net,
+    notes:document.getElementById('c-notes')?.value||'',
+    _acct:casinoFormAcct,
+  });
+  if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('casinoSession');showToast('Casino session saved!');
+  render();
+}
+
+function showCasinoBookies(){
+  filterCasinoBookies(document.getElementById('c-casino-search')?.value||'');
+}
+
+function filterCasinoBookies(q){
+  const dd=document.getElementById('casino-bookie-dropdown');
+  if(!dd)return;
+  const bookies=Object.keys(state[casinoFormAcct]?.bookies||{}).sort();
+  const filtered=q?bookies.filter(b=>b.toLowerCase().includes(q.toLowerCase())):bookies;
+  if(!filtered.length){dd.style.display='none';return;}
+  dd.innerHTML=filtered.map(b=>{
+    const safe=b.replace(/'/g,"&#39;");
+    return '<div onclick="selectCasinoBook(\x27'+safe+'\x27)" style="padding:8px 12px;cursor:pointer;font-size:13px;color:#F0EDE8;border-bottom:0.5px solid rgba(255,255,255,0.08)">'+b+'</div>';
+  }).join('');
+  dd.style.display='block';
+}
+
+function selectCasinoBook(name){
+  const s=document.getElementById('c-casino-search');
+  const h=document.getElementById('c-casino');
+  const dd=document.getElementById('casino-bookie-dropdown');
+  if(s)s.value=name;
+  if(h)h.value=name;
+  if(dd)dd.style.display='none';
+}
+
+function deleteCasinoSession(acct,id){
+  if(!confirm('Delete this casino session?'))return;
+  const session=(state[acct].casino||[]).find(s=>s.id===id);
+  if(session){
+    const p=state[acct];
+    const casino=session.casino;
+    // Reverse the P&L from bookie balance
+    const pnl=session.startBal!==undefined?session.endBal-session.startBal:session.netProfit||0;
+    if(p.bookies[casino])p.bookies[casino].bal=(p.bookies[casino].bal||0)-pnl;
+  }
+  if(!casinoDeletedIds[acct])casinoDeletedIds[acct]=[];
+  casinoDeletedIds[acct].push(id);
+  state[acct].casino=(state[acct].casino||[]).filter(s=>s.id!==id);
+  if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('deleteCasino');
+  showToast('Session deleted');render();
+}
+
+function resetCasinoForm(){
+  casinoOperator='JG';
+  ['c-casino','c-casino-search','c-start-bal','c-end-bal','c-notes'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  const d=document.getElementById('c-date');if(d)d.value=todayStr();
+  const dd=document.getElementById('casino-bookie-dropdown');if(dd)dd.style.display='none';
+  const net=document.getElementById('c-net');if(net){net.textContent='£0.00';net.style.color='#22C55E';}
+  const cv=document.getElementById('casino-view');if(cv)cv.innerHTML=renderCasinoForm();
+}
+
+// Prevent scroll wheel changing number inputs
+document.addEventListener('wheel', function(e){
+  if(document.activeElement&&document.activeElement.type==='number'){
+    document.activeElement.blur();
+  }
+}, {passive:false});
+
+async function loadApp(){
+  window._appLoading=true;
+  // Version check — clear localStorage cache if bookie list version changed
+  const BOOKIE_VERSION='v5';
+  if(localStorage.getItem('mbe_bookie_ver')!==BOOKIE_VERSION){
+    localStorage.removeItem('mbe_state');
+    localStorage.setItem('mbe_bookie_ver',BOOKIE_VERSION);
+  }
+  try{
+    await loadData();
+    migrateLegacy();
+  }catch(e){
+    console.error('Load failed:',e);
+  }finally{
+    window._appLoading=false;
+  }
+  const pb=document.getElementById('profile-bar');if(pb)pb.style.display='none';
+  switchProfile('me');
+  render();
+}
+
+function checkPin(){
+  if(sessionStorage.getItem('mbe_unlocked')==='1'){
+    document.getElementById('pin-screen').style.display='none';
+    document.getElementById('app-content').style.display='block';
+    loadApp();
+    return;
+  }
+  const pinKey='0069';
+  const ps=document.getElementById('pin-screen');
+  ps.style.cssText='display:flex;position:fixed;inset:0;background:#343A40;z-index:9999;flex-direction:column;align-items:center;justify-content:center;padding:40px 20px';
+  ps.innerHTML=`
+    <div style="font-size:22px;font-weight:500;color:#F0EDE8;margin-bottom:8px">MBWorld</div>
+    <div style="font-size:13px;color:#9A9590;margin-bottom:32px">Enter PIN to continue</div>
+    <div id="pin-dots" style="display:flex;gap:12px;margin-bottom:32px">
+      ${[0,1,2,3].map(i=>'<div style="width:14px;height:14px;border-radius:50%;border:2px solid #9A9590;background:transparent" id="pd'+i+'"></div>').join('')}
+    </div>
+    <div id="pin-error" style="font-size:12px;color:#F87171;margin-bottom:16px;min-height:18px"></div>
+    <div style="display:grid;grid-template-columns:repeat(3,72px);gap:12px">
+      ${[1,2,3,4,5,6,7,8,9,'',0,'⌫'].map(d=>`<button onclick="pinPress('${d}')" style="height:72px;border-radius:50%;border:0.5px solid rgba(255,255,255,0.10);background:#2C3136;color:#F0EDE8;font-size:${d==='⌫'?'20':'22'}px;font-weight:500;font-family:system-ui,-apple-system,sans-serif;cursor:pointer;${d===''?'visibility:hidden':''}">${d}</button>`).join('')}
+    </div>`;
+  let entry='';
+  window.pinPress=function(d){
+    if(d==='⌫'){entry=entry.slice(0,-1);}
+    else if(d!==''){entry+=d;}
+    for(let i=0;i<4;i++){
+      const dot=document.getElementById('pd'+i);
+      if(dot)dot.style.background=i<entry.length?'#F0EDE8':'transparent';
+    }
+    if(entry.length===4){
+      if(entry===pinKey){
+        sessionStorage.setItem('mbe_unlocked','1');
+        ps.style.display='none';
+        document.getElementById('app-content').style.display='block';
+        loadApp();
+      }else{
+        document.getElementById('pin-error').textContent='Incorrect PIN';
+        entry='';
+        for(let i=0;i<4;i++){const dot=document.getElementById('pd'+i);if(dot)dot.style.background='transparent';}
+      }
+    }
+  };
+}
+
+async function init(){
+  checkPin();
+}
+
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.getRegistrations().then(regs=>{
+    regs.forEach(r=>r.unregister());
+  });
+}
+init();
+</script>
+</div>
+</body>
+</html>
