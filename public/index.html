@@ -1674,25 +1674,52 @@ function renderCasinoMonthly(){
 
 function renderCasinoSummaryView(){
   const allSessions=PROFILES.flatMap(p=>(state[p].casino||[]).map(s=>({...s,_acct:p})));
+  const sessionPnl=s=>s.startBal!==undefined?s.endBal-s.startBal:s.netProfit||0;
+
+  // Split by operator
+  const jgSessions=allSessions.filter(s=>(s.operator||'JG')==='JG');
+  const jpSessions=allSessions.filter(s=>s.operator==='JP');
+  const jgPnl=jgSessions.reduce((a,s)=>a+sessionPnl(s),0);
+  const jpPnl=jpSessions.reduce((a,s)=>a+sessionPnl(s),0);
+  const totalPnl=jgPnl+jpPnl;
+  const totalSessions=allSessions.length;
+
+  // By casino
   const casinoMap={};
   allSessions.forEach(s=>{
-    const pnl=s.startBal!==undefined?s.endBal-s.startBal:s.netProfit||0;
-    if(!casinoMap[s.casino])casinoMap[s.casino]=0;
-    casinoMap[s.casino]+=pnl;
+    if(!s.casino)return;
+    casinoMap[s.casino]=(casinoMap[s.casino]||0)+sessionPnl(s);
   });
   const entries=Object.entries(casinoMap).sort((a,b)=>b[1]-a[1]);
   if(!entries.length)return '<div class="empty">No casino sessions yet</div>';
+
   const rows=entries.map(([casino,pnl])=>'<tr>'
-    +'<td style="font-size:12px">'+(casino||'Unknown')+'</td>'
-    +'<td style="text-align:right;font-size:12px;font-weight:500;color:'+(pnl>=0?'#1D9E75':'#E24B4A')+'">'+fmtS(pnl)+'</td>'
+    +'<td style="font-size:12px;word-break:break-word">'+(casino||'Unknown')+'</td>'
+    +'<td style="text-align:right;font-size:12px;font-weight:500;white-space:nowrap;color:'+(pnl>=0?'#1D9E75':'#E24B4A')+'">'+fmtS(pnl)+'</td>'
     +'</tr>').join('');
-  return '<div class="card">'
+
+  return '<div class="metric-card" style="margin-bottom:12px">'
+    +'<div class="metric-label"><i class="ti ti-cards" aria-hidden="true"></i>Combined Casino Summary</div>'
+    +'<div class="metric-value '+(totalPnl>=0?'pos':'neg')+'">'+fmtS(totalPnl)+'</div>'
+    +'<div class="metric-sub">'+totalSessions+' total sessions</div>'
+    +'<div style="margin-top:8px;padding-top:8px;border-top:0.5px solid rgba(255,255,255,0.10);display:grid;grid-template-columns:1fr 1fr;gap:8px">'
+    +'<div style="background:rgba(255,255,255,0.05);border-radius:8px;padding:10px">'
+    +'<div style="font-size:10px;color:#B0B3BE;margin-bottom:4px">Me (JG)</div>'
+    +'<div style="font-size:16px;font-weight:500;color:'+(jgPnl>=0?'#1D9E75':'#E24B4A')+'">'+fmtS(jgPnl)+'</div>'
+    +'<div style="font-size:11px;color:#8A8D98;margin-top:2px">'+jgSessions.length+' sessions</div>'
+    +'</div>'
+    +'<div style="background:rgba(255,255,255,0.05);border-radius:8px;padding:10px">'
+    +'<div style="font-size:10px;color:#B0B3BE;margin-bottom:4px">Person A (JP)</div>'
+    +'<div style="font-size:16px;font-weight:500;color:'+(jpPnl>=0?'#1D9E75':'#E24B4A')+'">'+fmtS(jpPnl)+'</div>'
+    +'<div style="font-size:11px;color:#8A8D98;margin-top:2px">'+jpSessions.length+' sessions</div>'
+    +'</div>'
+    +'</div></div>'
+    +'<div class="card">'
     +'<div class="card-header"><span class="card-title">P&L by Casino</span></div>'
-    +'<div style="overflow-x:auto">'
-    +'<table class="data-table" style="width:100%">'
-    +'<thead><tr><th>Casino / Bookie</th><th style="text-align:right">P&L (£)</th></tr></thead>'
+    +'<table class="data-table" style="width:100%;table-layout:fixed">'
+    +'<thead><tr><th style="width:70%">Casino / Bookie</th><th style="text-align:right;width:30%">P&L (£)</th></tr></thead>'
     +'<tbody>'+rows+'</tbody>'
-    +'</table></div></div>';
+    +'</table></div>';
 }
 
 
@@ -1705,7 +1732,7 @@ function renderCasinoHistory(){
     const pnl=s.endBal-s.startBal;
     return '<tr>'
       +'<td style="font-size:11px;white-space:nowrap">'+(s.date||'')+'</td>'
-      +'<td style="text-align:center"><span class="dot-'+s._acct+'" style="display:inline-block;width:6px;height:6px;border-radius:50%"></span> '+s._acct.toUpperCase()+'</td>'
+      +'<td style="text-align:center"><span class="dot-'+s._acct+'" style="display:inline-block;width:6px;height:6px;border-radius:50%"></span> '+profileLabel(s._acct)+'</td>'
       +'<td style="text-align:center;font-size:11px">'+(s.operator||'JG')+'</td>'
       +'<td style="font-size:11px">'+(s.casino||'')+'</td>'
       +'<td style="text-align:right;font-size:12px">'+fmt(s.startBal)+'</td>'
