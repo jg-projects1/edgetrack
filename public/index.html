@@ -414,9 +414,9 @@ const DEFAULT_BOOKIES=[
   'Betfred','Betgoodwin','BetMGM','Betstgeorge','BetTom','Betvickers','Betvictor','Betway',
   'Betwright','Betzone','Bingostars','Boyle','Bresbet','Buzz Casino','Bwin','Casumo',
   'Copybet','Coral','Dabble','Dazn','Double Bubble','Dragonbet','Dream Vegas','Fabulous Vegas',
-  'Fairplay','Fanteam','Fitzbet','Fitzdares','Foxy','Fruit Kings','Gala','Geoff Banks',
-  'Grosvenor','GRP','Highbet','Hollywoodbets','Hot Streak Casino','Jackpot Joy','Jackpot Mobile','Ken Howells',
-  'Kwiff','Ladbrokes','Leovegas','Livescorebet','Lottoland','Lottomart','Luckymate','Mecca Bingo',
+  'Fairplay','Fanteam','Fitzbet','Fitzdares','Foxy','Fruit Kings','Geoff Banks','Grosvenor',
+  'GRP','Highbet','Hollywoodbets','Hot Streak Casino','Jackpot Joy','Jackpot Mobile','Ken Howells','Kwiff',
+  'Ladbrokes','Leovegas','Livescorebet','LottoGo','Lottoland','Lottomart','Luckymate','Mecca Bingo',
   'Mega Riches','Meta Betting','Midnite','Monopoly','MrQ','MrVegas','Netbet','Octobet',
   'Paddy Power','Parimatch','Party Casino','Pink Casino','Planet Sport Bet','Planet Sports','Play Bingo','Priced Up',
   'Puntit','Quick Bet','Quinnbet','Rainbow Riches','Regal Wins','Royale Lounge','Skybet','Slot Boss',
@@ -458,6 +458,11 @@ function migrateLegacy(){
   if(!state.exchanges){state.exchanges={};EXCHANGES.forEach(e=>state.exchanges[e]=0);}
   EXCHANGES.forEach(e=>{if(state.exchanges[e]===undefined)state.exchanges[e]=0;});
   PROFILES.forEach(pr=>{if(!state[pr].casino)state[pr].casino=[];});
+  // If bookie list was cleaned up, save to server so KV gets updated
+  if(localStorage.getItem('mbe_bookie_cleaned')!=='v4'){
+    localStorage.setItem('mbe_bookie_cleaned','v4');
+    setTimeout(()=>saveData('bookieMigration'),2000);
+  }
 }
 
 let currentProfile='me',currentTab='dashboard',formAccount='me',selectedBetType='',exchTransferBank='me';
@@ -2925,7 +2930,7 @@ document.addEventListener('wheel', function(e){
 async function loadApp(){
   window._appLoading=true;
   // Version check — clear localStorage cache if bookie list version changed
-  const BOOKIE_VERSION='v3';
+  const BOOKIE_VERSION='v4';
   if(localStorage.getItem('mbe_bookie_ver')!==BOOKIE_VERSION){
     localStorage.removeItem('mbe_state');
     localStorage.setItem('mbe_bookie_ver',BOOKIE_VERSION);
