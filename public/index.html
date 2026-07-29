@@ -438,13 +438,20 @@ function migrateLegacy(){
     if(!state[pr])state[pr]=makeProfile();
     if(!state[pr].transactions)state[pr].transactions=[];if(!state[pr].freeBets)state[pr].freeBets=[];
     const bk=state[pr].bookies||{};
+    // Add any new bookies with Not Signed Up default
     DEFAULT_BOOKIES.forEach(b=>{if(!bk[b])bk[b]={bal:0,status:'Not Signed Up',notes:''};});
     Object.keys(bk).forEach(k=>{
       if(typeof bk[k]==='number')bk[k]={bal:bk[k],status:'Active',notes:''};
-      if(!bk[k].status)bk[k].status='Active';
+      // Only set status if completely missing — don't override existing status
+      if(!bk[k].status)bk[k].status='Not Signed Up';
       if(bk[k].notes===undefined)bk[k].notes='';
     });
-    state[pr].bookies=bk;
+    // Re-sort bookies alphabetically
+    const sorted={};
+    DEFAULT_BOOKIES.forEach(b=>{if(bk[b])sorted[b]=bk[b];});
+    // Keep any extra bookies not in DEFAULT_BOOKIES at the end
+    Object.keys(bk).forEach(b=>{if(!sorted[b])sorted[b]=bk[b];});
+    state[pr].bookies=sorted;
   });
   if(!state.exchanges){state.exchanges={};EXCHANGES.forEach(e=>state.exchanges[e]=0);}
   EXCHANGES.forEach(e=>{if(state.exchanges[e]===undefined)state.exchanges[e]=0;});
@@ -2845,6 +2852,12 @@ document.addEventListener('wheel', function(e){
 
 async function loadApp(){
   window._appLoading=true;
+  // Version check — clear localStorage cache if bookie list version changed
+  const BOOKIE_VERSION='v2';
+  if(localStorage.getItem('mbe_bookie_ver')!==BOOKIE_VERSION){
+    localStorage.removeItem('mbe_state');
+    localStorage.setItem('mbe_bookie_ver',BOOKIE_VERSION);
+  }
   try{
     await loadData();
     migrateLegacy();
