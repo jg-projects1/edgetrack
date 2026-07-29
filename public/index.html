@@ -446,11 +446,13 @@ function migrateLegacy(){
       if(!bk[k].status)bk[k].status='Not Signed Up';
       if(bk[k].notes===undefined)bk[k].notes='';
     });
-    // Re-sort bookies alphabetically
+    // Re-sort bookies alphabetically — only keep bookies in DEFAULT_BOOKIES
+    // (preserves balances, removes old/renamed entries)
     const sorted={};
-    DEFAULT_BOOKIES.forEach(b=>{if(bk[b])sorted[b]=bk[b];});
-    // Keep any extra bookies not in DEFAULT_BOOKIES at the end
-    Object.keys(bk).forEach(b=>{if(!sorted[b])sorted[b]=bk[b];});
+    DEFAULT_BOOKIES.forEach(b=>{
+      if(bk[b]){sorted[b]=bk[b];}
+      else{sorted[b]={bal:0,status:'Not Signed Up',notes:''};}
+    });
     state[pr].bookies=sorted;
   });
   if(!state.exchanges){state.exchanges={};EXCHANGES.forEach(e=>state.exchanges[e]=0);}
@@ -2853,7 +2855,7 @@ document.addEventListener('wheel', function(e){
 async function loadApp(){
   window._appLoading=true;
   // Version check — clear localStorage cache if bookie list version changed
-  const BOOKIE_VERSION='v2';
+  const BOOKIE_VERSION='v3';
   if(localStorage.getItem('mbe_bookie_ver')!==BOOKIE_VERSION){
     localStorage.removeItem('mbe_state');
     localStorage.setItem('mbe_bookie_ver',BOOKIE_VERSION);
