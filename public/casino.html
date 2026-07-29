@@ -4,95 +4,95 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
-<meta name="apple-mobile-web-app-title" content="Casino — MBEmpire"/>
+<meta name="apple-mobile-web-app-title" content="Casino — MBWorld"/>
 <meta name="theme-color" content="#3A3D47"/>
-<title>Casino — MBEmpire</title>
+<title>Casino — MBWorld</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css"/>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{height:100%;-webkit-text-size-adjust:100%}
-body{font-family:system-ui,-apple-system,sans-serif;background:#3A3D47;min-height:100%;font-size:14px;color:#e8e8e4;-webkit-tap-highlight-color:transparent}
+body{font-family:system-ui,-apple-system,sans-serif;background:#343A40;min-height:100%;font-size:14px;color:#F0EDE8;-webkit-tap-highlight-color:transparent}
 .app{display:flex;flex-direction:column;min-height:100svh}
-.topbar{background:#42454F;border-bottom:0.5px solid rgba(255,255,255,0.12);padding:14px 16px;padding-top:calc(14px + env(safe-area-inset-top));display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
-.logo{font-size:17px;font-weight:500;color:#e8e8e4}.logo span{color:#1D9E75}
-.sync-badge{display:flex;align-items:center;gap:5px;font-size:11px;color:#C0C3CE;background:#4E5260;padding:4px 10px;border-radius:20px;border:0.5px solid rgba(255,255,255,0.10)}
-.sync-dot{width:5px;height:5px;border-radius:50%;background:#1D9E75;flex-shrink:0}
+.topbar{background:#2C3136;border-bottom:0.5px solid rgba(255,255,255,0.09);padding:14px 16px;padding-top:calc(14px + env(safe-area-inset-top));display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+.logo{font-size:17px;font-weight:500;color:#F0EDE8}.logo span{color:#22C55E}
+.sync-badge{display:flex;align-items:center;gap:5px;font-size:11px;color:#C8C5BF;background:#3D4349;padding:4px 10px;border-radius:20px;border:0.5px solid rgba(255,255,255,0.08)}
+.sync-dot{width:5px;height:5px;border-radius:50%;background:#22C55E;flex-shrink:0}
 .sync-dot.syncing{background:#BA7517;animation:pulse 1s infinite}
-.sync-dot.error{background:#E24B4A}
+.sync-dot.error{background:#F87171}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
-.tab-bar{background:#42454F;border-top:0.5px solid rgba(255,255,255,0.12);padding:6px 4px;padding-bottom:calc(6px + env(safe-area-inset-bottom));display:flex;position:fixed;bottom:0;left:0;right:0;z-index:100}
-.tab{flex:1;padding:5px 2px;cursor:pointer;font-size:9px;font-weight:500;color:#B0B3BE;border:none;background:none;text-align:center;display:flex;flex-direction:column;align-items:center;gap:3px;transition:color .15s}
+.tab-bar{background:#2C3136;border-top:0.5px solid rgba(255,255,255,0.09);padding:6px 4px;padding-bottom:calc(6px + env(safe-area-inset-bottom));display:flex;position:fixed;bottom:0;left:0;right:0;z-index:100}
+.tab{flex:1;padding:5px 2px;cursor:pointer;font-size:9px;font-weight:500;color:#9A9590;border:none;background:none;text-align:center;display:flex;flex-direction:column;align-items:center;gap:3px;transition:color .15s}
 .tab i{font-size:20px;line-height:1}
-.tab.active{color:#1D9E75}
+.tab.active{color:#22C55E}
 .tab-label{font-size:9px;font-weight:500;white-space:nowrap}
 .content{flex:1;padding:14px 16px;padding-bottom:calc(72px + env(safe-area-inset-bottom));max-width:680px;margin:0 auto;width:100%}
-.card{background:#42454F;border:0.5px solid rgba(255,255,255,0.12);border-radius:12px;overflow:hidden;margin-bottom:12px}
-.card-header{padding:12px 16px;border-bottom:0.5px solid rgba(255,255,255,0.10);display:flex;align-items:center;justify-content:space-between}
-.card-title{font-size:11px;font-weight:500;color:#B0B3BE;letter-spacing:.3px;text-transform:uppercase}
+.card{background:#2C3136;border:0.5px solid rgba(255,255,255,0.09);border-radius:12px;overflow:hidden;margin-bottom:12px}
+.card-header{padding:12px 16px;border-bottom:0.5px solid rgba(255,255,255,0.08);display:flex;align-items:center;justify-content:space-between}
+.card-title{font-size:11px;font-weight:500;color:#9A9590;letter-spacing:.3px;text-transform:uppercase}
 .card-body{padding:14px 16px}
-.metric-card{background:#4E5260;border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:3px}
-.metric-label{font-size:11px;color:#C0C3CE;font-weight:500;display:flex;align-items:center;gap:4px}
+.metric-card{background:#3D4349;border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:3px}
+.metric-label{font-size:11px;color:#C8C5BF;font-weight:500;display:flex;align-items:center;gap:4px}
 .metric-label i{font-size:14px}
-.metric-value{font-size:26px;font-weight:500;letter-spacing:-1px;color:#e8e8e4;line-height:1.1}
-.metric-value.pos{color:#1D9E75}.metric-value.neg{color:#E24B4A}.metric-value.warn{color:#BA7517}
-.metric-sub{font-size:11px;color:#B0B3BE}
+.metric-value{font-size:26px;font-weight:500;letter-spacing:-1px;color:#F0EDE8;line-height:1.1}
+.metric-value.pos{color:#22C55E}.metric-value.neg{color:#F87171}.metric-value.warn{color:#BA7517}
+.metric-sub{font-size:11px;color:#9A9590}
 .list-row{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:0.5px solid rgba(255,255,255,0.05)}
 .list-row:last-child{border-bottom:none}
 .list-row-left{display:flex;flex-direction:column;gap:3px;flex:1;min-width:0;margin-right:10px}
-.list-row-title{font-size:13px;font-weight:500;color:#e8e8e4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.list-row-title{font-size:13px;font-weight:500;color:#F0EDE8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .list-row-meta{display:flex;gap:5px;align-items:center;flex-wrap:wrap}
 .list-row-right{font-size:13px;font-weight:500;flex-shrink:0}
-.list-row-right.pos{color:#1D9E75}.list-row-right.neg{color:#E24B4A}
-.pill{display:inline-flex;align-items:center;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:500;white-space:nowrap;background:#4E5260;color:#C0C3CE;border:0.5px solid transparent}
-.pill-me{background:#0C447C;color:#85B7EB;border-color:#185FA5}
+.list-row-right.pos{color:#22C55E}.list-row-right.neg{color:#F87171}
+.pill{display:inline-flex;align-items:center;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:500;white-space:nowrap;background:#3D4349;color:#C8C5BF;border:0.5px solid transparent}
+.pill-me{background:#7A4F00;color:#F5C842;border-color:#185FA5}
 .pill-wife{background:#3C3489;color:#AFA9EC;border-color:#534AB7}
-.pill-bp{background:#633806;color:#EF9F27;border-color:#854F0B}
-.pill-rq{background:#27500A;color:#97C459;border-color:#3B6D11}
-.form-label{font-size:10px;font-weight:500;color:#B0B3BE;letter-spacing:.3px;text-transform:uppercase;display:block;margin-bottom:5px}
-input[type=text],input[type=number],select{width:100%;background:#4E5260;border:0.5px solid rgba(255,255,255,0.15);border-radius:8px;padding:9px 11px;font-family:system-ui,-apple-system,sans-serif;font-size:13px;color:#e8e8e4;outline:none;-webkit-appearance:none;appearance:none;transition:border-color .15s}
+.pill-bp{background:#5C3800;color:#F0A500;border-color:#854F0B}
+.pill-rq{background:#14532D;color:#86EFAC;border-color:#3B6D11}
+.form-label{font-size:10px;font-weight:500;color:#9A9590;letter-spacing:.3px;text-transform:uppercase;display:block;margin-bottom:5px}
+input[type=text],input[type=number],select{width:100%;background:#3D4349;border:0.5px solid rgba(255,255,255,0.10);border-radius:8px;padding:9px 11px;font-family:system-ui,-apple-system,sans-serif;font-size:13px;color:#F0EDE8;outline:none;-webkit-appearance:none;appearance:none;transition:border-color .15s}
 input:focus,select:focus{border-color:rgba(255,255,255,0.25);background:#575A65}
-select option{background:#4E5260}
+select option{background:#3D4349}
 .acct-selector{display:flex;gap:5px;flex-wrap:wrap}
-.acct-sel-btn{flex:1;min-width:60px;padding:7px 5px;border-radius:8px;border:0.5px solid rgba(255,255,255,0.15);background:#4E5260;color:#C0C3CE;font-family:system-ui,-apple-system,sans-serif;font-size:12px;font-weight:500;cursor:pointer;text-align:center;transition:all .15s}
-.acct-sel-btn.active-me{background:#0C447C;color:#85B7EB;border-color:#185FA5}
+.acct-sel-btn{flex:1;min-width:60px;padding:7px 5px;border-radius:8px;border:0.5px solid rgba(255,255,255,0.10);background:#3D4349;color:#C8C5BF;font-family:system-ui,-apple-system,sans-serif;font-size:12px;font-weight:500;cursor:pointer;text-align:center;transition:all .15s}
+.acct-sel-btn.active-me{background:#7A4F00;color:#F5C842;border-color:#185FA5}
 .acct-sel-btn.active-wife{background:#3C3489;color:#AFA9EC;border-color:#534AB7}
-.acct-sel-btn.active-bp{background:#633806;color:#EF9F27;border-color:#854F0B}
-.acct-sel-btn.active-rq{background:#27500A;color:#97C459;border-color:#3B6D11}
-.btn{padding:11px 20px;border-radius:8px;font-family:system-ui,-apple-system,sans-serif;font-size:14px;font-weight:500;cursor:pointer;border:0.5px solid rgba(255,255,255,0.12);background:#4E5260;color:#e8e8e4;transition:all .15s;display:inline-flex;align-items:center;justify-content:center;gap:6px}
-.btn-primary{background:#1D9E75;color:#fff;border-color:#1D9E75}
+.acct-sel-btn.active-bp{background:#5C3800;color:#F0A500;border-color:#854F0B}
+.acct-sel-btn.active-rq{background:#14532D;color:#86EFAC;border-color:#3B6D11}
+.btn{padding:11px 20px;border-radius:8px;font-family:system-ui,-apple-system,sans-serif;font-size:14px;font-weight:500;cursor:pointer;border:0.5px solid rgba(255,255,255,0.09);background:#3D4349;color:#F0EDE8;transition:all .15s;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.btn-primary{background:#22C55E;color:#fff;border-color:#22C55E}
 .btn-full{width:100%;padding:13px}
-.btn-ghost{background:#4E5260;color:#C0C3CE;border-color:rgba(255,255,255,0.12)}
-.btn-sm{padding:4px 10px;font-size:11px;border-radius:6px;font-family:system-ui,-apple-system,sans-serif;font-weight:500;cursor:pointer;border:0.5px solid rgba(255,255,255,0.15);background:#4E5260;color:#C0C3CE}
-.btn-sm-edit{background:#633806;color:#EF9F27;border-color:#854F0B}
+.btn-ghost{background:#3D4349;color:#C8C5BF;border-color:rgba(255,255,255,0.09)}
+.btn-sm{padding:4px 10px;font-size:11px;border-radius:6px;font-family:system-ui,-apple-system,sans-serif;font-weight:500;cursor:pointer;border:0.5px solid rgba(255,255,255,0.10);background:#3D4349;color:#C8C5BF}
+.btn-sm-edit{background:#5C3800;color:#F0A500;border-color:#854F0B}
 .btn-sm-danger{background:#791F1F;color:#F09595;border-color:#A32D2D}
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;display:flex;align-items:flex-end;justify-content:center}
 @media(min-width:600px){.modal-bg{align-items:center}}
-.modal{background:#42454F;border-radius:16px 16px 0 0;border:0.5px solid rgba(255,255,255,0.15);padding:20px;padding-bottom:calc(20px + env(safe-area-inset-bottom));width:100%;max-width:500px}
+.modal{background:#2C3136;border-radius:16px 16px 0 0;border:0.5px solid rgba(255,255,255,0.10);padding:20px;padding-bottom:calc(20px + env(safe-area-inset-bottom));width:100%;max-width:500px}
 @media(min-width:600px){.modal{border-radius:14px;padding:24px}}
-.modal-handle{width:32px;height:3px;background:rgba(255,255,255,0.12);border-radius:2px;margin:0 auto 16px}
-.modal-title{font-size:16px;font-weight:500;margin-bottom:4px;color:#e8e8e4}
-.modal-sub{font-size:12px;color:#B0B3BE;margin-bottom:16px}
+.modal-handle{width:32px;height:3px;background:rgba(255,255,255,0.09);border-radius:2px;margin:0 auto 16px}
+.modal-title{font-size:16px;font-weight:500;margin-bottom:4px;color:#F0EDE8}
+.modal-sub{font-size:12px;color:#9A9590;margin-bottom:16px}
 .modal-actions{display:flex;gap:8px;margin-top:16px}
-.toast{position:fixed;bottom:calc(68px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%) translateY(16px);background:#e8e8e4;border-radius:20px;padding:10px 18px;font-size:12px;font-weight:500;color:#42454F;z-index:999;opacity:0;transition:all .25s;pointer-events:none;white-space:nowrap;max-width:90vw}
+.toast{position:fixed;bottom:calc(68px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%) translateY(16px);background:#F0EDE8;border-radius:20px;padding:10px 18px;font-size:12px;font-weight:500;color:#42454F;z-index:999;opacity:0;transition:all .25s;pointer-events:none;white-space:nowrap;max-width:90vw}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
-.loading{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:50vh;gap:12px;color:#B0B3BE;font-size:13px}
-.spinner{width:28px;height:28px;border:2px solid rgba(255,255,255,0.12);border-top-color:#1D9E75;border-radius:50%;animation:spin .7s linear infinite}
+.loading{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:50vh;gap:12px;color:#9A9590;font-size:13px}
+.spinner{width:28px;height:28px;border:2px solid rgba(255,255,255,0.09);border-top-color:#22C55E;border-radius:50%;animation:spin .7s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
-.empty{padding:30px 20px;text-align:center;color:#B0B3BE;font-size:13px}
-.pos{color:#1D9E75;font-weight:500}.neg{color:#E24B4A;font-weight:500}
+.empty{padding:30px 20px;text-align:center;color:#9A9590;font-size:13px}
+.pos{color:#22C55E;font-weight:500}.neg{color:#F87171;font-weight:500}
 .month-wrap{display:flex;align-items:flex-end;gap:6px;overflow-x:auto;padding:4px 2px}
 .month-col{display:flex;flex-direction:column;align-items:center;gap:3px;flex:0 0 auto;min-width:40px}
 .month-bar{width:32px;border-radius:3px 3px 0 0;min-height:2px}
-.month-bar.pos{background:#1D9E75}.month-bar.neg{background:#E24B4A;border-radius:0 0 3px 3px}
-.month-lbl{font-size:9px;color:#B0B3BE;font-weight:500}
+.month-bar.pos{background:#22C55E}.month-bar.neg{background:#F87171;border-radius:0 0 3px 3px}
+.month-lbl{font-size:9px;color:#9A9590;font-weight:500}
 .month-val{font-size:9px;font-weight:500}
-.month-val.pos{color:#1D9E75}.month-val.neg{color:#E24B4A}
+.month-val.pos{color:#22C55E}.month-val.neg{color:#F87171}
 </style>
 </head>
 <body>
 <div class="app">
   <div class="topbar">
-    <div class="logo">MB<span>Empire</span> <span style="font-size:12px;color:#B0B3BE;font-weight:400">Casino</span></div>
+    <div class="logo">MB<span>Empire</span> <span style="font-size:12px;color:#9A9590;font-weight:400">Casino</span></div>
     <div class="sync-badge"><div class="sync-dot" id="sync-dot"></div><span id="sync-label">Loading</span></div>
   </div>
   <div class="content" id="main-content">
@@ -110,7 +110,7 @@ select option{background:#4E5260}
 <script>
 const PROFILES=['me','wife','bp','rq'];
 const PROFILE_LABELS={me:'JG',wife:'HG',bp:'BP',rq:'RQ'};
-const PROFILE_COLORS={me:'#378ADD',wife:'#7F77DD',bp:'#BA7517',rq:'#639922'};
+const PROFILE_COLORS={me:'#F0A500',wife:'#7F77DD',bp:'#BA7517',rq:'#639922'};
 const CASINO_OFFER_TYPES=['Reload','Welcome','Free Spins','Cashback','Other'];
 
 let currentTab='log';
@@ -177,7 +177,7 @@ function fmt(v){const n=parseFloat(v)||0;return(n<0?'-':'')+'£'+Math.abs(n).toF
 function fmtS(v){const n=parseFloat(v)||0;return(n>=0?'+':'-')+'£'+Math.abs(n).toFixed(2);}
 function todayStr(){const d=new Date();return[String(d.getDate()).padStart(2,'0'),String(d.getMonth()+1).padStart(2,'0'),d.getFullYear()].join('/');}
 function profileLabel(p){return PROFILE_LABELS[p]||p;}
-function profileColor(p){return PROFILE_COLORS[p]||'#C0C3CE';}
+function profileColor(p){return PROFILE_COLORS[p]||'#C8C5BF';}
 function acctPill(a){return`<span class="pill pill-${a}">${profileLabel(a)}</span>`;}
 function casinoPnl(p){
   return(fullState[p]?.casino||[]).reduce((a,s)=>{
@@ -217,8 +217,8 @@ function renderLog(){
     <div style="margin-bottom:10px">
       <div class="form-label">Operator</div>
       <div style="display:flex;gap:6px">
-        <button onclick="operator='JG';render()" style="flex:1;padding:9px;border-radius:8px;border:0.5px solid rgba(255,255,255,0.12);background:${operator==='JG'?'#0C447C':'#4E5260'};color:${operator==='JG'?'#85B7EB':'#C0C3CE'};font-family:system-ui;font-size:13px;font-weight:500;cursor:pointer">JG</button>
-        <button onclick="operator='JP';render()" style="flex:1;padding:9px;border-radius:8px;border:0.5px solid rgba(255,255,255,0.12);background:${operator==='JP'?'#27500A':'#4E5260'};color:${operator==='JP'?'#97C459':'#C0C3CE'};font-family:system-ui;font-size:13px;font-weight:500;cursor:pointer">JP</button>
+        <button onclick="operator='JG';render()" style="flex:1;padding:9px;border-radius:8px;border:0.5px solid rgba(255,255,255,0.09);background:${operator==='JG'?'#7A4F00':'#4E5260'};color:${operator==='JG'?'#F5C842':'#C8C5BF'};font-family:system-ui;font-size:13px;font-weight:500;cursor:pointer">JG</button>
+        <button onclick="operator='JP';render()" style="flex:1;padding:9px;border-radius:8px;border:0.5px solid rgba(255,255,255,0.09);background:${operator==='JP'?'#14532D':'#4E5260'};color:${operator==='JP'?'#86EFAC':'#C8C5BF'};font-family:system-ui;font-size:13px;font-weight:500;cursor:pointer">JP</button>
       </div>
     </div>
     <div style="display:grid;grid-template-columns:120px 1fr;gap:8px;margin-bottom:8px">
@@ -227,7 +227,7 @@ function renderLog(){
         <div style="position:relative">
           <input type="text" id="c-casino-search" placeholder="Search…" autocomplete="off" oninput="filterBookies(this.value)" onfocus="showBookies()"/>
           <input type="hidden" id="c-casino" value=""/>
-          <div id="c-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:50;background:#4E5260;border:0.5px solid rgba(255,255,255,0.15);border-radius:8px;margin-top:3px;max-height:180px;overflow-y:auto"></div>
+          <div id="c-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:50;background:#3D4349;border:0.5px solid rgba(255,255,255,0.10);border-radius:8px;margin-top:3px;max-height:180px;overflow-y:auto"></div>
         </div>
       </div>
     </div>
@@ -235,17 +235,17 @@ function renderLog(){
       <div><div class="form-label">Starting Balance (£)</div><input type="number" id="c-start-bal" placeholder="0.00" step="0.01" inputmode="decimal" oninput="updateNet()"/></div>
       <div><div class="form-label">Ending Balance (£)</div><input type="number" id="c-end-bal" placeholder="0.00" step="0.01" inputmode="decimal" oninput="updateNet()"/></div>
     </div>
-    <div style="background:#4E5260;border-radius:8px;padding:12px;margin-bottom:8px">
+    <div style="background:#3D4349;border-radius:8px;padding:12px;margin-bottom:8px">
       <div style="display:flex;justify-content:space-between;align-items:center">
-        <span style="font-size:12px;color:#C0C3CE">P&L (Ending − Starting)</span>
-        <span id="c-net" style="font-size:20px;font-weight:500;color:#1D9E75">£0.00</span>
+        <span style="font-size:12px;color:#C8C5BF">P&L (Ending − Starting)</span>
+        <span id="c-net" style="font-size:20px;font-weight:500;color:#22C55E">£0.00</span>
       </div>
-      <div style="font-size:10px;color:#8A8D98;margin-top:3px">Updates bookie balance automatically</div>
+      <div style="font-size:10px;color:#9A9590;margin-top:3px">Updates bookie balance automatically</div>
     </div>
-    <div><div class="form-label">Notes <span style="font-size:9px;color:#8A8D98;text-transform:none">optional</span></div><input type="text" id="c-notes" placeholder="optional"/></div>
-    <div id="c-msg" style="font-size:12px;color:#E24B4A;margin-top:6px;text-align:center"></div>
+    <div><div class="form-label">Notes <span style="font-size:9px;color:#9A9590;text-transform:none">optional</span></div><input type="text" id="c-notes" placeholder="optional"/></div>
+    <div id="c-msg" style="font-size:12px;color:#F87171;margin-top:6px;text-align:center"></div>
   </div></div>
-  <div style="position:fixed;bottom:calc(58px + env(safe-area-inset-bottom));left:0;right:0;padding:10px 16px;background:#3A3D47;border-top:0.5px solid rgba(255,255,255,0.10);display:flex;gap:8px;z-index:90;max-width:680px;margin:0 auto">
+  <div style="position:fixed;bottom:calc(58px + env(safe-area-inset-bottom));left:0;right:0;padding:10px 16px;background:#343A40;border-top:0.5px solid rgba(255,255,255,0.08);display:flex;gap:8px;z-index:90;max-width:680px;margin:0 auto">
     <button class="btn btn-ghost" onclick="resetForm()" style="width:72px;flex-shrink:0">Clear</button>
     <button class="btn btn-primary btn-full" onclick="saveSession()"><i class="ti ti-check"></i> Save session</button>
   </div>`;
@@ -254,8 +254,8 @@ function renderLog(){
 
 function updatePendingBtns(){
   const yes=document.getElementById('c-btn-yes'),no=document.getElementById('c-btn-no');
-  if(yes){yes.style.background=casinoPending?'#633806':'#4E5260';yes.style.color=casinoPending?'#EF9F27':'#C0C3CE';}
-  if(no){no.style.background=!casinoPending?'#27500A':'#4E5260';no.style.color=!casinoPending?'#97C459':'#C0C3CE';}
+  if(yes){yes.style.background=casinoPending?'#5C3800':'#4E5260';yes.style.color=casinoPending?'#F0A500':'#C8C5BF';}
+  if(no){no.style.background=!casinoPending?'#14532D':'#4E5260';no.style.color=!casinoPending?'#86EFAC':'#C8C5BF';}
 }
 
 function updateNet(){
@@ -263,7 +263,7 @@ function updateNet(){
   const endBal=parseFloat(document.getElementById('c-end-bal')?.value)||0;
   const net=endBal-startBal;
   const el=document.getElementById('c-net');
-  if(el){el.textContent=(net>=0?'+£':'−£')+Math.abs(net).toFixed(2);el.style.color=net>=0?'#1D9E75':'#E24B4A';}
+  if(el){el.textContent=(net>=0?'+£':'−£')+Math.abs(net).toFixed(2);el.style.color=net>=0?'#22C55E':'#F87171';}
 }
 function showBookies(){
   const dd=document.getElementById('c-dropdown');if(!dd)return;
@@ -287,8 +287,8 @@ function filterBookies(q){
 }
 function renderBookieItems(items){
   const dd=document.getElementById('c-dropdown');if(!dd)return;
-  if(!items.length){dd.innerHTML='<div style="padding:10px 12px;font-size:12px;color:#B0B3BE">No results</div>';return;}
-  dd.innerHTML=items.slice(0,20).map(b=>`<div onclick="selectBookie('${b.replace(/'/g,"\\'")}') " style="padding:10px 12px;font-size:13px;color:#e8e8e4;cursor:pointer;border-bottom:0.5px solid rgba(255,255,255,0.05)" onmouseenter="this.style.background='#575A65'" onmouseleave="this.style.background=''">${b}</div>`).join('');
+  if(!items.length){dd.innerHTML='<div style="padding:10px 12px;font-size:12px;color:#9A9590">No results</div>';return;}
+  dd.innerHTML=items.slice(0,20).map(b=>`<div onclick="selectBookie('${b.replace(/'/g,"\\'")}') " style="padding:10px 12px;font-size:13px;color:#F0EDE8;cursor:pointer;border-bottom:0.5px solid rgba(255,255,255,0.05)" onmouseenter="this.style.background='#575A65'" onmouseleave="this.style.background=''">${b}</div>`).join('');
 }
 function selectBookie(name){
   const inp=document.getElementById('c-casino-search');if(inp)inp.value=name;
@@ -320,22 +320,22 @@ function resetForm(){
   ['c-casino','c-casino-search','c-start-bal','c-end-bal','c-notes'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   const d=document.getElementById('c-date');if(d)d.value=todayStr();
   const dd=document.getElementById('c-dropdown');if(dd)dd.style.display='none';
-  const net=document.getElementById('c-net');if(net){net.textContent='£0.00';net.style.color='#1D9E75';}
+  const net=document.getElementById('c-net');if(net){net.textContent='£0.00';net.style.color='#22C55E';}
 }
 function renderHistory(){
   const sessions=allSessions();
   if(!sessions.length)return`<div class="empty">No casino sessions yet</div>`;
-  return`<div class="card"><div class="card-header"><span class="card-title">All sessions</span><span style="font-size:11px;color:#B0B3BE">${sessions.length} total</span></div>
+  return`<div class="card"><div class="card-header"><span class="card-title">All sessions</span><span style="font-size:11px;color:#9A9590">${sessions.length} total</span></div>
   ${sessions.map(s=>`<div class="list-row">
     <div class="list-row-left">
-      <div class="list-row-title">${s.casino}${s.pending?` <span style="font-size:10px;color:#EF9F27">⏳ pending</span>`:''}</div>
+      <div class="list-row-title">${s.casino}${s.pending?` <span style="font-size:10px;color:#F0A500">⏳ pending</span>`:''}</div>
       <div class="list-row-meta">
-        <span class="pill" style="background:#4E5260;color:#C0C3CE">${s.offerType}</span>
+        <span class="pill" style="background:#3D4349;color:#C8C5BF">${s.offerType}</span>
         ${acctPill(s._acct)}
-        <span style="font-size:10px;color:#B0B3BE">${s.date}</span>
-        ${s.operator?`<span style="font-size:10px;font-weight:600;color:${s.operator==='JG'?'#85B7EB':'#97C459'}">${s.operator}</span>`:''}${s.wager?`<span style="font-size:10px;color:#B0B3BE">£${s.wager} wagered</span>`:''}
-        ${s.deposit?`<span style="font-size:10px;color:#EF9F27">dep £${s.deposit}</span>`:''}
-        ${s.bonusWin?`<span style="font-size:10px;color:#B0B3BE">bonus £${s.bonusWin.toFixed(2)}</span>`:''}
+        <span style="font-size:10px;color:#9A9590">${s.date}</span>
+        ${s.operator?`<span style="font-size:10px;font-weight:600;color:${s.operator==='JG'?'#F5C842':'#86EFAC'}">${s.operator}</span>`:''}${s.wager?`<span style="font-size:10px;color:#9A9590">£${s.wager} wagered</span>`:''}
+        ${s.deposit?`<span style="font-size:10px;color:#F0A500">dep £${s.deposit}</span>`:''}
+        ${s.bonusWin?`<span style="font-size:10px;color:#9A9590">bonus £${s.bonusWin.toFixed(2)}</span>`:''}
       </div>
     </div>
     <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
@@ -355,7 +355,7 @@ function addBonus(acct,id){
       <div class="modal-title">Add bonus win</div>
       <div class="modal-sub">${session.casino} · ${session.date}</div>
       <div style="margin-bottom:12px"><div class="form-label">Bonus win (£)</div>
-        <input type="number" id="modal-bonus" step="0.01" placeholder="0.00" inputmode="decimal" style="font-size:20px;font-weight:500;border-color:#1D9E75;background:#0d1f19"/>
+        <input type="number" id="modal-bonus" step="0.01" placeholder="0.00" inputmode="decimal" style="font-size:20px;font-weight:500;border-color:#22C55E;background:#0d1f19"/>
       </div>
       <div class="modal-actions">
         <button class="btn btn-primary" style="flex:1" onclick="confirmBonus('${acct}',${id})">Save</button>
@@ -424,8 +424,8 @@ function renderSummary(){
     return`<div class="list-row">
       <div class="list-row-left"><div class="list-row-title">${lbl}</div></div>
       <div style="display:flex;gap:12px;align-items:center">
-        <span style="font-size:11px;color:#85B7EB">JG: <span style="color:${mo.JG>=0?'#1D9E75':'#E24B4A'}">${fmtS(mo.JG)}</span></span>
-        <span style="font-size:11px;color:#97C459">JP: <span style="color:${mo.JP>=0?'#1D9E75':'#E24B4A'}">${fmtS(mo.JP)}</span></span>
+        <span style="font-size:11px;color:#F5C842">JG: <span style="color:${mo.JG>=0?'#22C55E':'#F87171'}">${fmtS(mo.JG)}</span></span>
+        <span style="font-size:11px;color:#86EFAC">JP: <span style="color:${mo.JP>=0?'#22C55E':'#F87171'}">${fmtS(mo.JP)}</span></span>
         <span class="list-row-right ${total>=0?'pos':'neg'}">${fmtS(total)}</span>
       </div>
     </div>`;
@@ -437,11 +437,11 @@ function renderSummary(){
       <div class="metric-label"><i class="ti ti-cards"></i>Total casino P&L</div>
       <div class="metric-value ${total>=0?'pos':'neg'}">${fmtS(total)}</div>
       <div class="metric-sub" style="display:flex;gap:10px;flex-wrap:wrap">
-        ${PROFILES.map(p=>`<span>${profileLabel(p)}: <span style="color:${casinoPnl(p)>=0?'#1D9E75':'#E24B4A'}">${fmtS(casinoPnl(p))}</span></span>`).join('')}
+        ${PROFILES.map(p=>`<span>${profileLabel(p)}: <span style="color:${casinoPnl(p)>=0?'#22C55E':'#F87171'}">${fmtS(casinoPnl(p))}</span></span>`).join('')}
       </div>
-      <div style="margin-top:6px;padding-top:6px;border-top:0.5px solid rgba(255,255,255,0.10);display:flex;gap:10px">
-        <span style="font-size:11px">JG: <span style="color:${jgPnl>=0?'#1D9E75':'#E24B4A'};font-weight:500">${fmtS(jgPnl)}</span></span>
-        <span style="font-size:11px">JP: <span style="color:${jpPnl>=0?'#1D9E75':'#E24B4A'};font-weight:500">${fmtS(jpPnl)}</span></span>
+      <div style="margin-top:6px;padding-top:6px;border-top:0.5px solid rgba(255,255,255,0.08);display:flex;gap:10px">
+        <span style="font-size:11px">JG: <span style="color:${jgPnl>=0?'#22C55E':'#F87171'};font-weight:500">${fmtS(jgPnl)}</span></span>
+        <span style="font-size:11px">JP: <span style="color:${jpPnl>=0?'#22C55E':'#F87171'};font-weight:500">${fmtS(jpPnl)}</span></span>
       </div>
     </div>
   </div>
