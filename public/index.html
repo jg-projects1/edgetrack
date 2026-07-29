@@ -2862,6 +2862,23 @@ function selectCasinoBook(name){
   if(dd)dd.style.display='none';
 }
 
+function deleteCasinoSession(acct,id){
+  if(!confirm('Delete this casino session?'))return;
+  const session=(state[acct].casino||[]).find(s=>s.id===id);
+  if(session){
+    const p=state[acct];
+    const casino=session.casino;
+    // Reverse the P&L from bookie balance
+    const pnl=session.startBal!==undefined?session.endBal-session.startBal:session.netProfit||0;
+    if(p.bookies[casino])p.bookies[casino].bal=(p.bookies[casino].bal||0)-pnl;
+  }
+  if(!casinoDeletedIds[acct])casinoDeletedIds[acct]=[];
+  casinoDeletedIds[acct].push(id);
+  state[acct].casino=(state[acct].casino||[]).filter(s=>s.id!==id);
+  if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('deleteCasino');
+  showToast('Session deleted');render();
+}
+
 function resetCasinoForm(){
   casinoOperator='JG';
   ['c-casino','c-casino-search','c-start-bal','c-end-bal','c-notes'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
