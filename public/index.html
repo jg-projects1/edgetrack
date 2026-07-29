@@ -2836,6 +2836,32 @@ function saveCasinoSession(){
   render();
 }
 
+function showCasinoBookies(){
+  filterCasinoBookies(document.getElementById('c-casino-search')?.value||'');
+}
+
+function filterCasinoBookies(q){
+  const dd=document.getElementById('casino-bookie-dropdown');
+  if(!dd)return;
+  const bookies=Object.keys(state[casinoFormAcct]?.bookies||{}).sort();
+  const filtered=q?bookies.filter(b=>b.toLowerCase().includes(q.toLowerCase())):bookies;
+  if(!filtered.length){dd.style.display='none';return;}
+  dd.innerHTML=filtered.map(b=>{
+    const safe=b.replace(/'/g,"&#39;");
+    return '<div onclick="selectCasinoBook(\x27'+safe+'\x27)" style="padding:8px 12px;cursor:pointer;font-size:13px;color:#e8e8e4;border-bottom:0.5px solid rgba(255,255,255,0.08)">'+b+'</div>';
+  }).join('');
+  dd.style.display='block';
+}
+
+function selectCasinoBook(name){
+  const s=document.getElementById('c-casino-search');
+  const h=document.getElementById('c-casino');
+  const dd=document.getElementById('casino-bookie-dropdown');
+  if(s)s.value=name;
+  if(h)h.value=name;
+  if(dd)dd.style.display='none';
+}
+
 function resetCasinoForm(){
   casinoOperator='JG';
   ['c-casino','c-casino-search','c-start-bal','c-end-bal','c-notes'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
