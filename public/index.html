@@ -350,6 +350,7 @@ async function saveData(source='unknown'){
         bank:state[pr]?.bank||0,
         bookies:state[pr]?.bookies||{},
         transactions:state[pr]?.transactions||[],
+        freeBets:state[pr]?.freeBets||[],
         deletedIds:deletedTxIds[pr]||[]
       };
     });
@@ -410,18 +411,20 @@ const EXCHANGES=['Betfair','Smarkets','Matchbook','Betdaq'];
 const BOOKIE_STATUSES=['Not Signed Up','Active','Restricted','Gubbed','Closed'];
 const DEFAULT_BOOKIES=[
   '10bet','247bet','32Red','36 Vegas','7bet','888 Sport','Admiral Casino','Arrowbet',
-  'Bally Casino','Bella Casino','Bestodds','Bet UK','Bet442','Bet600','Betano','Betfair',
-  'Betfred','Betgoodwin','BetMGM','Betstgeorge','BetTom','Betvickers','Betvictor','Betway',
-  'Betwright','Betzone','Bingostars','Boyle','Bresbet','Buzz Casino','Bwin','Casumo',
-  'Copybet','Coral','Dabble','Dazn','Double Bubble','Dragonbet','Dream Vegas','Fabulous Vegas',
-  'Fairplay','Fanteam','Fitzbet','Fitzdares','Foxy','Fruit Kings','Gala Casino','Geoff Banks',
-  'Grosvenor','GRP','Highbet','Hollywoodbets','Hot Streak Casino','Jackpot Joy','Jackpot Mobile','Ken Howells',
-  'Kwiff','Ladbrokes','Leovegas','Livescorebet','LottoGo','Lottoland','Lottomart','Luckymate',
-  'Mecca Bingo','Mega Riches','Meta Betting','Midnite','Monopoly','MrQ','MrVegas','Netbet',
-  'Octobet','Paddy Power','Parimatch','Party Casino','Pink Casino','Planet Sport Bet','Planet Sports','Play Bingo',
-  'Priced Up','Puntit','Quick Bet','Quinnbet','Rainbow Riches','Regal Wins','Royale Lounge','Skybet',
-  'Slot Boss','Slot Planet','Smooth Spins','Spin & Win','Sporting Bet','Spreadex','Stakemate','Star Sports',
-  'Sun Vegas','Swifty Sports','Talksportbet','Tigerbet','Tombola Arcade','Unibet','Vbet','Video Slots',
+  'Bally Casino','Bella Casino','Bestodds','Bet UK','Bet442','Bet600','BetAhoy','Betano',
+  'BetCrown','Betfair','Betfred','Betgoodwin','BetMGM','BetStGeorge','BetTom','Betvickers',
+  'Betvictor','Betway','Betwright','Betzone','Bingostars','Boyle','Bresbet','Buzz Casino',
+  'Bwin','Casumo','Casushi','Copybet','Coral','Dabble','Dazn','Double Bubble',
+  'Dragonbet','Dream Vegas','Fabulous Bingo','Fabulous Vegas','Fairplay','Fanteam','Fitzbet','Fitzdares',
+  'Foxy','Fruit Kings','Gala Casino','Geoff Banks','Grand Ivy','Grosvenor','GRP','Heart Bingo',
+  'Highbet','Hollywoodbets','Hot Streak','Jackpot Joy','Jackpot Mobile','Ken Howells','Kitty Bingo','Kwiff',
+  'Ladbrokes','Leovegas','Livescorebet','LottoGo','Lottoland','Lottomart','Lucky Pants','Luckymate',
+  'Magical Vegas','Mecca Bingo','Mega Riches','Meta Betting','Midnite','Monopoly','MrBen','MrQ',
+  'MrVegas','Netbet','Octobet','Paddy Power','Parimatch','Party Casino','Peachy Games','Pink Casino',
+  'Planet Sport Bet','Planet Sports','Play Bingo','PlayOjo','Priced Up','Puntit','Quick Bet','Quinnbet',
+  'Rainbow Riches','Regal Wins','Rialto','RightBet','Royale Lounge','Skybet','Slot Boss','Slot Planet',
+  'Slot Temple','Smooth Spins','Spin & Win','Sporting Bet','Spreadex','Stakemate','Star Sports','Sun Vegas',
+  'Swifty Sports','Talksportbet','Tigerbet','Tombola Arcade','Tote','Unibet','Vbet','Video Slots',
   'Virgin Bet','Virgin Games','William Hill'
 ];
 
@@ -1053,6 +1056,7 @@ function submitTx(){
     if(selectedBetType==='Qualifier'){
       if(!p.freeBets)p.freeBets=[];
       p.freeBets.push({id:Date.now()+Math.random(),date,bookie,acct:formAccount,status:'Pending'});
+      showToast('🎁 Free bet added for '+bookie+' — check Dashboard','success');
     }
   }
   // Track recent bookies and last exchange
@@ -2235,6 +2239,7 @@ function submitTx(){
     if(selectedBetType==='Qualifier'){
       if(!p.freeBets)p.freeBets=[];
       p.freeBets.push({id:Date.now()+Math.random(),date,bookie,acct:formAccount,status:'Pending'});
+      showToast('🎁 Free bet added for '+bookie+' — check Dashboard','success');
     }
   }
   // Track recent bookies and last exchange
@@ -2927,7 +2932,7 @@ document.addEventListener('wheel', function(e){
 async function loadApp(){
   window._appLoading=true;
   // Version check — clear localStorage cache if bookie list version changed
-  const BOOKIE_VERSION='v5';
+  const BOOKIE_VERSION='v6';
   if(localStorage.getItem('mbe_bookie_ver')!==BOOKIE_VERSION){
     localStorage.removeItem('mbe_state');
     localStorage.setItem('mbe_bookie_ver',BOOKIE_VERSION);
