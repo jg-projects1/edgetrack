@@ -67,6 +67,13 @@ export default async function handler(req, res) {
 
       // Always apply incoming balances
       if (incoming[pr].bank !== undefined) merged[pr].bank = incoming[pr].bank;
+      // Merge freeBets — keep all, deduplicate by id, incoming wins for status updates
+      const serverFB = server[pr]?.freeBets || [];
+      const incomingFB = incoming[pr]?.freeBets || [];
+      const fbMap = new Map();
+      serverFB.forEach(fb => fbMap.set(String(fb.id), fb));
+      incomingFB.forEach(fb => fbMap.set(String(fb.id), fb));
+      merged[pr].freeBets = Array.from(fbMap.values());
       if (incoming[pr].bookies && Object.keys(incoming[pr].bookies).length > 0) {
         const serverBookies = server[pr]?.bookies || {};
         const mergedBookies = { ...serverBookies, ...incoming[pr].bookies };
