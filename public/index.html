@@ -740,6 +740,7 @@ function renderPending(){
         <span class="${pillClass(t.type)}">${t.type}</span>${acctPill(t._acct)}
         <span style="font-size:11px;color:#C8C5BF">${t.date}</span>
         <span style="font-size:11px;color:#C8C5BF">${t.bookie||'—'}</span>
+        ${t.exchange?`<span style="font-size:11px;color:#9A9590;background:rgba(255,255,255,0.06);padding:2px 6px;border-radius:4px">${t.exchange}</span>`:''}
         ${isFB?'<span class="badge" style="background:#EAF3DE;color:#3B6D11">SNR</span>':''}
       </div>
       <div class="pending-info">
@@ -1923,6 +1924,7 @@ function renderPending(){
         <span class="${pillClass(t.type)}">${t.type}</span>${acctPill(t._acct)}
         <span style="font-size:11px;color:#C8C5BF">${t.date}</span>
         <span style="font-size:11px;color:#C8C5BF">${t.bookie||'—'}</span>
+        ${t.exchange?`<span style="font-size:11px;color:#9A9590;background:rgba(255,255,255,0.06);padding:2px 6px;border-radius:4px">${t.exchange}</span>`:''}
         ${isFB?'<span class="badge" style="background:#EAF3DE;color:#3B6D11">SNR</span>':''}
       </div>
       <div class="pending-info">
