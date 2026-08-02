@@ -4,188 +4,130 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).end();
-
   try {
     const kvUrl = process.env.KV_REST_API_URL;
     const kvToken = process.env.KV_REST_API_TOKEN;
     const incoming = req.body;
 
-    // Use client-provided server state if available (avoids stale replica reads)
-    // Otherwise fall back to reading from KV
+    // Load current casino state
+    const [casinoLoadRes, sportsLoadRes] = await Promise.all([
+      fetch(`${kvUrl}/get/edgetrack_casino`, { headers: { Authorization: `Bearer ${kvToken}` } }),
+      fetch(`${kvUrl}/get/edgetrack_main`, { headers: { Authorization: `Bearer ${kvToken}` } })
+    ]);
+
     let server = {};
-    let serverSource = 'kv';
-    if (incoming._serverState && typeof incoming._serverState === 'object' && Object.keys(incoming._serverState).length > 0) {
-      server = incoming._serverState;
-      serverSource = 'client';
-    } else {
-      const loadRes = await fetch(`${kvUrl}/get/edgetrack_main`, {
-        headers: { Authorization: `Bearer ${kvToken}` }
-      });
-      if (!loadRes.ok) throw new Error(`KV load error: ${loadRes.status}`);
-      const loadData = await loadRes.json();
-      if (loadData.result) {
-        let parsed = JSON.parse(loadData.result);
-        if (typeof parsed === 'string') parsed = JSON.parse(parsed);
-        server = parsed;
-      }
+    if (casinoLoadRes.ok) {
+      const d = await casinoLoadRes.json();
+      if (d.result) { let p = JSON.parse(d.result); if (typeof p === 'string') p = JSON.parse(p); server = p; }
+    }
+
+    let sportsServer = {};
+    if (sportsLoadRes.ok) {
+      const d = await sportsLoadRes.json();
+      if (d.result) { let p = JSON.parse(d.result); if (typeof p === 'string') p = JSON.parse(p); sportsServer = p; }
     }
 
     const profiles = ['me', 'wife', 'bp', 'rq'];
-    const merged = JSON.parse(JSON.stringify(server));
+    const mergedCasino = JSON.parse(JSON.stringify(server));
+    const mergedSports = JSON.parse(JSON.stringify(sportsServer));
 
     profiles.forEach(pr => {
-      if (!merged[pr]) merged[pr] = { transactions: [], bank: 0, bookies: {} };
+      if (!mergedCasino[pr]) mergedCasino[pr] = { casino: [] };
       if (!incoming[pr]) return;
 
-      const serverTxs = server[pr]?.transactions || [];
-      const incomingTxs = incoming[pr]?.transactions || [];
-      // Simple additive merge — client provides lastServerState so no stale reads
-      // Union of server + incoming by ID, with explicit deletes honoured
+      const serverSessions = server[pr]?.casino || [];
+      const incomingSessions = incoming[pr]?.casino || [];
       const deletedIds = new Set((incoming[pr]?.deletedIds || []).map(String));
-      const serverMap = new Map(serverTxs.map(t => [String(t.id), t]));
-      const incomingMap = new Map(incomingTxs.map(t => [String(t.id), t]));
+
+      // Find truly new sessions (not on server) to apply balance changes
+      const serverIds = new Set(serverSessions.map(s => String(s.id)));
+      const newSessions = incomingSessions.filter(s => !serverIds.has(String(s.id)));
+      const deletedSessions = serverSessions.filter(s => deletedIds.has(String(s.id)));
+
+      // Apply new session balance changes to sports/main state
+      if (!mergedSports[pr]) mergedSports[pr] = { bank: 0, bookies: {}, transactions: [] };
+      newSessions.forEach(s => {
+        const casino = s.casino;
+        // Handle both new format (startBal/endBal) and old format (netProfit)
+        const net = (s.startBal !== undefined && s.endBal !== undefined) ? (s.endBal - s.startBal) : (s.netProfit || 0);
+        const deposit = s.deposit || 0;
+        if (!mergedSports[pr].bookies[casino]) mergedSports[pr].bookies[casino] = { bal: 0, status: 'Active', notes: '' };
+        if (deposit > 0) {
+          mergedSports[pr].bank -= deposit;
+          mergedSports[pr].bookies[casino].bal += deposit;
+        }
+        mergedSports[pr].bookies[casino].bal += net;
+      });
+
+      // Reverse deleted session balance changes
+      deletedSessions.forEach(s => {
+        const casino = s.casino;
+        const net = (s.startBal !== undefined && s.endBal !== undefined) ? (s.endBal - s.startBal) : (s.netProfit || 0);
+        const deposit = s.deposit || 0;
+        if (!mergedSports[pr].bookies) mergedSports[pr].bookies = {};
+        if (!mergedSports[pr].bookies[casino]) mergedSports[pr].bookies[casino] = { bal: 0, status: 'Active', notes: '' };
+        if (deposit > 0) {
+          mergedSports[pr].bank += deposit;
+          mergedSports[pr].bookies[casino].bal -= deposit;
+        }
+        mergedSports[pr].bookies[casino].bal -= net;
+      });
+
+      // Additive merge for casino sessions
+      const serverMap = new Map(serverSessions.map(s => [String(s.id), s]));
+      const incomingMap = new Map(incomingSessions.map(s => [String(s.id), s]));
       const allIds = new Set([...serverMap.keys(), ...incomingMap.keys()]);
-      const mergedTxs = [];
+      const mergedSessions = [];
       allIds.forEach(id => {
         if (deletedIds.has(id)) return;
-        const serverTx = serverMap.get(id);
-        const incomingTx = incomingMap.get(id);
-        if (incomingTx && serverTx) {
-          // Both have it — prefer settled over pending
-          if (serverTx.result !== 'Pending' && incomingTx.result === 'Pending') {
-            mergedTxs.push(serverTx);
-          } else {
-            mergedTxs.push(incomingTx);
-          }
-        } else if (incomingTx) {
-          mergedTxs.push(incomingTx); // new transaction
-        } else if (serverTx) {
-          mergedTxs.push(serverTx); // only on server — keep it
-        }
+        const ss = serverMap.get(id);
+        const is = incomingMap.get(id);
+        mergedSessions.push(is || ss);
       });
-      merged[pr].transactions = mergedTxs;
-
-      // Always apply incoming balances
-      if (incoming[pr].bank !== undefined) merged[pr].bank = incoming[pr].bank;
-      // Merge freeBets — keep all, deduplicate by id, incoming wins for status updates
-      const serverFB = server[pr]?.freeBets || [];
-      const incomingFB = incoming[pr]?.freeBets || [];
-      const fbMap = new Map();
-      serverFB.forEach(fb => fbMap.set(String(fb.id), fb));
-      incomingFB.forEach(fb => fbMap.set(String(fb.id), fb));
-      merged[pr].freeBets = Array.from(fbMap.values());
-      if (incoming[pr].bookies && Object.keys(incoming[pr].bookies).length > 0) {
-        const serverBookies = server[pr]?.bookies || {};
-        const mergedBookies = { ...serverBookies, ...incoming[pr].bookies };
-        merged[pr].bookies = mergedBookies;
-      }
+      mergedCasino[pr].casino = mergedSessions;
     });
 
-    if (incoming.exchanges) merged.exchanges = incoming.exchanges;
+    // Save both keys in parallel
+    const [casinoSaveRes, sportsSaveRes] = await Promise.all([
+      fetch(`${kvUrl}/set/edgetrack_casino`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${kvToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(JSON.stringify(mergedCasino))
+      }),
+      fetch(`${kvUrl}/set/edgetrack_main`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${kvToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(JSON.stringify(mergedSports))
+      })
+    ]);
 
-    // Save to KV
-    const jsonString = JSON.stringify(merged);
-    const saveRes = await fetch(`${kvUrl}/set/edgetrack_main`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${kvToken}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(jsonString)
-    });
-    if (!saveRes.ok) throw new Error(`KV save error: ${saveRes.status}`);
+    if (!casinoSaveRes.ok) throw new Error(`Casino KV save error: ${casinoSaveRes.status}`);
+    if (!sportsSaveRes.ok) throw new Error(`Sports KV save error: ${sportsSaveRes.status}`);
 
-    // Read back to verify what was actually saved
-    const verifyRes = await fetch(`${kvUrl}/get/edgetrack_main`, {
-      headers: { Authorization: `Bearer ${kvToken}` }
-    });
-    let verifiedBanks = {};
-    let verifiedCounts = {};
-    if (verifyRes.ok) {
-      const vd = await verifyRes.json();
-      if (vd.result) {
-        let vp = JSON.parse(vd.result);
-        if (typeof vp === 'string') vp = JSON.parse(vp);
-        verifiedBanks = Object.fromEntries(profiles.map(pr => [pr, vp[pr]?.bank || 0]));
-        verifiedCounts = Object.fromEntries(profiles.map(pr => [pr, vp[pr]?.transactions?.length || 0]));
-      }
-    }
-
-    // Log audit AFTER verified save
+    // Audit log
     const auditEntry = {
       ts: new Date().toISOString(),
-      source: incoming._source || 'unknown',
-      serverSource,
-      serverCounts: Object.fromEntries(profiles.map(pr => [pr, server[pr]?.transactions?.length || 0])),
-      counts: verifiedCounts,
-      banks: verifiedBanks,
-      intended_counts: Object.fromEntries(profiles.map(pr => [pr, merged[pr]?.transactions?.length || 0])),
-      intended_banks: Object.fromEntries(profiles.map(pr => [pr, merged[pr]?.bank || 0])),
-      incoming_counts: Object.fromEntries(profiles.map(pr => [pr, incoming[pr]?.transactions?.length || 0])),
-      incoming_banks: Object.fromEntries(profiles.map(pr => [pr, incoming[pr]?.bank]))
+      counts: Object.fromEntries(profiles.map(pr => [pr, mergedCasino[pr]?.casino?.length || 0]))
     };
-
     let audit = [];
     try {
-      const auditRes = await fetch(`${kvUrl}/get/edgetrack_audit`, {
-        headers: { Authorization: `Bearer ${kvToken}` }
-      });
+      const auditRes = await fetch(`${kvUrl}/get/edgetrack_casino_audit`, { headers: { Authorization: `Bearer ${kvToken}` } });
       if (auditRes.ok) {
-        const auditData = await auditRes.json();
-        if (auditData.result) {
-          audit = JSON.parse(auditData.result);
-          if (typeof audit === 'string') audit = JSON.parse(audit);
-        }
+        const d = await auditRes.json();
+        if (d.result) { audit = JSON.parse(d.result); if (typeof audit === 'string') audit = JSON.parse(audit); }
       }
     } catch(e) {}
     audit.push(auditEntry);
-    if (audit.length > 100) audit = audit.slice(-100);
-    await fetch(`${kvUrl}/set/edgetrack_audit`, {
+    if (audit.length > 50) audit = audit.slice(-50);
+    await fetch(`${kvUrl}/set/edgetrack_casino_audit`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${kvToken}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(JSON.stringify(audit))
     });
 
-    // Write count stamp so load.js knows what to expect
-    const countStamp = {
-      ts: new Date().toISOString(),
-      counts: Object.fromEntries(profiles.map(pr => [pr, merged[pr]?.transactions?.length || 0]))
-    };
-    await fetch(`${kvUrl}/set/edgetrack_stamp`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${kvToken}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(JSON.stringify(countStamp))
-    });
-
-    // Strip any bookies not in the approved list
-    const DEFAULT_BOOKIES = [
-      '10bet','247bet','32Red','36 Vegas','7bet','888 Sport','Admiral Casino','Arrowbet',
-      'Bally Casino','Bella Casino','Bestodds','Bet UK','Bet442','Bet600','Betano','Betfair',
-      'Betfred','Betgoodwin','BetMGM','Betstgeorge','BetTom','Betvickers','Betvictor','Betway',
-      'Betwright','Betzone','Bingostars','Boyle','Bresbet','Buzz Casino','Bwin','Casumo',
-      'Copybet','Coral','Dabble','Dazn','Double Bubble','Dragonbet','Dream Vegas','Fabulous Vegas',
-      'Fairplay','Fanteam','Fitzbet','Fitzdares','Foxy','Fruit Kings','Gala Casino','Geoff Banks',
-      'Grosvenor','GRP','Highbet','Hollywoodbets','Hot Streak Casino','Jackpot Joy','Jackpot Mobile',
-      'Ken Howells','Kwiff','Ladbrokes','Leovegas','Livescorebet','Lottoland','Lottomart','LottoGo',
-      'Luckymate','Mecca Bingo','Mega Riches','Meta Betting','Midnite','Monopoly','MrQ','MrVegas',
-      'Netbet','Octobet','Paddy Power','Parimatch','Party Casino','Pink Casino','Planet Sport Bet',
-      'Planet Sports','Play Bingo','Priced Up','Puntit','Quick Bet','Quinnbet','Rainbow Riches',
-      'Regal Wins','Royale Lounge','Skybet','Slot Boss','Slot Planet','Smooth Spins','Spin & Win',
-      'Sporting Bet','Spreadex','Stakemate','Star Sports','Sun Vegas','Swifty Sports','Talksportbet',
-      'Tigerbet','Tombola Arcade','Unibet','Vbet','Video Slots','Virgin Bet','Virgin Games','William Hill'
-    ];
-    const bookieSet = new Set(DEFAULT_BOOKIES);
-    profiles.forEach(pr => {
-      if (merged[pr] && merged[pr].bookies) {
-        const cleaned = {};
-        DEFAULT_BOOKIES.forEach(b => {
-          if (merged[pr].bookies[b]) cleaned[b] = merged[pr].bookies[b];
-          else cleaned[b] = { bal: 0, status: 'Not Signed Up', notes: '' };
-        });
-        merged[pr].bookies = cleaned;
-      }
-    });
-
-    return res.status(200).json({ ok: true, data: merged });
+    return res.status(200).json({ ok: true });
   } catch (e) {
-    console.error('Save error:', e);
+    console.error('Save casino error:', e);
     return res.status(500).json({ ok: false, error: e.message });
   }
 }
