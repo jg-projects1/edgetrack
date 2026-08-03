@@ -302,12 +302,31 @@ async function fetchFromServer(){
         const serverCount=PROFILES.reduce((a,p)=>a+(saved[p]?.transactions||[]).length,0);
         const localCount=PROFILES.reduce((a,p)=>a+(state[p]?.transactions||[]).length,0);
         if(serverCount>=localCount){
+          // Merge server transactions with local — prefer settled over pending
           PROFILES.forEach(pr=>{
-            if(saved[pr]){
-              state[pr]=JSON.parse(JSON.stringify(saved[pr]));
-              if(!state[pr].casino)state[pr].casino=[];
-              if(!state[pr].freeBets)state[pr].freeBets=[];
-            }
+            if(!saved[pr])return;
+            const serverTxs=saved[pr].transactions||[];
+            const localTxs=state[pr].transactions||[];
+            const localMap=new Map(localTxs.map(t=>[String(t.id),t]));
+            const serverMap=new Map(serverTxs.map(t=>[String(t.id),t]));
+            const allIds=new Set([...localMap.keys(),...serverMap.keys()]);
+            const merged=[];
+            allIds.forEach(id=>{
+              const local=localMap.get(id);
+              const server=serverMap.get(id);
+              if(local&&server){
+                // Prefer local settled over server pending
+                if(local.result!=='Pending'&&server.result==='Pending')merged.push(local);
+                else merged.push(server);
+              } else {
+                merged.push(local||server);
+              }
+            });
+            state[pr]={...JSON.parse(JSON.stringify(saved[pr])),transactions:merged};
+            if(!state[pr].casino)state[pr].casino=[];
+            // Preserve local freeBets if server doesn't have them
+            if(!state[pr].freeBets||state[pr].freeBets.length===0)
+              state[pr].freeBets=JSON.parse(JSON.stringify(saved[pr].freeBets||[]));
           });
           if(saved.exchanges)state.exchanges=JSON.parse(JSON.stringify(saved.exchanges));
           lastServerState=JSON.parse(JSON.stringify(saved));
