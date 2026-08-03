@@ -392,7 +392,17 @@ async function saveData(source='unknown'){
         if(sportsJson.data[pr]){
           state[pr].bank=sportsJson.data[pr].bank;
           state[pr].bookies=sportsJson.data[pr].bookies;
-          state[pr].transactions=sportsJson.data[pr].transactions;
+          // Merge transactions — prefer locally settled over server pending
+          const serverTxs=sportsJson.data[pr].transactions||[];
+          const localTxs=state[pr].transactions||[];
+          const localMap=new Map(localTxs.map(t=>[String(t.id),t]));
+          const mergedTxs=serverTxs.map(t=>{
+            const local=localMap.get(String(t.id));
+            // If local has settled but server still shows pending, keep local
+            if(local&&local.result!=='Pending'&&t.result==='Pending')return local;
+            return t;
+          });
+          state[pr].transactions=mergedTxs;
           // Preserve casino data — not included in sports response
           if(!state[pr].casino)state[pr].casino=[];
           if(!state[pr].freeBets)state[pr].freeBets=[];
@@ -816,7 +826,10 @@ function applyBalanceAtLog(tx,p){
 
 function settleBet(acct,id,result){
   const p=state[acct];const tx=(p.transactions||[]).find(t=>t.id===id);if(!tx||tx.result!=='Pending')return;
-  tx.result=result;applyBalanceOnSettle(tx,p,result);if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('settle');
+  tx.result=result;applyBalanceOnSettle(tx,p,result);
+  // Immediately update localStorage so refresh doesn't revert
+  try{const snap={exchanges:state.exchanges};PROFILES.forEach(pr=>{snap[pr]={bank:state[pr].bank,bookies:state[pr].bookies,transactions:state[pr].transactions,freeBets:state[pr].freeBets||[]};});localStorage.setItem('mbe_state',JSON.stringify(snap));}catch(e){}
+  if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('settle');
   const card=document.getElementById('pcard-'+id);
   if(card){card.style.transition='opacity .25s,transform .25s';card.style.opacity='0';card.style.transform='translateY(-6px)';setTimeout(()=>{card.remove();updateBadge();},260);}
   showToast(`${result==='Won'?'Won':'Lost'} — ${fmtS(tx.pnl||0)}`,result==='Won'?'success':'error');
@@ -2000,7 +2013,10 @@ function applyBalanceAtLog(tx,p){
 
 function settleBet(acct,id,result){
   const p=state[acct];const tx=(p.transactions||[]).find(t=>t.id===id);if(!tx||tx.result!=='Pending')return;
-  tx.result=result;applyBalanceOnSettle(tx,p,result);if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('settle');
+  tx.result=result;applyBalanceOnSettle(tx,p,result);
+  // Immediately update localStorage so refresh doesn't revert
+  try{const snap={exchanges:state.exchanges};PROFILES.forEach(pr=>{snap[pr]={bank:state[pr].bank,bookies:state[pr].bookies,transactions:state[pr].transactions,freeBets:state[pr].freeBets||[]};});localStorage.setItem('mbe_state',JSON.stringify(snap));}catch(e){}
+  if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('settle');
   const card=document.getElementById('pcard-'+id);
   if(card){card.style.transition='opacity .25s,transform .25s';card.style.opacity='0';card.style.transform='translateY(-6px)';setTimeout(()=>{card.remove();updateBadge();},260);}
   showToast(`${result==='Won'?'Won':'Lost'} — ${fmtS(tx.pnl||0)}`,result==='Won'?'success':'error');
