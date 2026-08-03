@@ -301,36 +301,39 @@ async function fetchFromServer(){
         // Only update if server has more data than current state
         const serverCount=PROFILES.reduce((a,p)=>a+(saved[p]?.transactions||[]).length,0);
         const localCount=PROFILES.reduce((a,p)=>a+(state[p]?.transactions||[]).length,0);
-        if(serverCount>=localCount){
-          // Merge server transactions with local — prefer settled over pending
-          PROFILES.forEach(pr=>{
-            if(!saved[pr])return;
-            const serverTxs=saved[pr].transactions||[];
-            const localTxs=state[pr].transactions||[];
-            const localMap=new Map(localTxs.map(t=>[String(t.id),t]));
-            const serverMap=new Map(serverTxs.map(t=>[String(t.id),t]));
-            const allIds=new Set([...localMap.keys(),...serverMap.keys()]);
-            const merged=[];
-            allIds.forEach(id=>{
-              const local=localMap.get(id);
-              const server=serverMap.get(id);
-              if(local&&server){
-                // Prefer local settled over server pending
-                if(local.result!=='Pending'&&server.result==='Pending')merged.push(local);
-                else merged.push(server);
-              } else {
-                merged.push(local||server);
-              }
-            });
-            state[pr]={...JSON.parse(JSON.stringify(saved[pr])),transactions:merged};
-            if(!state[pr].casino)state[pr].casino=[];
-            // Preserve local freeBets if server doesn't have them
-            if(!state[pr].freeBets||state[pr].freeBets.length===0)
-              state[pr].freeBets=JSON.parse(JSON.stringify(saved[pr].freeBets||[]));
+        // Always merge — never let server overwrite local-only transactions
+        PROFILES.forEach(pr=>{
+          if(!saved[pr])return;
+          const serverTxs=saved[pr].transactions||[];
+          const localTxs=state[pr].transactions||[];
+          const serverMap=new Map(serverTxs.map(t=>[String(t.id),t]));
+          const localMap=new Map(localTxs.map(t=>[String(t.id),t]));
+          // Union: all IDs from both
+          const allIds=new Set([...serverMap.keys(),...localMap.keys()]);
+          const merged=[];
+          allIds.forEach(id=>{
+            const server=serverMap.get(id);
+            const local=localMap.get(id);
+            if(local&&server){
+              // Prefer local settled over server pending
+              if(local.result!=='Pending'&&server.result==='Pending')merged.push(local);
+              else merged.push(server);
+            } else if(local){
+              merged.push(local); // local-only — keep it (new log not yet on server)
+            } else {
+              merged.push(server); // server-only
+            }
           });
-          if(saved.exchanges)state.exchanges=JSON.parse(JSON.stringify(saved.exchanges));
-          lastServerState=JSON.parse(JSON.stringify(saved));
-        }
+          // Sort by date desc
+          merged.sort((a,b)=>{const da=parseDate(a.date),db=parseDate(b.date);return db!==da?db-da:b.id-a.id;});
+          state[pr].bank=saved[pr].bank;
+          state[pr].bookies=saved[pr].bookies;
+          state[pr].transactions=merged;
+          state[pr].freeBets=saved[pr].freeBets||state[pr].freeBets||[];
+          if(!state[pr].casino)state[pr].casino=[];
+        });
+        if(saved.exchanges)state.exchanges=JSON.parse(JSON.stringify(saved.exchanges));
+        lastServerState=JSON.parse(JSON.stringify(saved));
       }
     }
     if(casinoRes&&casinoRes.ok){
@@ -392,16 +395,22 @@ async function saveData(source='unknown'){
         if(sportsJson.data[pr]){
           state[pr].bank=sportsJson.data[pr].bank;
           state[pr].bookies=sportsJson.data[pr].bookies;
-          // Merge transactions — prefer locally settled over server pending
+          // Merge transactions — union of server + local, prefer settled over pending
           const serverTxs=sportsJson.data[pr].transactions||[];
           const localTxs=state[pr].transactions||[];
+          const serverMap=new Map(serverTxs.map(t=>[String(t.id),t]));
           const localMap=new Map(localTxs.map(t=>[String(t.id),t]));
-          const mergedTxs=serverTxs.map(t=>{
-            const local=localMap.get(String(t.id));
-            // If local has settled but server still shows pending, keep local
-            if(local&&local.result!=='Pending'&&t.result==='Pending')return local;
-            return t;
+          const allIds=new Set([...serverMap.keys(),...localMap.keys()]);
+          const mergedTxs=[];
+          allIds.forEach(id=>{
+            const srv=serverMap.get(id);
+            const loc=localMap.get(id);
+            if(loc&&srv){
+              if(loc.result!=='Pending'&&srv.result==='Pending')mergedTxs.push(loc);
+              else mergedTxs.push(srv);
+            } else { mergedTxs.push(loc||srv); }
           });
+          mergedTxs.sort((a,b)=>{const da=parseDate(a.date),db=parseDate(b.date);return db!==da?db-da:b.id-a.id;});
           state[pr].transactions=mergedTxs;
           // Preserve casino data — not included in sports response
           if(!state[pr].casino)state[pr].casino=[];
