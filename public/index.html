@@ -339,10 +339,31 @@ async function fetchFromServer(){
               mergedBk[k]={...mergedBk[k],bal:localBk[k].bal,status:localBk[k].status||mergedBk[k].status,notes:localBk[k].notes||mergedBk[k].notes};
             }
           });
-          // Re-sort bookies alphabetically after merge
+          // Case-insensitive dedup + rename before re-sort
+          const renameMap={'hot streak casino':'Hot Streak','gala':'Gala Casino'};
+          DEFAULT_BOOKIES.forEach(canonical=>{
+            Object.keys(mergedBk).forEach(existing=>{
+              if(existing!==canonical&&existing.toLowerCase()===canonical.toLowerCase()){
+                if(!mergedBk[canonical])mergedBk[canonical]={bal:0,status:'Not Signed Up',notes:''};
+                mergedBk[canonical].bal=(mergedBk[canonical].bal||0)+(mergedBk[existing].bal||0);
+                if(mergedBk[existing].status&&mergedBk[existing].status!=='Not Signed Up')mergedBk[canonical].status=mergedBk[existing].status;
+                if(mergedBk[existing].notes)mergedBk[canonical].notes=mergedBk[existing].notes;
+                delete mergedBk[existing];
+              }
+            });
+          });
+          Object.keys(renameMap).forEach(old=>{
+            const canonical=renameMap[old];
+            if(mergedBk[old]){
+              if(!mergedBk[canonical])mergedBk[canonical]={bal:0,status:'Not Signed Up',notes:''};
+              mergedBk[canonical].bal=(mergedBk[canonical].bal||0)+(mergedBk[old].bal||0);
+              if(mergedBk[old].status&&mergedBk[old].status!=='Not Signed Up')mergedBk[canonical].status=mergedBk[old].status;
+              delete mergedBk[old];
+            }
+          });
+          // Re-sort — only keep DEFAULT_BOOKIES entries
           const resorted={};
           DEFAULT_BOOKIES.forEach(b=>{if(mergedBk[b])resorted[b]=mergedBk[b];});
-          Object.keys(mergedBk).forEach(b=>{if(!resorted[b])resorted[b]=mergedBk[b];});
           state[pr].bookies=resorted;
           state[pr].transactions=merged;
           state[pr].freeBets=saved[pr].freeBets||state[pr].freeBets||[];
@@ -410,11 +431,31 @@ async function saveData(source='unknown'){
       PROFILES.forEach(pr=>{
         if(sportsJson.data[pr]){
           state[pr].bank=sportsJson.data[pr].bank;
-          // Re-sort bookies alphabetically
+          // Case-insensitive dedup + rename + re-sort
           const rawBk=sportsJson.data[pr].bookies||{};
+          const renameMapS={'hot streak casino':'Hot Streak','gala':'Gala Casino'};
+          DEFAULT_BOOKIES.forEach(canonical=>{
+            Object.keys(rawBk).forEach(existing=>{
+              if(existing!==canonical&&existing.toLowerCase()===canonical.toLowerCase()){
+                if(!rawBk[canonical])rawBk[canonical]={bal:0,status:'Not Signed Up',notes:''};
+                rawBk[canonical].bal=(rawBk[canonical].bal||0)+(rawBk[existing].bal||0);
+                if(rawBk[existing].status&&rawBk[existing].status!=='Not Signed Up')rawBk[canonical].status=rawBk[existing].status;
+                if(rawBk[existing].notes)rawBk[canonical].notes=rawBk[existing].notes;
+                delete rawBk[existing];
+              }
+            });
+          });
+          Object.keys(renameMapS).forEach(old=>{
+            const canonical=renameMapS[old];
+            if(rawBk[old]){
+              if(!rawBk[canonical])rawBk[canonical]={bal:0,status:'Not Signed Up',notes:''};
+              rawBk[canonical].bal=(rawBk[canonical].bal||0)+(rawBk[old].bal||0);
+              if(rawBk[old].status&&rawBk[old].status!=='Not Signed Up')rawBk[canonical].status=rawBk[old].status;
+              delete rawBk[old];
+            }
+          });
           const sortedBk={};
           DEFAULT_BOOKIES.forEach(b=>{if(rawBk[b])sortedBk[b]=rawBk[b];});
-          Object.keys(rawBk).forEach(b=>{if(!sortedBk[b])sortedBk[b]=rawBk[b];});
           state[pr].bookies=sortedBk;
           // Merge transactions — union of server + local, prefer settled over pending
           const serverTxs=sportsJson.data[pr].transactions||[];
