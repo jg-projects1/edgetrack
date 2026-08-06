@@ -491,11 +491,25 @@ function migrateLegacy(){
     if(!state[pr])state[pr]=makeProfile();
     if(!state[pr].transactions)state[pr].transactions=[];if(!state[pr].freeBets)state[pr].freeBets=[];
     const bk=state[pr].bookies||{};
-    // Rename old bookies to new names — carry over balance, status, notes
-    const renames={'Hot Streak Casino':'Hot Streak','Betstgeorge':'BetStGeorge','Gala':'Gala Casino'};
+    // Rename old bookies — merge balance into new name, delete old
+    const renames={
+      'Hot Streak Casino':'Hot Streak',
+      'Betstgeorge':'BetStGeorge',
+      'betstgeorge':'BetStGeorge',
+      'BETSTGEORGE':'BetStGeorge',
+      'Gala':'Gala Casino',
+      'Hot streak':'Hot Streak',
+      'hot streak casino':'Hot Streak',
+    };
     Object.entries(renames).forEach(([oldName,newName])=>{
-      if(bk[oldName]&&!bk[newName]){bk[newName]=bk[oldName];}
-      delete bk[oldName];
+      if(bk[oldName]){
+        if(!bk[newName])bk[newName]={bal:0,status:'Not Signed Up',notes:''};
+        // Merge balance and carry over status/notes if meaningful
+        bk[newName].bal=(bk[newName].bal||0)+(bk[oldName].bal||0);
+        if(bk[oldName].status&&bk[oldName].status!=='Not Signed Up')bk[newName].status=bk[oldName].status;
+        if(bk[oldName].notes)bk[newName].notes=bk[oldName].notes;
+        delete bk[oldName];
+      }
     });
     // Add any new bookies with Not Signed Up default
     DEFAULT_BOOKIES.forEach(b=>{if(!bk[b])bk[b]={bal:0,status:'Not Signed Up',notes:''};});
@@ -2996,7 +3010,7 @@ document.addEventListener('wheel', function(e){
 async function loadApp(){
   window._appLoading=true;
   // Version check — clear localStorage cache if bookie list version changed
-  const BOOKIE_VERSION='v7';
+  const BOOKIE_VERSION='v8';
   if(localStorage.getItem('mbe_bookie_ver')!==BOOKIE_VERSION){
     localStorage.removeItem('mbe_state');
     localStorage.setItem('mbe_bookie_ver',BOOKIE_VERSION);
