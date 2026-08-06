@@ -327,7 +327,19 @@ async function fetchFromServer(){
           // Sort by date desc
           merged.sort((a,b)=>{const da=parseDate(a.date),db=parseDate(b.date);return db!==da?db-da:b.id-a.id;});
           state[pr].bank=saved[pr].bank;
-          state[pr].bookies=saved[pr].bookies;
+          // Merge bookies — keep local balance if it differs from server
+          // (local is more recent, server may be stale replica)
+          const serverBk=saved[pr].bookies||{};
+          const localBk=state[pr].bookies||{};
+          const mergedBk={...serverBk};
+          Object.keys(localBk).forEach(k=>{
+            if(!mergedBk[k])mergedBk[k]=localBk[k];
+            else if(localBk[k].bal!==mergedBk[k].bal){
+              // Keep whichever was more recently modified — use local as it's in-session
+              mergedBk[k]={...mergedBk[k],bal:localBk[k].bal,status:localBk[k].status||mergedBk[k].status,notes:localBk[k].notes||mergedBk[k].notes};
+            }
+          });
+          state[pr].bookies=mergedBk;
           state[pr].transactions=merged;
           state[pr].freeBets=saved[pr].freeBets||state[pr].freeBets||[];
           if(!state[pr].casino)state[pr].casino=[];
