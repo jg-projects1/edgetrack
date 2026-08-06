@@ -500,20 +500,28 @@ function migrateLegacy(){
     if(!state[pr])state[pr]=makeProfile();
     if(!state[pr].transactions)state[pr].transactions=[];if(!state[pr].freeBets)state[pr].freeBets=[];
     const bk=state[pr].bookies||{};
-    // Rename old bookies — merge balance into new name, delete old
+    // Case-insensitive dedup — for each DEFAULT_BOOKIES entry, find any case variant and merge
+    DEFAULT_BOOKIES.forEach(canonical=>{
+      Object.keys(bk).forEach(existing=>{
+        if(existing!==canonical&&existing.toLowerCase()===canonical.toLowerCase()){
+          // Found a case variant — merge into canonical
+          if(!bk[canonical])bk[canonical]={bal:0,status:'Not Signed Up',notes:''};
+          bk[canonical].bal=(bk[canonical].bal||0)+(bk[existing].bal||0);
+          if(bk[existing].status&&bk[existing].status!=='Not Signed Up')bk[canonical].status=bk[existing].status;
+          if(bk[existing].notes)bk[canonical].notes=bk[existing].notes;
+          delete bk[existing];
+        }
+      });
+    });
+    // Explicit renames for non-case-variant changes
     const renames={
       'Hot Streak Casino':'Hot Streak',
-      'Betstgeorge':'BetStGeorge',
-      'betstgeorge':'BetStGeorge',
-      'BETSTGEORGE':'BetStGeorge',
-      'Gala':'Gala Casino',
-      'Hot streak':'Hot Streak',
       'hot streak casino':'Hot Streak',
+      'Gala':'Gala Casino',
     };
     Object.entries(renames).forEach(([oldName,newName])=>{
       if(bk[oldName]){
         if(!bk[newName])bk[newName]={bal:0,status:'Not Signed Up',notes:''};
-        // Merge balance and carry over status/notes if meaningful
         bk[newName].bal=(bk[newName].bal||0)+(bk[oldName].bal||0);
         if(bk[oldName].status&&bk[oldName].status!=='Not Signed Up')bk[newName].status=bk[oldName].status;
         if(bk[oldName].notes)bk[newName].notes=bk[oldName].notes;
@@ -539,11 +547,8 @@ function migrateLegacy(){
   if(!state.exchanges){state.exchanges={};EXCHANGES.forEach(e=>state.exchanges[e]=0);}
   EXCHANGES.forEach(e=>{if(state.exchanges[e]===undefined)state.exchanges[e]=0;});
   PROFILES.forEach(pr=>{if(!state[pr].casino)state[pr].casino=[];});
-  // Always save after migration to push clean state to server
-  if(localStorage.getItem('mbe_bookie_cleaned')!=='v8'){
-    localStorage.setItem('mbe_bookie_cleaned','v8');
-    setTimeout(()=>saveData('bookieMigration'),2000);
-  }
+  // Always push clean bookie state to server on load
+  setTimeout(()=>saveData('bookieMigration'),3000);
 }
 
 let currentProfile='me',currentTab='dashboard',formAccount='me',selectedBetType='',exchTransferBank='me';
@@ -1352,7 +1357,7 @@ function renderAccounts(){
 }
 
 function renderBookieList(acct,search,statusFilter){
-  const p=state[acct];let keys=Object.keys(p.bookies||{});
+  const p=state[acct];let keys=Object.keys(p.bookies||{}).sort((a,b)=>a.toLowerCase().localeCompare(b.toLowerCase()));
   if(search)keys=keys.filter(b=>b.toLowerCase().includes(search.toLowerCase()));
   if(statusFilter)keys=keys.filter(b=>p.bookies[b].status===statusFilter);
   if(!keys.length)return`<div class="empty">No results</div>`;
@@ -2539,7 +2544,7 @@ function renderAccounts(){
 }
 
 function renderBookieList(acct,search,statusFilter){
-  const p=state[acct];let keys=Object.keys(p.bookies||{});
+  const p=state[acct];let keys=Object.keys(p.bookies||{}).sort((a,b)=>a.toLowerCase().localeCompare(b.toLowerCase()));
   if(search)keys=keys.filter(b=>b.toLowerCase().includes(search.toLowerCase()));
   if(statusFilter)keys=keys.filter(b=>p.bookies[b].status===statusFilter);
   if(!keys.length)return`<div class="empty">No results</div>`;
