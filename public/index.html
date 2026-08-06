@@ -530,9 +530,9 @@ function migrateLegacy(){
   if(!state.exchanges){state.exchanges={};EXCHANGES.forEach(e=>state.exchanges[e]=0);}
   EXCHANGES.forEach(e=>{if(state.exchanges[e]===undefined)state.exchanges[e]=0;});
   PROFILES.forEach(pr=>{if(!state[pr].casino)state[pr].casino=[];});
-  // If bookie list was cleaned up, save to server so KV gets updated
-  if(localStorage.getItem('mbe_bookie_cleaned')!=='v5'){
-    localStorage.setItem('mbe_bookie_cleaned','v5');
+  // Always save after migration to push clean state to server
+  if(localStorage.getItem('mbe_bookie_cleaned')!=='v8'){
+    localStorage.setItem('mbe_bookie_cleaned','v8');
     setTimeout(()=>saveData('bookieMigration'),2000);
   }
 }
