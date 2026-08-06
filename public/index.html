@@ -339,7 +339,11 @@ async function fetchFromServer(){
               mergedBk[k]={...mergedBk[k],bal:localBk[k].bal,status:localBk[k].status||mergedBk[k].status,notes:localBk[k].notes||mergedBk[k].notes};
             }
           });
-          state[pr].bookies=mergedBk;
+          // Re-sort bookies alphabetically after merge
+          const resorted={};
+          DEFAULT_BOOKIES.forEach(b=>{if(mergedBk[b])resorted[b]=mergedBk[b];});
+          Object.keys(mergedBk).forEach(b=>{if(!resorted[b])resorted[b]=mergedBk[b];});
+          state[pr].bookies=resorted;
           state[pr].transactions=merged;
           state[pr].freeBets=saved[pr].freeBets||state[pr].freeBets||[];
           if(!state[pr].casino)state[pr].casino=[];
@@ -406,7 +410,12 @@ async function saveData(source='unknown'){
       PROFILES.forEach(pr=>{
         if(sportsJson.data[pr]){
           state[pr].bank=sportsJson.data[pr].bank;
-          state[pr].bookies=sportsJson.data[pr].bookies;
+          // Re-sort bookies alphabetically
+          const rawBk=sportsJson.data[pr].bookies||{};
+          const sortedBk={};
+          DEFAULT_BOOKIES.forEach(b=>{if(rawBk[b])sortedBk[b]=rawBk[b];});
+          Object.keys(rawBk).forEach(b=>{if(!sortedBk[b])sortedBk[b]=rawBk[b];});
+          state[pr].bookies=sortedBk;
           // Merge transactions — union of server + local, prefer settled over pending
           const serverTxs=sportsJson.data[pr].transactions||[];
           const localTxs=state[pr].transactions||[];
