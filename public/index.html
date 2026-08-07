@@ -332,13 +332,15 @@ async function fetchFromServer(){
           const serverBk=saved[pr].bookies||{};
           const localBk=state[pr].bookies||{};
           console.log('[bk] '+pr+' serverBk Betfred:', serverBk.Betfred?.bal, 'localBk Betfred:', localBk.Betfred?.bal);
+          // Server wins for balances — local only wins if it has a non-zero balance and server has zero
           const mergedBk={...serverBk};
           Object.keys(localBk).forEach(k=>{
-            if(!mergedBk[k])mergedBk[k]=localBk[k];
-            else if(localBk[k].bal!==mergedBk[k].bal){
-              // Keep whichever was more recently modified — use local as it's in-session
-              mergedBk[k]={...mergedBk[k],bal:localBk[k].bal,status:localBk[k].status||mergedBk[k].status,notes:localBk[k].notes||mergedBk[k].notes};
+            if(!mergedBk[k]&&(localBk[k].bal||0)!==0)mergedBk[k]=localBk[k];
+            else if(mergedBk[k]&&(localBk[k].bal||0)!==0&&(mergedBk[k].bal||0)===0){
+              // Local has a balance but server doesn't — local wins
+              mergedBk[k]={...mergedBk[k],bal:localBk[k].bal};
             }
+            // In all other cases server wins — don't let local 0 overwrite server balance
           });
           // Just use merged bookies as-is — migrateLegacy will clean up
           state[pr].bookies=mergedBk;
