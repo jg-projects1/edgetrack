@@ -280,7 +280,6 @@ async function loadData(){
     }
     // No cache — load from server directly
     await fetchFromServer();
-    migrateLegacy(); // run again after server data is loaded
   }catch(e){
     console.error('Load error:',e);
     setSyncStatus('error');
@@ -340,32 +339,8 @@ async function fetchFromServer(){
               mergedBk[k]={...mergedBk[k],bal:localBk[k].bal,status:localBk[k].status||mergedBk[k].status,notes:localBk[k].notes||mergedBk[k].notes};
             }
           });
-          // Case-insensitive dedup + rename before re-sort
-          const renameMap={'hot streak casino':'Hot Streak','gala':'Gala Casino'};
-          DEFAULT_BOOKIES.forEach(canonical=>{
-            Object.keys(mergedBk).forEach(existing=>{
-              if(existing!==canonical&&existing.toLowerCase()===canonical.toLowerCase()){
-                if(!mergedBk[canonical])mergedBk[canonical]={bal:0,status:'Not Signed Up',notes:''};
-                mergedBk[canonical].bal=(mergedBk[canonical].bal||0)+(mergedBk[existing].bal||0);
-                if(mergedBk[existing].status&&mergedBk[existing].status!=='Not Signed Up')mergedBk[canonical].status=mergedBk[existing].status;
-                if(mergedBk[existing].notes)mergedBk[canonical].notes=mergedBk[existing].notes;
-                delete mergedBk[existing];
-              }
-            });
-          });
-          Object.keys(renameMap).forEach(old=>{
-            const canonical=renameMap[old];
-            if(mergedBk[old]){
-              if(!mergedBk[canonical])mergedBk[canonical]={bal:0,status:'Not Signed Up',notes:''};
-              mergedBk[canonical].bal=(mergedBk[canonical].bal||0)+(mergedBk[old].bal||0);
-              if(mergedBk[old].status&&mergedBk[old].status!=='Not Signed Up')mergedBk[canonical].status=mergedBk[old].status;
-              delete mergedBk[old];
-            }
-          });
-          // Re-sort — only keep DEFAULT_BOOKIES entries
-          const resorted={};
-          DEFAULT_BOOKIES.forEach(b=>{if(mergedBk[b])resorted[b]=mergedBk[b];});
-          state[pr].bookies=resorted;
+          // Just use merged bookies as-is — migrateLegacy will clean up
+          state[pr].bookies=mergedBk;
           state[pr].transactions=merged;
           state[pr].freeBets=saved[pr].freeBets||state[pr].freeBets||[];
           if(!state[pr].casino)state[pr].casino=[];
@@ -386,6 +361,7 @@ async function fetchFromServer(){
       }
     }
     setSyncStatus('synced');
+    migrateLegacy();
     render();
   }catch(e){
     console.error('Server fetch error:',e);
@@ -432,32 +408,8 @@ async function saveData(source='unknown'){
       PROFILES.forEach(pr=>{
         if(sportsJson.data[pr]){
           state[pr].bank=sportsJson.data[pr].bank;
-          // Case-insensitive dedup + rename + re-sort
-          const rawBk=sportsJson.data[pr].bookies||{};
-          const renameMapS={'hot streak casino':'Hot Streak','gala':'Gala Casino'};
-          DEFAULT_BOOKIES.forEach(canonical=>{
-            Object.keys(rawBk).forEach(existing=>{
-              if(existing!==canonical&&existing.toLowerCase()===canonical.toLowerCase()){
-                if(!rawBk[canonical])rawBk[canonical]={bal:0,status:'Not Signed Up',notes:''};
-                rawBk[canonical].bal=(rawBk[canonical].bal||0)+(rawBk[existing].bal||0);
-                if(rawBk[existing].status&&rawBk[existing].status!=='Not Signed Up')rawBk[canonical].status=rawBk[existing].status;
-                if(rawBk[existing].notes)rawBk[canonical].notes=rawBk[existing].notes;
-                delete rawBk[existing];
-              }
-            });
-          });
-          Object.keys(renameMapS).forEach(old=>{
-            const canonical=renameMapS[old];
-            if(rawBk[old]){
-              if(!rawBk[canonical])rawBk[canonical]={bal:0,status:'Not Signed Up',notes:''};
-              rawBk[canonical].bal=(rawBk[canonical].bal||0)+(rawBk[old].bal||0);
-              if(rawBk[old].status&&rawBk[old].status!=='Not Signed Up')rawBk[canonical].status=rawBk[old].status;
-              delete rawBk[old];
-            }
-          });
-          const sortedBk={};
-          DEFAULT_BOOKIES.forEach(b=>{if(rawBk[b])sortedBk[b]=rawBk[b];});
-          state[pr].bookies=sortedBk;
+          // Use server bookies as-is — migrateLegacy will clean up
+          state[pr].bookies=sportsJson.data[pr].bookies||{};
           // Merge transactions — union of server + local, prefer settled over pending
           const serverTxs=sportsJson.data[pr].transactions||[];
           const localTxs=state[pr].transactions||[];
@@ -577,13 +529,14 @@ function migrateLegacy(){
       if(!bk[k].status)bk[k].status='Not Signed Up';
       if(bk[k].notes===undefined)bk[k].notes='';
     });
-    // Re-sort bookies alphabetically — only keep bookies in DEFAULT_BOOKIES
-    // (preserves balances, removes old/renamed entries)
+    // Re-sort bookies alphabetically — preserve ALL existing balances
     const sorted={};
     DEFAULT_BOOKIES.forEach(b=>{
-      if(bk[b]){sorted[b]=bk[b];}
-      else{sorted[b]={bal:0,status:'Not Signed Up',notes:''};}
+      if(bk[b]){sorted[b]=bk[b];} // keep existing entry with balance intact
+      else{sorted[b]={bal:0,status:'Not Signed Up',notes:''};} // only new bookies get 0
     });
+    // Also keep any bookies with non-zero balance not in DEFAULT_BOOKIES
+    Object.keys(bk).forEach(b=>{if(!sorted[b]&&(bk[b].bal||0)!==0)sorted[b]=bk[b];});
     state[pr].bookies=sorted;
   });
   if(!state.exchanges){state.exchanges={};EXCHANGES.forEach(e=>state.exchanges[e]=0);}
