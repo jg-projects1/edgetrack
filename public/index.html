@@ -331,7 +331,6 @@ async function fetchFromServer(){
           // (local is more recent, server may be stale replica)
           const serverBk=saved[pr].bookies||{};
           const localBk=state[pr].bookies||{};
-          console.log('[bk] '+pr+' serverBk Betfred:', serverBk.Betfred?.bal, 'localBk Betfred:', localBk.Betfred?.bal);
           // Server wins for balances — local only wins if it has a non-zero balance and server has zero
           const mergedBk={...serverBk};
           Object.keys(localBk).forEach(k=>{
@@ -344,7 +343,6 @@ async function fetchFromServer(){
           });
           // Just use merged bookies as-is — migrateLegacy will clean up
           state[pr].bookies=mergedBk;
-          console.log('[fetch] '+pr+' Betfred bal after merge:', mergedBk.Betfred?.bal);
           state[pr].transactions=merged;
           state[pr].freeBets=saved[pr].freeBets||state[pr].freeBets||[];
           if(!state[pr].casino)state[pr].casino=[];
@@ -498,7 +496,6 @@ function migrateLegacy(){
     if(!state[pr])state[pr]=makeProfile();
     if(!state[pr].transactions)state[pr].transactions=[];if(!state[pr].freeBets)state[pr].freeBets=[];
     const bk=state[pr].bookies||{};
-    console.log('[migrate]', pr, 'keys:', Object.keys(bk).length, 'Betfred:', bk.Betfred?.bal);
     // Case-insensitive dedup — for each DEFAULT_BOOKIES entry, find any case variant and merge
     DEFAULT_BOOKIES.forEach(canonical=>{
       Object.keys(bk).forEach(existing=>{
