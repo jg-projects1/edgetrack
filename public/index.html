@@ -341,6 +341,7 @@ async function fetchFromServer(){
           });
           // Just use merged bookies as-is — migrateLegacy will clean up
           state[pr].bookies=mergedBk;
+          console.log('[fetch] '+pr+' Betfred bal after merge:', mergedBk.Betfred?.bal);
           state[pr].transactions=merged;
           state[pr].freeBets=saved[pr].freeBets||state[pr].freeBets||[];
           if(!state[pr].casino)state[pr].casino=[];
