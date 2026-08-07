@@ -326,7 +326,8 @@ async function fetchFromServer(){
           });
           // Sort by date desc
           merged.sort((a,b)=>{const da=parseDate(a.date),db=parseDate(b.date);return db!==da?db-da:b.id-a.id;});
-          state[pr].bank=saved[pr].bank;
+          // Only use server bank if local is 0 (fresh load) — preserve local amendments
+          if((state[pr].bank||0)===0)state[pr].bank=saved[pr].bank;
           // Merge bookies — keep local balance if it differs from server
           // (local is more recent, server may be stale replica)
           const serverBk=saved[pr].bookies||{};
