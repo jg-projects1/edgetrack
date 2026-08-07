@@ -494,7 +494,7 @@ function migrateLegacy(){
     if(!state[pr])state[pr]=makeProfile();
     if(!state[pr].transactions)state[pr].transactions=[];if(!state[pr].freeBets)state[pr].freeBets=[];
     const bk=state[pr].bookies||{};
-    console.log('[migrate] '+pr+' bk keys:'+Object.keys(bk).length+' Betfred bal:'+(bk['Betfred']?.bal));
+    console.log('[migrate]', pr, 'keys:', Object.keys(bk).length, 'Betfred:', bk.Betfred?.bal);
     // Case-insensitive dedup — for each DEFAULT_BOOKIES entry, find any case variant and merge
     DEFAULT_BOOKIES.forEach(canonical=>{
       Object.keys(bk).forEach(existing=>{
