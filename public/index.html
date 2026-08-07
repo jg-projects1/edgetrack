@@ -331,6 +331,7 @@ async function fetchFromServer(){
           // (local is more recent, server may be stale replica)
           const serverBk=saved[pr].bookies||{};
           const localBk=state[pr].bookies||{};
+          console.log('[bk] '+pr+' serverBk Betfred:', serverBk.Betfred?.bal, 'localBk Betfred:', localBk.Betfred?.bal);
           const mergedBk={...serverBk};
           Object.keys(localBk).forEach(k=>{
             if(!mergedBk[k])mergedBk[k]=localBk[k];
