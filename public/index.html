@@ -92,8 +92,8 @@ body{font-family:system-ui,-apple-system,sans-serif;background:#343A40;min-heigh
 .pill-cashback{background:#14532D;color:#86EFAC}
 .pill-cashout{background:#791F1F;color:#F09595}
 .pill-arb{background:#5C3800;color:#F0A500}
-.pill-deposit,.pill-withdrawal{background:#3D4349;color:#C8C5BF}
-.pill-exchangedeposit,.pill-exchangewithdrawal{background:#085041;color:#5DCAA5}
+.pill-deposit,.pill-withdrawal{background:#0D4F5C;color:#5DCAA5}
+.pill-exchangedeposit,.pill-exchangewithdrawal{background:#0D4F5C;color:#5DCAA5}
 .pill-balanceamendment{background:#3D4349;color:#C8C5BF}
 
 .badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:500}
@@ -134,8 +134,8 @@ select option{background:#3D4349;color:#F0EDE8}
 .sel-cashback{background:#14532D;color:#86EFAC;border-color:#3B6D11}
 .sel-cashout{background:#791F1F;color:#F09595;border-color:#A32D2D}
 .sel-arb{background:#5C3800;color:#F0A500;border-color:#854F0B}
-.sel-deposit,.sel-withdrawal{background:#575A65;color:#B4B2A9;border-color:#9A9590}
-.sel-exchangedeposit,.sel-exchangewithdrawal{background:#085041;color:#5DCAA5;border-color:#0F6E56}
+.sel-deposit,.sel-withdrawal{background:#0D4F5C;color:#5DCAA5;border-color:#0F8FA5}
+.sel-exchangedeposit,.sel-exchangewithdrawal{background:#0D4F5C;color:#5DCAA5;border-color:#0F8FA5}
 .sel-balanceamendment{background:#575A65;color:#B4B2A9;border-color:#9A9590}
 
 .acct-selector{display:flex;gap:5px;flex-wrap:wrap}
@@ -1255,7 +1255,7 @@ function renderTxTable(txs,showAcct){
       ${showAcct?`<td>${acctPill(t._acct)}</td>`:''}
       <td><span class="${pillClass(t.type)}">${t.type}</span></td>
       <td style="font-weight:500">${isAmend?t.target:(isExchT?t.exchange:t.bookie)||'—'}</td>
-      <td style="max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#C8C5BF;font-size:11px">${t.event||t.notes||'—'}</td>
+      <td style="max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#C8C5BF;font-size:11px">${(isBookieT||isExchT)&&t.amount?fmt(t.amount):t.event||t.notes||'—'}</td>
       <td>${resStr}</td>
       <td><div style="display:flex;align-items:center;gap:4px">${pnlStr}<button class="btn-sm btn-sm-edit" onclick="editPnl('${t._acct}',${t.id})" style="padding:3px 7px;font-size:10px"><i class="ti ti-edit" aria-hidden="true"></i></button></div></td>
       <td style="white-space:nowrap">
@@ -2442,7 +2442,7 @@ function renderTxTable(txs,showAcct){
       ${showAcct?`<td>${acctPill(t._acct)}</td>`:''}
       <td><span class="${pillClass(t.type)}">${t.type}</span></td>
       <td style="font-weight:500">${isAmend?t.target:(isExchT?t.exchange:t.bookie)||'—'}</td>
-      <td style="max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#C8C5BF;font-size:11px">${t.event||t.notes||'—'}</td>
+      <td style="max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#C8C5BF;font-size:11px">${(isBookieT||isExchT)&&t.amount?fmt(t.amount):t.event||t.notes||'—'}</td>
       <td>${resStr}</td>
       <td><div style="display:flex;align-items:center;gap:4px">${pnlStr}<button class="btn-sm btn-sm-edit" onclick="editPnl('${t._acct}',${t.id})" style="padding:3px 7px;font-size:10px"><i class="ti ti-edit" aria-hidden="true"></i></button></div></td>
       <td style="white-space:nowrap">
