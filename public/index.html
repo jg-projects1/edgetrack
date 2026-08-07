@@ -280,6 +280,7 @@ async function loadData(){
     }
     // No cache — load from server directly
     await fetchFromServer();
+    migrateLegacy(); // run again after server data is loaded
   }catch(e){
     console.error('Load error:',e);
     setSyncStatus('error');
@@ -3071,7 +3072,7 @@ async function loadApp(){
   }
   try{
     await loadData();
-    migrateLegacy();
+    // migrateLegacy runs inside fetchFromServer after server data loads
   }catch(e){
     console.error('Load failed:',e);
   }finally{
