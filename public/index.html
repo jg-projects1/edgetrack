@@ -2335,6 +2335,32 @@ function renderCasinoForm(){
 }
 
 
+function showCasinoBookies(){
+  filterCasinoBookies(document.getElementById('c-casino-search')?.value||'');
+}
+
+function filterCasinoBookies(q){
+  const dd=document.getElementById('casino-bookie-dropdown');
+  if(!dd)return;
+  const bookies=Object.keys(state[casinoFormAcct]?.bookies||{}).sort();
+  const filtered=q?bookies.filter(function(b){return b.toLowerCase().includes(q.toLowerCase());}):bookies;
+  if(!filtered.length){dd.style.display='none';return;}
+  dd.innerHTML=filtered.map(function(b){
+    const safe=b.replace(/'/g,"&#39;");
+    return '<div onclick="selectCasinoBook(\''+safe+'\')" style="padding:8px 12px;cursor:pointer;font-size:13px;color:#F0EDE8;border-bottom:0.5px solid rgba(255,255,255,0.06)">'+b+'</div>';
+  }).join('');
+  dd.style.display='block';
+}
+
+function selectCasinoBook(name){
+  const s=document.getElementById('c-casino-search');
+  const h=document.getElementById('c-casino');
+  const dd=document.getElementById('casino-bookie-dropdown');
+  if(s)s.value=name;
+  if(h)h.value=name;
+  if(dd)dd.style.display='none';
+}
+
 // Prevent scroll wheel changing number inputs
 document.addEventListener('wheel', function(e){
   if(document.activeElement&&document.activeElement.type==='number'){
