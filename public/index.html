@@ -603,8 +603,6 @@ function showToast(msg,type='success'){
 
 function switchTab(t){
   currentTab=t;
-  document.querySelectorAll('.tab').forEach(el=>el.classList.remove('active'));
-  const el=document.getElementById('tab-'+t);if(el)el.classList.add('active');
   const pb=document.getElementById('profile-bar');
   if(pb)pb.style.display=(t==='dashboard'||t==='trade'||t==='casino')?'none':'flex';
   render();window.scrollTo(0,0);
@@ -637,15 +635,20 @@ function updateBadge(){
 
 function render(){
   const el=document.getElementById('main-content');
+  if(!el)return;
+  // Update tab bar active state
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  const activeTab=document.getElementById('tab-'+currentTab);
+  if(activeTab)activeTab.classList.add('active');
+  // Render content
   if(currentTab==='dashboard')el.innerHTML=renderDashboard();
   else if(currentTab==='pending')el.innerHTML=renderPending();
   else if(currentTab==='trade')el.innerHTML=renderTrade();
   else if(currentTab==='accounts')el.innerHTML=renderAccounts();
-  else if(currentTab==='reports')el.innerHTML=renderAccounts();
-  else if(currentTab==='risk')el.innerHTML=renderAccounts();
   else if(currentTab==='casino')el.innerHTML=renderCasino();
+  else el.innerHTML=renderDashboard(); // fallback
   updateBadge();
-  if(currentTab==='trade'&&tradeSubTab==='log')bindFormEvents();
+  if(currentTab==='trade'&&tradeSubTab==='log')setTimeout(bindFormEvents,50);
 }
 
 function monthlyPnl(txs){
@@ -989,15 +992,20 @@ function updateBadge(){
 
 function render(){
   const el=document.getElementById('main-content');
+  if(!el)return;
+  // Update tab bar active state
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  const activeTab=document.getElementById('tab-'+currentTab);
+  if(activeTab)activeTab.classList.add('active');
+  // Render content
   if(currentTab==='dashboard')el.innerHTML=renderDashboard();
   else if(currentTab==='pending')el.innerHTML=renderPending();
   else if(currentTab==='trade')el.innerHTML=renderTrade();
   else if(currentTab==='accounts')el.innerHTML=renderAccounts();
-  else if(currentTab==='reports')el.innerHTML=renderAccounts();
-  else if(currentTab==='risk')el.innerHTML=renderAccounts();
   else if(currentTab==='casino')el.innerHTML=renderCasino();
+  else el.innerHTML=renderDashboard(); // fallback
   updateBadge();
-  if(currentTab==='trade'&&tradeSubTab==='log')bindFormEvents();
+  if(currentTab==='trade'&&tradeSubTab==='log')setTimeout(bindFormEvents,50);
 }
 
 function monthlyPnl(txs){
@@ -1596,8 +1604,8 @@ function submitTx(){
 function duplicateTrade(acct,id,rawTx){
   const tx=rawTx||(state[acct]?.transactions||[]).find(t=>t.id===id);if(!tx)return;
   formAccount=acct;selectedBetType=tx.type||'';
-  currentTab='add';document.querySelectorAll('.tab').forEach(el=>el.classList.remove('active'));
-  document.getElementById('tab-add')?.classList.add('active');
+  currentTab='trade';tradeSubTab='log';document.querySelectorAll('.tab').forEach(el=>el.classList.remove('active'));
+  document.getElementById('tab-trade')?.classList.add('active');
   document.getElementById('profile-bar').style.display='none';
   document.getElementById('main-content').innerHTML=renderAdd(tx);
   updateBadge();bindFormEvents();updateFormFields();
