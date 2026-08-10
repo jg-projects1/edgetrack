@@ -866,18 +866,7 @@ function applyBalanceOnSettle(tx,p,result){
   }
 }
 
-function applyBalanceAtLog(tx,p){
-  if(tx.result==='Pending'){
-    // Only deduct stake for normal bets — free bets don't use your money
-    if(!isFreeBet(tx.type)&&tx.bookie&&p.bookies[tx.bookie])
-      p.bookies[tx.bookie].bal=(p.bookies[tx.bookie].bal||0)-(tx.bstake||0);
-  }else{
-    // Logged as already settled — for normal bets deduct stake first, then apply result
-    if(!isFreeBet(tx.type)&&tx.result==='Lost'&&tx.bookie&&p.bookies[tx.bookie])
-      p.bookies[tx.bookie].bal=(p.bookies[tx.bookie].bal||0)-(tx.bstake||0);
-    applyBalanceOnSettle(tx,p,tx.result);
-  }
-}
+
 
 function settleBet(acct,id,result){
   const p=state[acct];const tx=(p.transactions||[]).find(t=>t.id===id);if(!tx||tx.result!=='Pending')return;
@@ -2359,6 +2348,60 @@ function selectCasinoBook(name){
   if(s)s.value=name;
   if(h)h.value=name;
   if(dd)dd.style.display='none';
+}
+
+function updateCasinoNet(){
+  const startBal=parseFloat(document.getElementById('c-start-bal')?.value)||0;
+  const endBal=parseFloat(document.getElementById('c-end-bal')?.value)||0;
+  const net=endBal-startBal;
+  const el=document.getElementById('c-net');
+  if(el){el.textContent=fmtS(net);el.style.color=net>=0?'#22C55E':'#F87171';}
+}
+
+function saveCasinoSession(){
+  const msg=document.getElementById('c-msg');
+  const casino=document.getElementById('c-casino')?.value||(document.getElementById('c-casino-search')?.value?.trim()||'');
+  if(!casino){if(msg)msg.textContent='Select a casino / bookie.';return;}
+  const startBal=parseFloat(document.getElementById('c-start-bal')?.value)||0;
+  const endBal=parseFloat(document.getElementById('c-end-bal')?.value)||0;
+  const net=endBal-startBal;
+  const p=state[casinoFormAcct];
+  if(!p.bookies[casino])p.bookies[casino]={bal:0,status:'Active',notes:''};
+  p.bookies[casino].bal=(p.bookies[casino].bal||0)+net;
+  if(!p.casino)p.casino=[];
+  p.casino.push({
+    id:Date.now(),
+    date:document.getElementById('c-date')?.value||todayStr(),
+    casino,operator:casinoOperator,startBal,endBal,netProfit:net,
+    notes:document.getElementById('c-notes')?.value||'',_acct:casinoFormAcct,
+  });
+  if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('casinoSession');
+  showToast('Casino session saved!');render();
+}
+
+function resetCasinoForm(){
+  casinoOperator='JG';
+  ['c-casino','c-casino-search','c-start-bal','c-end-bal','c-notes'].forEach(function(id){
+    const el=document.getElementById(id);if(el)el.value='';
+  });
+  const d=document.getElementById('c-date');if(d)d.value=todayStr();
+  const dd=document.getElementById('casino-bookie-dropdown');if(dd)dd.style.display='none';
+  const net=document.getElementById('c-net');if(net){net.textContent='£0.00';net.style.color='#22C55E';}
+  setCasinoView(0);
+}
+
+function deleteCasinoSession(acct,id){
+  if(!confirm('Delete this casino session?'))return;
+  const session=(state[acct].casino||[]).find(function(s){return s.id===id;});
+  if(session){
+    const p=state[acct];
+    const casino=session.casino;
+    const pnl=session.startBal!==undefined?session.endBal-session.startBal:session.netProfit||0;
+    if(p.bookies[casino])p.bookies[casino].bal=(p.bookies[casino].bal||0)-pnl;
+  }
+  state[acct].casino=(state[acct].casino||[]).filter(function(s){return s.id!==id;});
+  if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('deleteCasino');
+  showToast('Session deleted');render();
 }
 
 // Prevent scroll wheel changing number inputs
