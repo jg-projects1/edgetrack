@@ -614,10 +614,10 @@ function setAccountsTab(i){
   if(el)el.innerHTML=renderAccounts();
 }
 
-function switchTradeTab(sub){
-  tradeSubTab=sub;
-  const el=document.getElementById('main-content');
-  if(el)el.innerHTML=renderTrade();
+function switchTradeTab(i){
+  tradeSubTab=i===1?'history':'log';
+  currentTab='trade';
+  render();
 }
 
 function switchProfile(p){
@@ -971,10 +971,10 @@ function renderTrade(){
   return tabs+renderAdd();
 }
 
-function switchTradeTab(sub){
-  tradeSubTab=sub;
-  const el=document.getElementById('main-content');
-  if(el)el.innerHTML=renderTrade();
+function switchTradeTab(i){
+  tradeSubTab=i===1?'history':'log';
+  currentTab='trade';
+  render();
 }
 
 function switchProfile(p){
