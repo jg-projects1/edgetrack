@@ -611,6 +611,7 @@ function switchTab(t){
 }
 function setAccountsTab(i){
   window._accountsSubTab=['accounts','risk','reports'][i];
+  currentTab='accounts';
   const el=document.getElementById('main-content');
   if(el)el.innerHTML=renderAccounts();
 }
@@ -645,7 +646,6 @@ function render(){
   else if(currentTab==='casino')el.innerHTML=renderCasino();
   updateBadge();
   if(currentTab==='trade'&&tradeSubTab==='log')bindFormEvents();
-  if(currentTab==='add')bindFormEvents();
 }
 
 function monthlyPnl(txs){
@@ -998,7 +998,6 @@ function render(){
   else if(currentTab==='casino')el.innerHTML=renderCasino();
   updateBadge();
   if(currentTab==='trade'&&tradeSubTab==='log')bindFormEvents();
-  if(currentTab==='add')bindFormEvents();
 }
 
 function monthlyPnl(txs){
@@ -1320,6 +1319,7 @@ function renderTrade(){
 }
 function setCasinoView(i){
   casinoView=['log','history','monthly','summary'][i];
+  currentTab='casino';
   render();
 }
 function renderAdd(prefill){
