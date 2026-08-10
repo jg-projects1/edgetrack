@@ -838,6 +838,8 @@ function renderPending(){
 }
 
 function applyBalanceOnSettle(tx,p,result){
+  // Underlay lost: P&L = £0, no lay profit to exchange, bookie stays deducted
+  if(tx.underlay&&result==='Lost'){tx.pnl=0;return;}
   const isFB=isFreeBet(tx.type);
   const bstake=tx.bstake||0,bodds=tx.bodds||0,pnl=tx.pnl||0,exchange=tx.exchange;
   if(result==='Won'){
@@ -2067,6 +2069,8 @@ function renderPending(){
 }
 
 function applyBalanceOnSettle(tx,p,result){
+  // Underlay lost: P&L = £0, no lay profit to exchange, bookie stays deducted
+  if(tx.underlay&&result==='Lost'){tx.pnl=0;return;}
   const isFB=isFreeBet(tx.type);
   const bstake=tx.bstake||0,bodds=tx.bodds||0,pnl=tx.pnl||0,exchange=tx.exchange;
   if(result==='Won'){
