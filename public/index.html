@@ -601,24 +601,10 @@ function showToast(msg,type='success'){
   setTimeout(()=>t.classList.remove('show'),3000);
 }
 
-function switchTab(t){
-  currentTab=t;
-  const pb=document.getElementById('profile-bar');
-  if(pb)pb.style.display=(t==='dashboard'||t==='trade'||t==='casino')?'none':'flex';
-  render();window.scrollTo(0,0);
-}
-function setAccountsTab(i){
-  window._accountsSubTab=['accounts','risk','reports'][i];
-  currentTab='accounts';
-  const el=document.getElementById('main-content');
-  if(el)el.innerHTML=renderAccounts();
-}
 
-function switchTradeTab(i){
-  tradeSubTab=i===1?'history':'log';
-  currentTab='trade';
-  render();
-}
+
+
+
 
 function switchProfile(p){
   currentProfile=p;
@@ -633,23 +619,7 @@ function updateBadge(){
   if(b){b.textContent=n;b.style.display=n?'inline':'none';}
 }
 
-function render(){
-  const el=document.getElementById('main-content');
-  if(!el)return;
-  // Update tab bar active state
-  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
-  const activeTab=document.getElementById('tab-'+currentTab);
-  if(activeTab)activeTab.classList.add('active');
-  // Render content
-  if(currentTab==='dashboard')el.innerHTML=renderDashboard();
-  else if(currentTab==='pending')el.innerHTML=renderPending();
-  else if(currentTab==='trade')el.innerHTML=renderTrade();
-  else if(currentTab==='accounts')el.innerHTML=renderAccounts();
-  else if(currentTab==='casino')el.innerHTML=renderCasino();
-  else el.innerHTML=renderDashboard(); // fallback
-  updateBadge();
-  if(currentTab==='trade'&&tradeSubTab==='log')setTimeout(bindFormEvents,50);
-}
+
 
 function monthlyPnl(txs){
   const map={};
@@ -960,22 +930,9 @@ function confirmPnlEdit(acct,id){
 function closeModal(){document.getElementById('modal-root').innerHTML='';}
 
 // ── ADD FORM ─────────────────────────────────────────────────────────────────
-function renderTrade(){
-  const logActive=tradeSubTab==='log';
-  const histActive=tradeSubTab==='history';
-  const tabs='<div style="display:flex;gap:8px;margin-bottom:14px">'
-    +'<button onclick="switchTradeTab(0)" class="btn '+(logActive?'btn-primary':'btn-ghost')+'" style="flex:1;padding:10px">Log</button>'
-    +'<button onclick="switchTradeTab(1)" class="btn '+(histActive?'btn-primary':'btn-ghost')+'" style="flex:1;padding:10px">History</button>'
-    +'</div>';
-  if(histActive)return tabs+renderHistory();
-  return tabs+renderAdd();
-}
 
-function switchTradeTab(i){
-  tradeSubTab=i===1?'history':'log';
-  currentTab='trade';
-  render();
-}
+
+
 
 function switchProfile(p){
   currentProfile=p;
@@ -990,23 +947,7 @@ function updateBadge(){
   if(b){b.textContent=n;b.style.display=n?'inline':'none';}
 }
 
-function render(){
-  const el=document.getElementById('main-content');
-  if(!el)return;
-  // Update tab bar active state
-  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
-  const activeTab=document.getElementById('tab-'+currentTab);
-  if(activeTab)activeTab.classList.add('active');
-  // Render content
-  if(currentTab==='dashboard')el.innerHTML=renderDashboard();
-  else if(currentTab==='pending')el.innerHTML=renderPending();
-  else if(currentTab==='trade')el.innerHTML=renderTrade();
-  else if(currentTab==='accounts')el.innerHTML=renderAccounts();
-  else if(currentTab==='casino')el.innerHTML=renderCasino();
-  else el.innerHTML=renderDashboard(); // fallback
-  updateBadge();
-  if(currentTab==='trade'&&tradeSubTab==='log')setTimeout(bindFormEvents,50);
-}
+
 
 function monthlyPnl(txs){
   const map={};
@@ -1317,19 +1258,8 @@ function confirmPnlEdit(acct,id){
 function closeModal(){document.getElementById('modal-root').innerHTML='';}
 
 // ── ADD FORM ─────────────────────────────────────────────────────────────────
-function renderTrade(){
-  const tabs='<div style="display:flex;gap:8px;margin-bottom:14px">'
-    +'<button onclick="setCasinoView(99)" class="btn '+(tradeSubTab==="log"?"btn-primary":"btn-ghost")+'" style="flex:1;padding:10px">Log</button>'
-    +'<button onclick="setCasinoView(98)" class="btn '+(tradeSubTab==="history"?"btn-primary":"btn-ghost")+'" style="flex:1;padding:10px">History</button>'
-    +"</div>";
-  if(tradeSubTab==="history")return tabs+renderHistory();
-  return tabs+renderAdd();
-}
-function setCasinoView(i){
-  casinoView=['log','history','monthly','summary'][i];
-  currentTab='casino';
-  render();
-}
+
+
 function renderAdd(prefill){
   const p=state[formAccount];const pf=prefill||{};
   const exchOpts=EXCHANGES.map(e=>`<option${(pf.exchange||lastExchange)===e?' selected':''}>${e}</option>`).join('');
@@ -1764,18 +1694,7 @@ function renderReports(){
 }
 
 // ── ACCOUNTS ─────────────────────────────────────────────────────────────────
-function renderAccounts(){
-  const accountsSubTab=window._accountsSubTab||'accounts';
-  const subBar='<div style="display:flex;gap:6px;margin-bottom:14px">'
-    +'<button onclick="setAccountsTab(0)" class="btn '+(accountsSubTab==='accounts'?'btn-primary':'btn-ghost')+'" style="flex:1;padding:9px;font-size:12px">Accounts</button>'
-    +'<button onclick="setAccountsTab(1)" class="btn '+(accountsSubTab==='risk'?'btn-primary':'btn-ghost')+'" style="flex:1;padding:9px;font-size:12px">Risk</button>'
-    +'<button onclick="setAccountsTab(2)" class="btn '+(accountsSubTab==='reports'?'btn-primary':'btn-ghost')+'" style="flex:1;padding:9px;font-size:12px">Reports</button>'
-    +'</div>';
-  if(accountsSubTab==='risk')return subBar+renderRisk();
-  if(accountsSubTab==='reports')return subBar+renderReports();
-  const _orig=renderAccountsMain();
-  return subBar+_orig;
-}
+
 
 function renderAccountsMain(){
   const acct=currentProfile==='both'?'me':currentProfile,p=state[acct];
@@ -2306,6 +2225,113 @@ function renderCasinoHistory(){
     +'</tr></thead>'
     +'<tbody>'+rows+'</tbody>'
     +'</table></div></div>';
+}
+
+
+
+// ── ROUTING ──────────────────────────────────────────────────────────────────
+function render(){
+  const el=document.getElementById('main-content');
+  if(!el)return;
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  const activeTab=document.getElementById('tab-'+currentTab);
+  if(activeTab)activeTab.classList.add('active');
+  if(currentTab==='dashboard')el.innerHTML=renderDashboard();
+  else if(currentTab==='pending')el.innerHTML=renderPending();
+  else if(currentTab==='trade')el.innerHTML=renderTrade();
+  else if(currentTab==='accounts')el.innerHTML=renderAccounts();
+  else if(currentTab==='casino')el.innerHTML=renderCasino();
+  else el.innerHTML=renderDashboard();
+  updateBadge();
+  if(currentTab==='trade'&&tradeSubTab==='log')setTimeout(bindFormEvents,50);
+}
+
+function switchTab(t){
+  currentTab=t;
+  const pb=document.getElementById('profile-bar');
+  if(pb)pb.style.display=(t==='dashboard'||t==='trade'||t==='casino')?'none':'flex';
+  render();window.scrollTo(0,0);
+}
+
+function switchTradeTab(i){
+  tradeSubTab=i===1?'history':'log';
+  currentTab='trade';
+  render();
+}
+
+function setAccountsTab(i){
+  window._accountsSubTab=['accounts','risk','reports'][i];
+  currentTab='accounts';
+  document.getElementById('main-content').innerHTML=renderAccounts();
+}
+
+function setCasinoView(i){
+  casinoView=['log','history','monthly','summary'][i];
+  currentTab='casino';
+  render();
+}
+
+function renderTrade(){
+  const logActive=tradeSubTab==='log';
+  const histActive=tradeSubTab==='history';
+  const tabs='<div style="display:flex;gap:8px;margin-bottom:14px">'
+    +'<button onclick="switchTradeTab(0)" class="btn '+(logActive?'btn-primary':'btn-ghost')+'" style="flex:1;padding:10px">Log</button>'
+    +'<button onclick="switchTradeTab(1)" class="btn '+(histActive?'btn-primary':'btn-ghost')+'" style="flex:1;padding:10px">History</button>'
+    +'</div>';
+  if(histActive)return tabs+renderHistory();
+  return tabs+renderAdd();
+}
+
+function renderAccounts(){
+  const accountsSubTab=window._accountsSubTab||'accounts';
+  const subBar='<div style="display:flex;gap:6px;margin-bottom:14px">'
+    +'<button onclick="setAccountsTab(0)" class="btn '+(accountsSubTab==='accounts'?'btn-primary':'btn-ghost')+'" style="flex:1;padding:9px;font-size:12px">Accounts</button>'
+    +'<button onclick="setAccountsTab(1)" class="btn '+(accountsSubTab==='risk'?'btn-primary':'btn-ghost')+'" style="flex:1;padding:9px;font-size:12px">Risk</button>'
+    +'<button onclick="setAccountsTab(2)" class="btn '+(accountsSubTab==='reports'?'btn-primary':'btn-ghost')+'" style="flex:1;padding:9px;font-size:12px">Reports</button>'
+    +'</div>';
+  if(accountsSubTab==='risk')return subBar+renderRisk();
+  if(accountsSubTab==='reports')return subBar+renderReports();
+  return subBar+renderAccountsMain();
+}
+
+function renderCasinoForm(){
+  const acctBtns=PROFILES.map(function(pr){
+    return '<button class="acct-sel-btn '+(casinoFormAcct===pr?'active-'+pr:'')+'" onclick="casinoFormAcct=\''+pr+'\';setCasinoView(0)">'+profileLabel(pr)+'</button>';
+  }).join('');
+  const jgBg=casinoOperator==='JG'?'#7A4F00':'#3D4349';
+  const jgCol=casinoOperator==='JG'?'#F5C842':'#C8C5BF';
+  const jpBg=casinoOperator==='JP'?'#14532D':'#3D4349';
+  const jpCol=casinoOperator==='JP'?'#86EFAC':'#C8C5BF';
+  return '<div class="card"><div class="card-header"><span class="card-title">Log casino session</span></div>'
+    +'<div class="card-body" style="padding-bottom:80px">'
+    +'<div class="form-section"><div class="form-label">Account</div><div class="acct-selector">'+acctBtns+'</div></div>'
+    +'<div style="margin-bottom:10px"><div class="form-label">Operator</div><div style="display:flex;gap:6px">'
+    +'<button onclick="casinoOperator=\'JG\';setCasinoView(0)" style="flex:1;padding:9px;border-radius:8px;border:0.5px solid rgba(255,255,255,0.09);background:'+jgBg+';color:'+jgCol+';font-family:system-ui;font-size:13px;font-weight:500;cursor:pointer">JG</button>'
+    +'<button onclick="casinoOperator=\'JP\';setCasinoView(0)" style="flex:1;padding:9px;border-radius:8px;border:0.5px solid rgba(255,255,255,0.09);background:'+jpBg+';color:'+jpCol+';font-family:system-ui;font-size:13px;font-weight:500;cursor:pointer">JP</button>'
+    +'</div></div>'
+    +'<div style="display:grid;grid-template-columns:120px 1fr;gap:8px;margin-bottom:8px">'
+    +'<div class="form-group"><div class="form-label">Date</div><input type="text" id="c-date" value="'+todayStr()+'" style="font-size:12px"/></div>'
+    +'<div class="form-group"><div class="form-label">Casino / Bookie</div><div style="position:relative">'
+    +'<input type="text" id="c-casino-search" placeholder="Search..." autocomplete="off" oninput="filterCasinoBookies(this.value)" onfocus="showCasinoBookies()"/>'
+    +'<input type="hidden" id="c-casino" value=""/>'
+    +'<div id="casino-bookie-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:50;background:#3D4349;border:0.5px solid rgba(255,255,255,0.10);border-radius:8px;margin-top:3px;max-height:180px;overflow-y:auto"></div>'
+    +'</div></div></div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">'
+    +'<div class="form-group"><div class="form-label">Starting Balance</div><input type="number" id="c-start-bal" placeholder="0.00" step="0.01" inputmode="decimal" oninput="updateCasinoNet()"/></div>'
+    +'<div class="form-group"><div class="form-label">Ending Balance</div><input type="number" id="c-end-bal" placeholder="0.00" step="0.01" inputmode="decimal" oninput="updateCasinoNet()"/></div>'
+    +'</div>'
+    +'<div style="background:#3D4349;border-radius:8px;padding:12px;margin-bottom:8px">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center">'
+    +'<span style="font-size:12px;color:#C8C5BF">P&L</span>'
+    +'<span id="c-net" style="font-size:20px;font-weight:500;color:#22C55E">£0.00</span>'
+    +'</div></div>'
+    +'<div class="form-group"><div class="form-label">Notes</div><input type="text" id="c-notes" placeholder="optional"/></div>'
+    +'<div id="c-msg" style="font-size:12px;color:#F87171;margin-top:6px"></div>'
+    +'</div>'
+    +'<div style="position:fixed;bottom:calc(58px + env(safe-area-inset-bottom));left:0;right:0;padding:10px 16px;background:#2C3136;border-top:0.5px solid rgba(255,255,255,0.08);display:flex;gap:8px;z-index:90;max-width:680px;margin:0 auto">'
+    +'<button class="btn btn-ghost" onclick="resetCasinoForm()" style="width:72px">Clear</button>'
+    +'<button class="btn btn-primary btn-full" onclick="saveCasinoSession()"><i class="ti ti-check"></i> Save session</button>'
+    +'</div></div>';
 }
 
 
