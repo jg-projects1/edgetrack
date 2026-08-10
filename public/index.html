@@ -604,10 +604,7 @@ function showToast(msg,type='success'){
 function switchTab(t){
   currentTab=t;
   document.querySelectorAll('.tab').forEach(el=>el.classList.remove('active'));
-  // Map old tab IDs to new ones
-  const tabMap={'add':'trade','history':'trade','reports':'accounts','risk':'accounts'};
-  const activeId=tabMap[t]||t;
-  const el=document.getElementById('tab-'+activeId);if(el)el.classList.add('active');
+  const el=document.getElementById('tab-'+t);if(el)el.classList.add('active');
   const pb=document.getElementById('profile-bar');
   if(pb)pb.style.display=(t==='dashboard'||t==='trade'||t==='casino')?'none':'flex';
   render();window.scrollTo(0,0);
@@ -641,7 +638,7 @@ function render(){
   const el=document.getElementById('main-content');
   if(currentTab==='dashboard')el.innerHTML=renderDashboard();
   else if(currentTab==='pending')el.innerHTML=renderPending();
-  else if(currentTab==='trade'||currentTab==='add'||currentTab==='history')el.innerHTML=renderTrade();
+  else if(currentTab==='trade')el.innerHTML=renderTrade();
   else if(currentTab==='accounts')el.innerHTML=renderAccounts();
   else if(currentTab==='reports')el.innerHTML=renderAccounts();
   else if(currentTab==='risk')el.innerHTML=renderAccounts();
@@ -994,7 +991,7 @@ function render(){
   const el=document.getElementById('main-content');
   if(currentTab==='dashboard')el.innerHTML=renderDashboard();
   else if(currentTab==='pending')el.innerHTML=renderPending();
-  else if(currentTab==='trade'||currentTab==='add'||currentTab==='history')el.innerHTML=renderTrade();
+  else if(currentTab==='trade')el.innerHTML=renderTrade();
   else if(currentTab==='accounts')el.innerHTML=renderAccounts();
   else if(currentTab==='reports')el.innerHTML=renderAccounts();
   else if(currentTab==='risk')el.innerHTML=renderAccounts();
