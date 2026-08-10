@@ -612,8 +612,8 @@ function switchTab(t){
   if(pb)pb.style.display=(t==='dashboard'||t==='trade'||t==='casino')?'none':'flex';
   render();window.scrollTo(0,0);
 }
-function setAccountsTab(k){
-  window._accountsSubTab=k;
+function setAccountsTab(i){
+  window._accountsSubTab=['accounts','risk','reports'][i];
   const el=document.getElementById('main-content');
   if(el)el.innerHTML=renderAccounts();
 }
@@ -1322,17 +1322,8 @@ function renderTrade(){
   return tabs+renderAdd();
 }
 function setCasinoView(i){
-  if(i===99){tradeSubTab="log";currentTab="trade";}
-  else if(i===98){tradeSubTab="history";currentTab="trade";}
-  else{casinoView=["log","history","monthly","summary"][i];}
-  const el=document.getElementById("main-content")||document.getElementById("casino-view");
-  if(i===99||i===98){
-    const mc=document.getElementById("main-content");
-    if(mc)mc.innerHTML=renderTrade();
-    if(i===99)bindFormEvents();
-  }else{
-    render();
-  }
+  casinoView=['log','history','monthly','summary'][i];
+  render();
 }
 function renderAdd(prefill){
   const p=state[formAccount];const pf=prefill||{};
@@ -1770,9 +1761,10 @@ function renderReports(){
 // ── ACCOUNTS ─────────────────────────────────────────────────────────────────
 function renderAccounts(){
   const accountsSubTab=window._accountsSubTab||'accounts';
-  const _acctTabs=[['accounts','Accounts'],['risk','Risk'],['reports','Reports']];
   const subBar='<div style="display:flex;gap:6px;margin-bottom:14px">'
-    +_acctTabs.map(function(pair){const k=pair[0],l=pair[1];return '<button onclick="setAccountsTab('+JSON.stringify(k)+')" class="btn '+(accountsSubTab===k?'btn-primary':'btn-ghost')+'" style="flex:1;padding:9px;font-size:12px">'+l+'</button>';}).join('')
+    +'<button onclick="setAccountsTab(0)" class="btn '+(accountsSubTab==='accounts'?'btn-primary':'btn-ghost')+'" style="flex:1;padding:9px;font-size:12px">Accounts</button>'
+    +'<button onclick="setAccountsTab(1)" class="btn '+(accountsSubTab==='risk'?'btn-primary':'btn-ghost')+'" style="flex:1;padding:9px;font-size:12px">Risk</button>'
+    +'<button onclick="setAccountsTab(2)" class="btn '+(accountsSubTab==='reports'?'btn-primary':'btn-ghost')+'" style="flex:1;padding:9px;font-size:12px">Reports</button>'
     +'</div>';
   if(accountsSubTab==='risk')return subBar+renderRisk();
   if(accountsSubTab==='reports')return subBar+renderReports();
