@@ -236,11 +236,8 @@ select option{background:#3D4349;color:#F0EDE8}
   <div class="tab-bar">
     <button class="tab active" id="tab-dashboard" onclick="switchTab('dashboard')"><i class="ti ti-layout-dashboard" aria-hidden="true"></i><span class="tab-label">Dashboard</span></button>
     <button class="tab" id="tab-pending" onclick="switchTab('pending')"><i class="ti ti-clock" aria-hidden="true"></i><span class="tab-label">Settle <span id="pending-badge" style="display:none;background:#BA7517;color:#fff;border-radius:10px;padding:0 5px;font-size:9px;font-weight:500">0</span></span></button>
-    <button class="tab" id="tab-add" onclick="switchTab('add')"><i class="ti ti-plus" aria-hidden="true"></i><span class="tab-label">Log trade</span></button>
-    <button class="tab" id="tab-history" onclick="switchTab('history')"><i class="ti ti-list" aria-hidden="true"></i><span class="tab-label">History</span></button>
-    <button class="tab" id="tab-accounts" onclick="switchTab('accounts')"><i class="ti ti-building-bank" aria-hidden="true"></i><span class="tab-label">Accounts</span></button>
-    <button class="tab" id="tab-reports" onclick="switchTab('reports')"><i class="ti ti-chart-bar" aria-hidden="true"></i><span class="tab-label">Reports</span></button>
-    <button class="tab" id="tab-risk" onclick="switchTab('risk')"><i class="ti ti-shield" aria-hidden="true"></i><span class="tab-label">Risk</span></button>
+    <button class="tab" id="tab-trade" onclick="switchTab('trade')"><i class="ti ti-repeat" aria-hidden="true"></i><span class="tab-label">Trade</span></button>
+    <button class="tab" id="tab-accounts" onclick="switchTab('accounts')"><i class="ti ti-wallet" aria-hidden="true"></i><span class="tab-label">Accounts</span></button>
     <button class="tab" id="tab-casino" onclick="switchTab('casino')"><i class="ti ti-cards" aria-hidden="true"></i><span class="tab-label">Casino</span></button>
   </div>
 </div>
@@ -548,7 +545,7 @@ function migrateLegacy(){
   // Bookie migration save disabled — was overwriting correct balances
 }
 
-let currentProfile='me',currentTab='dashboard',formAccount='me',selectedBetType='',exchTransferBank='me',isUnderlay=true;
+let currentProfile='me',currentTab='dashboard',tradeSubTab='log',formAccount='me',selectedBetType='',exchTransferBank='me',isUnderlay=true;
 let recentBookies=[]; // tracks last 8 used bookies
 let lastSavedTrade=null; // for quick duplicate after save
 let lastExchange=''; // tracks last used exchange
@@ -607,10 +604,24 @@ function showToast(msg,type='success'){
 function switchTab(t){
   currentTab=t;
   document.querySelectorAll('.tab').forEach(el=>el.classList.remove('active'));
-  const el=document.getElementById('tab-'+t);if(el)el.classList.add('active');
+  // Map old tab IDs to new ones
+  const tabMap={'add':'trade','history':'trade','reports':'accounts','risk':'accounts'};
+  const activeId=tabMap[t]||t;
+  const el=document.getElementById('tab-'+activeId);if(el)el.classList.add('active');
   const pb=document.getElementById('profile-bar');
-  if(pb)pb.style.display=(t==='dashboard'||t==='risk'||t==='add'||t==='casino')?'none':'flex';
+  if(pb)pb.style.display=(t==='dashboard'||t==='trade'||t==='casino')?'none':'flex';
   render();window.scrollTo(0,0);
+}
+function setAccountsTab(k){
+  window._accountsSubTab=k;
+  const el=document.getElementById('main-content');
+  if(el)el.innerHTML=renderAccounts();
+}
+
+function switchTradeTab(sub){
+  tradeSubTab=sub;
+  const el=document.getElementById('main-content');
+  if(el)el.innerHTML=renderTrade();
 }
 
 function switchProfile(p){
@@ -630,13 +641,13 @@ function render(){
   const el=document.getElementById('main-content');
   if(currentTab==='dashboard')el.innerHTML=renderDashboard();
   else if(currentTab==='pending')el.innerHTML=renderPending();
-  else if(currentTab==='add')el.innerHTML=renderAdd();
-  else if(currentTab==='history')el.innerHTML=renderHistory();
+  else if(currentTab==='trade'||currentTab==='add'||currentTab==='history')el.innerHTML=renderTrade();
   else if(currentTab==='accounts')el.innerHTML=renderAccounts();
-  else if(currentTab==='reports')el.innerHTML=renderReports();
-  else if(currentTab==='risk')el.innerHTML=renderRisk();
+  else if(currentTab==='reports')el.innerHTML=renderAccounts();
+  else if(currentTab==='risk')el.innerHTML=renderAccounts();
   else if(currentTab==='casino')el.innerHTML=renderCasino();
   updateBadge();
+  if(currentTab==='trade'&&tradeSubTab==='log')bindFormEvents();
   if(currentTab==='add')bindFormEvents();
 }
 
@@ -707,6 +718,31 @@ function renderDashboardMonthly(){
     +'</table></div></div>';
 }
 
+function renderPerformanceCard(){
+  const txs=allTxs().filter(t=>t.type!=='Balance Amendment'&&t.result!=='Pending'&&t.result!=='—');
+  if(!txs.length)return'';
+  const won=txs.filter(t=>t.result==='Won').length;
+  const total=txs.length;
+  const winRate=Math.round(won/total*100);
+  const totalPnlVal=txs.reduce((a,t)=>a+(t.pnl||0),0);
+  const avgPnl=totalPnlVal/total;
+  // This month
+  const now=new Date();
+  const thisMonth=txs.filter(t=>{const p=t.date?.split('/');return p&&p.length===3&&+p[1]===now.getMonth()+1&&+p[2]===now.getFullYear();});
+  const monthPnl=thisMonth.reduce((a,t)=>a+(t.pnl||0),0);
+  // Best bookie
+  const bookiePnl={};txs.forEach(t=>{if(!t.bookie)return;bookiePnl[t.bookie]=(bookiePnl[t.bookie]||0)+(t.pnl||0);});
+  const bestBookie=Object.entries(bookiePnl).sort((a,b)=>b[1]-a[1])[0];
+  return '<div class="card" style="margin-bottom:12px">'
+    +'<div class="card-header"><span class="card-title">Performance</span></div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:rgba(255,255,255,0.06);border-radius:0 0 10px 10px;overflow:hidden">'
+    +'<div style="background:#343A40;padding:12px"><div style="font-size:10px;color:#9A9590;margin-bottom:3px">Win rate</div><div style="font-size:18px;font-weight:500;color:#F0EDE8">'+winRate+'%</div><div style="font-size:10px;color:#9A9590">'+won+' of '+total+' bets</div></div>'
+    +'<div style="background:#343A40;padding:12px"><div style="font-size:10px;color:#9A9590;margin-bottom:3px">Avg P&L / bet</div><div style="font-size:18px;font-weight:500;color:'+(avgPnl>=0?'#22C55E':'#F87171')+'">'+fmtS(avgPnl)+'</div><div style="font-size:10px;color:#9A9590">all settled bets</div></div>'
+    +'<div style="background:#343A40;padding:12px"><div style="font-size:10px;color:#9A9590;margin-bottom:3px">This month</div><div style="font-size:18px;font-weight:500;color:'+(monthPnl>=0?'#22C55E':'#F87171')+'">'+fmtS(monthPnl)+'</div><div style="font-size:10px;color:#9A9590">'+thisMonth.length+' bets</div></div>'
+    +'<div style="background:#343A40;padding:12px"><div style="font-size:10px;color:#9A9590;margin-bottom:3px">Best bookie</div><div style="font-size:13px;font-weight:500;color:#F0EDE8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(bestBookie?bestBookie[0]:'—')+'</div><div style="font-size:10px;color:'+(bestBookie&&bestBookie[1]>=0?'#22C55E':'#F87171')+'">'+( bestBookie?fmtS(bestBookie[1]):'')+'</div></div>'
+    +'</div></div>';
+}
+
 function renderDashboard(){
   const allMap=monthlyPnl(allTxs());
   const totalTrades=PROFILES.reduce((a,p)=>a+(state[p].transactions||[]).length,0);
@@ -758,7 +794,7 @@ function renderDashboard(){
     }).join('')}
   </div>
   ${renderDashboardMonthly()}
-  ${renderFreeBetsPanel()}
+  ${renderPerformanceCard()}${renderFreeBetsPanel()}
 `;}
 
 function renderFreeBetsPanel(){
@@ -823,15 +859,16 @@ function renderPending(){
         <span style="font-size:11px;color:#C8C5BF">${t.bookie||'—'}</span>
         ${t.exchange?`<span style="font-size:11px;color:#9A9590;background:rgba(255,255,255,0.06);padding:2px 6px;border-radius:4px">${t.exchange}</span>`:''}
         ${isFB?'<span class="badge" style="background:#EAF3DE;color:#3B6D11">SNR</span>':''}
+        ${t.underlay?'<span class="badge" style="background:#0D4F5C;color:#5DCAA5;border:0.5px solid rgba(93,202,165,0.3)">U</span>':''}
       </div>
       <div class="pending-info">
         ${t.bstake?`<div class="pinfo-item"><span class="pinfo-label">Back</span><span class="pinfo-val">£${t.bstake} @ ${t.bodds}</span></div>`:''}
         <div class="pinfo-item"><span class="pinfo-label">P&L</span><span class="pinfo-val pos">${fmtS(t.pnl||0)}</span></div>
         <div style="margin-left:auto"><button class="btn-sm btn-sm-edit" onclick="editPnl('${t._acct}',${t.id})">Edit P&L</button></div>
       </div>
-      <div style="display:flex;gap:8px">
-        <button class="btn-won" onclick="settleBet('${t._acct}',${t.id},'Won')"><i class="ti ti-check" aria-hidden="true"></i> Won</button>
-        <button class="btn-lost" onclick="settleBet('${t._acct}',${t.id},'Lost')"><i class="ti ti-x" aria-hidden="true"></i> Lost</button>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px">
+        <button class="btn-won" onclick="settleBet('${t._acct}',${t.id},'Won')" style="padding:14px;font-size:15px;border-radius:10px"><i class="ti ti-check" aria-hidden="true"></i> Won</button>
+        <button class="btn-lost" onclick="settleBet('${t._acct}',${t.id},'Lost')" style="padding:14px;font-size:15px;border-radius:10px"><i class="ti ti-x" aria-hidden="true"></i> Lost</button>
       </div>
     </div>`;
   }).join('')}`;
@@ -1358,6 +1395,18 @@ function renderReports(){
 
 // ── ACCOUNTS ─────────────────────────────────────────────────────────────────
 function renderAccounts(){
+  const accountsSubTab=window._accountsSubTab||'accounts';
+  const _acctTabs=[['accounts','Accounts'],['risk','Risk'],['reports','Reports']];
+  const subBar='<div style="display:flex;gap:6px;margin-bottom:14px">'
+    +_acctTabs.map(function(pair){const k=pair[0],l=pair[1];return '<button onclick="setAccountsTab('+JSON.stringify(k)+')" class="btn '+(accountsSubTab===k?'btn-primary':'btn-ghost')+'" style="flex:1;padding:9px;font-size:12px">'+l+'</button>';}).join('')
+    +'</div>';
+  if(accountsSubTab==='risk')return subBar+renderRisk();
+  if(accountsSubTab==='reports')return subBar+renderReports();
+  const _orig=renderAccountsMain();
+  return subBar+_orig;
+}
+
+function renderAccountsMain(){
   const acct=currentProfile==='both'?'me':currentProfile,p=state[acct];
   return`
   <div style="margin-bottom:14px">
@@ -2054,15 +2103,16 @@ function renderPending(){
         <span style="font-size:11px;color:#C8C5BF">${t.bookie||'—'}</span>
         ${t.exchange?`<span style="font-size:11px;color:#9A9590;background:rgba(255,255,255,0.06);padding:2px 6px;border-radius:4px">${t.exchange}</span>`:''}
         ${isFB?'<span class="badge" style="background:#EAF3DE;color:#3B6D11">SNR</span>':''}
+        ${t.underlay?'<span class="badge" style="background:#0D4F5C;color:#5DCAA5;border:0.5px solid rgba(93,202,165,0.3)">U</span>':''}
       </div>
       <div class="pending-info">
         ${t.bstake?`<div class="pinfo-item"><span class="pinfo-label">Back</span><span class="pinfo-val">£${t.bstake} @ ${t.bodds}</span></div>`:''}
         <div class="pinfo-item"><span class="pinfo-label">P&L</span><span class="pinfo-val pos">${fmtS(t.pnl||0)}</span></div>
         <div style="margin-left:auto"><button class="btn-sm btn-sm-edit" onclick="editPnl('${t._acct}',${t.id})">Edit P&L</button></div>
       </div>
-      <div style="display:flex;gap:8px">
-        <button class="btn-won" onclick="settleBet('${t._acct}',${t.id},'Won')"><i class="ti ti-check" aria-hidden="true"></i> Won</button>
-        <button class="btn-lost" onclick="settleBet('${t._acct}',${t.id},'Lost')"><i class="ti ti-x" aria-hidden="true"></i> Lost</button>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px">
+        <button class="btn-won" onclick="settleBet('${t._acct}',${t.id},'Won')" style="padding:14px;font-size:15px;border-radius:10px"><i class="ti ti-check" aria-hidden="true"></i> Won</button>
+        <button class="btn-lost" onclick="settleBet('${t._acct}',${t.id},'Lost')" style="padding:14px;font-size:15px;border-radius:10px"><i class="ti ti-x" aria-hidden="true"></i> Lost</button>
       </div>
     </div>`;
   }).join('')}`;
