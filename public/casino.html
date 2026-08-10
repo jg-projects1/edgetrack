@@ -307,4 +307,168 @@ function saveSession(){
   if(!p.casino)p.casino=[];
   p.casino.push({
     id:Date.now(),
-    da
+    date:document.getElementById('c-date')?.value||todayStr(),
+    casino,operator,
+    startBal,endBal,netProfit:net,
+    notes:document.getElementById('c-notes')?.value||'',
+    _acct:formAcct,
+  });
+  save();showToast('Session saved!');resetForm();
+}
+
+function resetForm(){
+  ['c-casino','c-casino-search','c-start-bal','c-end-bal','c-notes'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  const d=document.getElementById('c-date');if(d)d.value=todayStr();
+  const dd=document.getElementById('c-dropdown');if(dd)dd.style.display='none';
+  const net=document.getElementById('c-net');if(net){net.textContent='£0.00';net.style.color='#22C55E';}
+}
+function renderHistory(){
+  const sessions=allSessions();
+  if(!sessions.length)return`<div class="empty">No casino sessions yet</div>`;
+  return`<div class="card"><div class="card-header"><span class="card-title">All sessions</span><span style="font-size:11px;color:#9A9590">${sessions.length} total</span></div>
+  ${sessions.map(s=>`<div class="list-row">
+    <div class="list-row-left">
+      <div class="list-row-title">${s.casino}${s.pending?` <span style="font-size:10px;color:#F0A500">⏳ pending</span>`:''}</div>
+      <div class="list-row-meta">
+        <span class="pill" style="background:#3D4349;color:#C8C5BF">${s.offerType}</span>
+        ${acctPill(s._acct)}
+        <span style="font-size:10px;color:#9A9590">${s.date}</span>
+        ${s.operator?`<span style="font-size:10px;font-weight:600;color:${s.operator==='JG'?'#F5C842':'#86EFAC'}">${s.operator}</span>`:''}${s.wager?`<span style="font-size:10px;color:#9A9590">£${s.wager} wagered</span>`:''}
+        ${s.deposit?`<span style="font-size:10px;color:#F0A500">dep £${s.deposit}</span>`:''}
+        ${s.bonusWin?`<span style="font-size:10px;color:#9A9590">bonus £${s.bonusWin.toFixed(2)}</span>`:''}
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+      <div class="list-row-right ${s.netProfit>=0?'pos':'neg'}">${fmtS(s.netProfit)}</div>
+      ${s.pending?`<button class="btn-sm btn-sm-edit" onclick="addBonus('${s._acct}',${s.id})">Add bonus</button>`:''}
+      <button class="btn-sm btn-sm-danger" onclick="deleteSession('${s._acct}',${s.id})" style="padding:3px 7px"><i class="ti ti-trash"></i></button>
+    </div>
+  </div>`).join('')}</div>`;
+}
+
+function addBonus(acct,id){
+  const session=(fullState[acct]?.casino||[]).find(s=>s.id===id);if(!session)return;
+  document.getElementById('modal-root').innerHTML=`
+  <div class="modal-bg" onclick="if(event.target===this)closeModal()">
+    <div class="modal">
+      <div class="modal-handle"></div>
+      <div class="modal-title">Add bonus win</div>
+      <div class="modal-sub">${session.casino} · ${session.date}</div>
+      <div style="margin-bottom:12px"><div class="form-label">Bonus win (£)</div>
+        <input type="number" id="modal-bonus" step="0.01" placeholder="0.00" inputmode="decimal" style="font-size:20px;font-weight:500;border-color:#22C55E;background:#0d1f19"/>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-primary" style="flex:1" onclick="confirmBonus('${acct}',${id})">Save</button>
+        <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      </div>
+    </div>
+  </div>`;
+  setTimeout(()=>document.getElementById('modal-bonus')?.focus(),50);
+}
+
+function confirmBonus(acct,id){
+  const win=parseFloat(document.getElementById('modal-bonus')?.value)||0;
+  const session=(fullState[acct]?.casino||[]).find(s=>s.id===id);if(!session)return;
+  session.bonusWin=(session.bonusWin||0)+win;
+  session.netProfit=session.wagerPnl+session.bonusWin;
+  session.pending=false;
+  const p=fullState[acct];
+  if(session.casino&&p.bookies?.[session.casino])
+    p.bookies[session.casino].bal=(p.bookies[session.casino].bal||0)+win;
+  save();closeModal();showToast('Bonus win added!');render();
+}
+
+function deleteSession(acct,id){
+  if(!confirm('Delete session?'))return;
+  fullState[acct].casino=(fullState[acct].casino||[]).filter(s=>s.id!==id);
+  if(!deletedIds[acct])deletedIds[acct]=[];
+  deletedIds[acct].push(id);
+  save();render();
+}
+
+function closeModal(){document.getElementById('modal-root').innerHTML='';}
+
+function renderSummary(){
+  const sessions=allSessions();
+  const total=PROFILES.reduce((a,p)=>a+casinoPnl(p),0);
+
+  // P&L per session (handle both old and new format)
+  const sessionPnl=s=>s.startBal!==undefined?s.endBal-s.startBal:s.netProfit||0;
+
+  const jgPnl=sessions.filter(s=>s.operator==='JG').reduce((a,s)=>a+sessionPnl(s),0);
+  const jpPnl=sessions.filter(s=>s.operator==='JP').reduce((a,s)=>a+sessionPnl(s),0);
+
+  // Monthly by operator
+  const monthly={};
+  sessions.forEach(s=>{
+    const pts=s.date?.split('/');if(!pts||pts.length<3)return;
+    const k=pts[2]+'-'+pts[1];
+    if(!monthly[k])monthly[k]={JG:0,JP:0};
+    monthly[k][s.operator||'JG']+=sessionPnl(s);
+  });
+  const months=Object.keys(monthly).sort();
+
+  // By casino
+  const byCasino={};
+  sessions.forEach(s=>{
+    if(!s.casino)return;
+    byCasino[s.casino]=(byCasino[s.casino]||0)+sessionPnl(s);
+  });
+  const topCasinos=Object.entries(byCasino).sort((a,b)=>b[1]-a[1]);
+
+  const monthRows=months.map(k=>{
+    const mo=monthly[k];
+    const total=mo.JG+mo.JP;
+    const yr=k.slice(0,4),mn=k.slice(5);
+    const lbl=new Date(+yr,+mn-1).toLocaleString('default',{month:'short'})+' '+yr;
+    return`<div class="list-row">
+      <div class="list-row-left"><div class="list-row-title">${lbl}</div></div>
+      <div style="display:flex;gap:12px;align-items:center">
+        <span style="font-size:11px;color:#F5C842">JG: <span style="color:${mo.JG>=0?'#22C55E':'#F87171'}">${fmtS(mo.JG)}</span></span>
+        <span style="font-size:11px;color:#86EFAC">JP: <span style="color:${mo.JP>=0?'#22C55E':'#F87171'}">${fmtS(mo.JP)}</span></span>
+        <span class="list-row-right ${total>=0?'pos':'neg'}">${fmtS(total)}</span>
+      </div>
+    </div>`;
+  }).join('');
+
+  return`
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+    <div class="metric-card" style="grid-column:span 2">
+      <div class="metric-label"><i class="ti ti-cards"></i>Total casino P&L</div>
+      <div class="metric-value ${total>=0?'pos':'neg'}">${fmtS(total)}</div>
+      <div class="metric-sub" style="display:flex;gap:10px;flex-wrap:wrap">
+        ${PROFILES.map(p=>`<span>${profileLabel(p)}: <span style="color:${casinoPnl(p)>=0?'#22C55E':'#F87171'}">${fmtS(casinoPnl(p))}</span></span>`).join('')}
+      </div>
+      <div style="margin-top:6px;padding-top:6px;border-top:0.5px solid rgba(255,255,255,0.08);display:flex;gap:10px">
+        <span style="font-size:11px">JG: <span style="color:${jgPnl>=0?'#22C55E':'#F87171'};font-weight:500">${fmtS(jgPnl)}</span></span>
+        <span style="font-size:11px">JP: <span style="color:${jpPnl>=0?'#22C55E':'#F87171'};font-weight:500">${fmtS(jpPnl)}</span></span>
+      </div>
+    </div>
+  </div>
+  ${months.length?`<div class="card" style="margin-bottom:10px">
+    <div class="card-header"><span class="card-title">Monthly P&L by Operator</span></div>
+    ${monthRows}
+  </div>`:''}
+  ${topCasinos.length?`<div class="card" style="margin-bottom:10px">
+    <div class="card-header"><span class="card-title">By Casino — Highest Wins</span></div>
+    ${topCasinos.map(([name,pnl])=>`<div class="list-row"><div class="list-row-left"><div class="list-row-title">${name}</div></div><div class="list-row-right ${pnl>=0?'pos':'neg'}">${fmtS(pnl)}</div></div>`).join('')}
+  </div>`:''}
+  <div class="card">
+    <div class="card-header"><span class="card-title">By Account</span></div>
+    ${PROFILES.map(p=>{const pnl=casinoPnl(p);return`<div class="list-row"><div class="list-row-left"><div class="list-row-title" style="display:flex;align-items:center;gap:8px"><div style="width:7px;height:7px;border-radius:50%;background:${profileColor(p)}"></div>${profileLabel(p)}</div></div><div class="list-row-right ${pnl>=0?'pos':'neg'}">${fmtS(pnl)}</div></div>`;}).join('')}
+  </div>`;
+}
+
+
+async function init(){
+  try{
+    await loadData();
+  }catch(e){
+    console.error('loadData failed:',e);
+  }
+  render();
+}
+init();
+</script>
+</body>
+</html>
