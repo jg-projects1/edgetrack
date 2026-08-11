@@ -1349,7 +1349,7 @@ function renderAdd(prefill){
 
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px" id="fg-result-pnl">
           <div class="form-group" id="fg-result"><div class="form-label">Result</div><select id="f-result"><option value="Pending">Pending</option><option value="Won">Won</option><option value="Lost">Lost</option></select></div>
-          <div class="form-group" id="fg-pnl"><div class="form-label">P&L (£) <span id="pnl-label-hint" style="font-size:10px;color:#22C55E">${isUnderlay?'auto-calculated':'your figure'}</span></div><input type="number" id="f-pnl" placeholder="0.00" step="0.01" inputmode="decimal" value="${pf.pnl||''}" ${isUnderlay?'readonly style="background:#252830;color:#22C55E"':''}/></div>
+          <div class="form-group" id="fg-pnl"><div class="form-label">P&L (£) <span id="pnl-label-hint" style="font-size:10px;color:#22C55E">${isUnderlay?'auto-calculated':'your figure'}</span></div><input type="number" id="f-pnl" placeholder="0.00" step="0.01" inputmode="decimal" value="${pf.pnl||''}"/></div>
           <div id="fg-underlay" style="margin-bottom:8px">
             <div onclick="toggleUnderlay()" style="display:flex;align-items:center;justify-content:space-between;background:#2C3136;border-radius:8px;padding:10px 12px;border:0.5px solid rgba(255,255,255,0.09);cursor:pointer">
               <div>
@@ -1408,7 +1408,14 @@ function autoCalcUnderlay(){
   const stakeEl=document.getElementById('ul-liab-display');
 
   if(!bs||!bo||!lo){
-    if(calc)calc.style.display='none';
+    if(calc){
+      calc.style.display=lo?'none':'block';
+      if(!lo){
+        if(winEl)winEl.textContent='—';
+        if(loseEl)loseEl.textContent='—';
+        if(stakeEl)stakeEl.textContent='Enter lay odds';
+      }
+    }
     return;
   }
 
@@ -1539,7 +1546,7 @@ function updateFlowPreview(){
 }
 function bindFormEvents(){const exchSel=document.getElementById('f-exchange');if(exchSel)exchSel.addEventListener('change',updateFlowPreview);}
 function resetForm(){
-  selectedBetType='';exchTransferBank='me';showMoreTypes=false;showComm=false;isUnderlay=true;isUnderlay=true;
+  selectedBetType='';exchTransferBank='me';showMoreTypes=false;showComm=false;isUnderlay=true;
   // Re-render the form completely for a clean slate
   const mc=document.getElementById('main-content');
   if(mc&&(currentTab==='add'||currentTab==='trade'))mc.innerHTML=renderTrade();
