@@ -1350,17 +1350,14 @@ function renderAdd(prefill){
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px" id="fg-result-pnl">
           <div class="form-group" id="fg-result"><div class="form-label">Result</div><select id="f-result"><option value="Pending">Pending</option><option value="Won">Won</option><option value="Lost">Lost</option></select></div>
           <div class="form-group" id="fg-pnl"><div class="form-label">P&L (£) <span id="pnl-label-hint" style="font-size:10px;color:#22C55E">${isUnderlay?'auto-calculated':'your figure'}</span></div><input type="number" id="f-pnl" placeholder="0.00" step="0.01" inputmode="decimal" value="${pf.pnl||''}"/></div>
-          <div id="fg-underlay" style="margin-bottom:8px">
-            <div onclick="toggleUnderlay()" style="display:flex;align-items:center;justify-content:space-between;background:#2C3136;border-radius:8px;padding:10px 12px;border:0.5px solid rgba(255,255,255,0.09);cursor:pointer">
-              <div>
-                <div style="font-size:13px;font-weight:500;color:#F0EDE8">Underlay</div>
-                <div style="font-size:11px;color:#9A9590;margin-top:1px">Off = lock in profit on loss</div>
-              </div>
-              <div id="underlay-toggle-btn" style="width:44px;height:24px;border-radius:12px;background:${isUnderlay?'#22C55E':'#4E5260'};position:relative;flex-shrink:0">
-                <div id="underlay-toggle-dot" style="position:absolute;top:3px;left:${isUnderlay?'23px':'3px'};width:18px;height:18px;border-radius:50%;background:#fff"></div>
-              </div>
+          <div id="fg-underlay" style="margin-bottom:8px;display:none">
+            <div class="form-label">Strategy</div>
+            <div style="display:flex;gap:6px">
+              <button id="btn-underlay" onclick="setStrategy('underlay')" class="btn btn-primary" style="flex:1;padding:9px;font-size:13px">Underlay</button>
+              <button id="btn-lockin" onclick="setStrategy('lockin')" class="btn btn-ghost" style="flex:1;padding:9px;font-size:13px">Lock-in</button>
             </div>
           </div>
+
         </div>
 
         <div class="form-row single" id="fg-amount" style="display:none"><div class="form-group"><div class="form-label">Amount (£)</div><input type="number" id="f-amount" placeholder="0.00" step="0.01" inputmode="decimal" oninput="updateFlowPreview()"/></div></div>
@@ -1468,6 +1465,31 @@ function autoCalcUnderlay(){
 
   // Auto-fill P&L only when underlay is on
   if(isUnderlay&&pnlEl)pnlEl.value=total_win.toFixed(2);
+}
+
+function setStrategy(s){
+  isUnderlay=(s==='underlay');
+  const bu=document.getElementById('btn-underlay');
+  const bl=document.getElementById('btn-lockin');
+  if(bu){bu.className='btn '+(isUnderlay?'btn-primary':'btn-ghost');}
+  if(bl){bl.className='btn '+(isUnderlay?'btn-ghost':'btn-primary');}
+  // P&L field
+  const pnl=document.getElementById('f-pnl');
+  if(pnl){
+    if(isUnderlay){
+      pnl.setAttribute('readonly','readonly');
+      pnl.style.background='#252830';
+      pnl.style.color='#22C55E';
+    } else {
+      pnl.removeAttribute('readonly');
+      pnl.style.background='';
+      pnl.style.color='';
+      pnl.value='';
+    }
+  }
+  const hint=document.getElementById('pnl-label-hint');
+  if(hint)hint.textContent=isUnderlay?'auto-calculated':'your figure';
+  autoCalcUnderlay();
 }
 
 function toggleUnderlay(){
