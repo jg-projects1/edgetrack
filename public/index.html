@@ -1288,7 +1288,7 @@ function renderAdd(prefill){
       <div class="form-section">
         <div class="form-label">Type</div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">
-          ${topTypes.map(t=>`<button onclick="selectBetType('${t}')" style="flex:1;padding:10px 6px;border-radius:8px;border:0.5px solid ${selectedBetType===t?'transparent':'rgba(255,255,255,0.10)'};background:${selectedBetType===t?getTypeColor(t):'#252629'};color:${selectedBetType===t?getTypeTextColor(t):'#C8C5BF'};font-family:system-ui,-apple-system,sans-serif;font-size:13px;font-weight:500;cursor:pointer;transition:all .15s">${t}</button>`).join('')}
+          ${topTypes.map(t=>`<button data-toptype="${t}" onclick="selectBetType('${t}')" style="flex:1;padding:10px 6px;border-radius:8px;border:0.5px solid ${selectedBetType===t?'transparent':'rgba(255,255,255,0.10)'};background:${selectedBetType===t?getTypeColor(t):'#252629'};color:${selectedBetType===t?getTypeTextColor(t):'#C8C5BF'};font-family:system-ui,-apple-system,sans-serif;font-size:13px;font-weight:500;cursor:pointer;transition:all .15s">${t}</button>`).join('')}
         </div>
         <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center">
           ${(showMoreTypes||isMoreSel||['Deposit','Withdrawal','Exchange Deposit','Exchange Withdrawal','Balance Amendment'].includes(selectedBetType))?[...moreTypes,'Deposit','Withdrawal','Exchange Deposit','Exchange Withdrawal','Balance Amendment'].map(t=>`<div class="type-pill${selectedBetType===t?' sel sel-'+t.toLowerCase().replace(/\s/g,''):''}" data-type="${t}" onclick="selectBetType('${t}')">${t}</div>`).join(''):''}
@@ -1522,7 +1522,14 @@ function updateUnderlayToggle(){
 
 function selectBetType(t){
   selectedBetType=t;
-  // Update pill styles in place — no re-render
+  // Update top type buttons
+  document.querySelectorAll('[data-toptype]').forEach(el=>{
+    const isSelected=el.dataset.toptype===t;
+    el.style.background=isSelected?getTypeColor(t):'#252629';
+    el.style.color=isSelected?getTypeTextColor(t):'#C8C5BF';
+    el.style.borderColor=isSelected?'transparent':'rgba(255,255,255,0.10)';
+  });
+  // Update type pills (more types)
   document.querySelectorAll('.type-pill').forEach(el=>{
     el.className='type-pill';
     if(el.dataset.type===t)el.classList.add('sel','sel-'+t.toLowerCase().split(' ').join(''));
