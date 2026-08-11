@@ -1637,9 +1637,10 @@ function submitTx(){
   const keepBookieVal=document.getElementById('f-bookie')?.value||'';
   const keepExchange=document.getElementById('f-exchange')?.value||'';
   // Re-render keeping context
+  currentTab='trade';tradeSubTab='log';
   const mc=document.getElementById('main-content');
-  if(mc&&(currentTab==='add'||currentTab==='trade')){
-    mc.innerHTML=renderAdd();
+  if(mc){
+    mc.innerHTML=renderTrade();
     setTimeout(()=>{
       if(keepBookie){const bs=document.getElementById('f-bookie-search');if(bs)bs.value=keepBookie;}
       const bh=document.getElementById('f-bookie');if(bh)bh.value=keepBookieVal;
@@ -1666,7 +1667,12 @@ function duplicateTrade(acct,id,rawTx){
 // ── HISTORY ──────────────────────────────────────────────────────────────────
 function renderHistory(){
   const txs=profileTxs(currentProfile),showAll=currentProfile==='both';
+  const profBar='<div style="display:flex;gap:5px;margin-bottom:10px;flex-wrap:wrap">'
+    +PROFILES.map(pr=>'<button onclick="switchProfile(\''+pr+'\');switchTradeTab(1)" class="profile-btn '+(currentProfile===pr?'active-'+pr:'')+'" style="font-size:11px;padding:4px 10px">'+profileLabel(pr)+'</button>').join('')
+    +'<button onclick="switchProfile(\'both\');switchTradeTab(1)" class="profile-btn '+(currentProfile==='both'?'active-both':'')+'" style="font-size:11px;padding:4px 10px">All</button>'
+    +'</div>';
   return`
+  ${profBar}
   <div class="filter-row">
     <select class="filter-select" onchange="render()"><option value="">All types</option>${BET_TYPES.map(t=>`<option>${t}</option>`).join('')}</select>
     <select class="filter-select" onchange="render()"><option value="">All results</option><option>Won</option><option>Lost</option><option>Pending</option></select>
@@ -2357,13 +2363,8 @@ function render(){
   if(currentTab==='dashboard')el.innerHTML=renderDashboard();
   else if(currentTab==='pending')el.innerHTML=renderPending();
   else if(currentTab==='trade'){
-    // Don't re-render log form if user is actively filling it in
-    if(tradeSubTab==='log'&&selectedBetType){
-      // Just update the dashboard badge, don't wipe the form
-    } else {
-      el.innerHTML=renderTrade();
-      if(tradeSubTab==='log')setTimeout(bindFormEvents,50);
-    }
+    el.innerHTML=renderTrade();
+    if(tradeSubTab==='log')setTimeout(bindFormEvents,50);
   }
   else if(currentTab==='accounts')el.innerHTML=renderAccounts();
   else if(currentTab==='casino')el.innerHTML=renderCasino();
