@@ -2349,12 +2349,19 @@ function render(){
   if(activeTab)activeTab.classList.add('active');
   if(currentTab==='dashboard')el.innerHTML=renderDashboard();
   else if(currentTab==='pending')el.innerHTML=renderPending();
-  else if(currentTab==='trade')el.innerHTML=renderTrade();
+  else if(currentTab==='trade'){
+    // Don't re-render log form if user is actively filling it in
+    if(tradeSubTab==='log'&&selectedBetType){
+      // Just update the dashboard badge, don't wipe the form
+    } else {
+      el.innerHTML=renderTrade();
+      if(tradeSubTab==='log')setTimeout(bindFormEvents,50);
+    }
+  }
   else if(currentTab==='accounts')el.innerHTML=renderAccounts();
   else if(currentTab==='casino')el.innerHTML=renderCasino();
   else el.innerHTML=renderDashboard();
   updateBadge();
-  if(currentTab==='trade'&&tradeSubTab==='log')setTimeout(bindFormEvents,50);
 }
 
 function switchTab(t){
