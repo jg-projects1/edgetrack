@@ -1474,8 +1474,8 @@ function autoCalcUnderlay(){
   const loseLbl=document.getElementById('ul-lose-label');
   if(winLbl)winLbl.textContent=isUnderlay?'Underlay P&L if wins':'Lock-in profit';
   if(loseLbl)loseLbl.textContent=isUnderlay?'Underlay P&L if loses':'Lock-in profit';
-  // Only auto-fill P&L when underlay is on — lock-in user enters manually
-  if(isUnderlay&&pnlEl)pnlEl.value=total_win.toFixed(2);
+  // Auto-fill P&L for both modes — field stays editable for manual override
+  if(pnlEl&&!pnlEl.hasAttribute('data-manual'))pnlEl.value=total_win.toFixed(2);
 }
 
 function setStrategy(s){
@@ -1484,7 +1484,7 @@ function setStrategy(s){
   const bl=document.getElementById('btn-lockin');
   if(bu){bu.className='btn '+(isUnderlay?'btn-primary':'btn-ghost');}
   if(bl){bl.className='btn '+(isUnderlay?'btn-ghost':'btn-primary');}
-  // P&L field
+  // P&L field — readonly for underlay (formula is exact), editable for lock-in (allow override)
   const pnl=document.getElementById('f-pnl');
   if(pnl){
     if(isUnderlay){
@@ -1494,12 +1494,11 @@ function setStrategy(s){
     } else {
       pnl.removeAttribute('readonly');
       pnl.style.background='';
-      pnl.style.color='';
-      pnl.value='';
+      pnl.style.color='#22C55E';
     }
   }
   const hint=document.getElementById('pnl-label-hint');
-  if(hint)hint.textContent=isUnderlay?'auto-calculated':'your figure';
+  if(hint)hint.textContent='auto-calculated';
   autoCalcUnderlay();
 }
 
