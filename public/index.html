@@ -1478,7 +1478,7 @@ function selectBetType(t){
   selectedBetType=t;
   // Re-render form so top-type buttons update
   const mc=document.getElementById('main-content');
-  if(mc&&currentTab==='add'){
+  if(mc&&(currentTab==='add'||currentTab==='trade')){
     const keepBookie=document.getElementById('f-bookie-search')?.value||'';
     const keepBookieVal=document.getElementById('f-bookie')?.value||'';
     const keepExchange=document.getElementById('f-exchange')?.value||'';
@@ -1506,7 +1506,7 @@ function updateFormFields(){
   const isBookieT=BOOKIE_TRANSFER.includes(selectedBetType),isExchT=EXCHANGE_TRANSFER.includes(selectedBetType),isBet=BET_ONLY.includes(selectedBetType),isAmend=selectedBetType==='Balance Amendment';
   sh('fg-bookie',isBet||isBookieT);sh('fg-exchange',isBet||isExchT);
   sh('fg-exchbank',isExchT);sh('fg-event',isBet);
-  sh('fg-stake-odds',isBet);sh('fg-bstake',isBet);sh('fg-bodds',isBet);sh('fg-underlay',isBet);if(isBet)document.getElementById('fg-layodds').style.display='block';else{const fgl=document.getElementById('fg-layodds');if(fgl)fgl.style.display='none';}sh('fg-underlay',isBet);
+  sh('fg-stake-odds',isBet);sh('fg-bstake',isBet);sh('fg-bodds',isBet);sh('fg-underlay',isBet);const _fgl=document.getElementById('fg-layodds');if(_fgl)_fgl.style.display=isBet?'block':'none';sh('fg-underlay',isBet);
   sh('fg-comm-toggle',isBet);sh('fg-result-pnl',isBet);sh('fg-result',isBet);sh('fg-pnl',isBet);
   sh('fg-amount',isBookieT||isExchT);
   sh('fg-amend-target',isAmend);sh('fg-amend-bal',isAmend);
@@ -1533,7 +1533,7 @@ function resetForm(){
   selectedBetType='';exchTransferBank='me';showMoreTypes=false;showComm=false;isUnderlay=true;isUnderlay=true;
   // Re-render the form completely for a clean slate
   const mc=document.getElementById('main-content');
-  if(mc&&currentTab==='add')mc.innerHTML=renderAdd();
+  if(mc&&(currentTab==='add'||currentTab==='trade'))mc.innerHTML=renderTrade();
   updateFormFields();bindFormEvents();
 }
 
@@ -1603,7 +1603,7 @@ function submitTx(){
   const keepExchange=document.getElementById('f-exchange')?.value||'';
   // Re-render keeping context
   const mc=document.getElementById('main-content');
-  if(mc&&currentTab==='add'){
+  if(mc&&(currentTab==='add'||currentTab==='trade')){
     mc.innerHTML=renderAdd();
     setTimeout(()=>{
       if(keepBookie){const bs=document.getElementById('f-bookie-search');if(bs)bs.value=keepBookie;}
