@@ -1351,7 +1351,7 @@ function renderAdd(prefill){
           <div class="form-group" id="fg-result"><div class="form-label">Result</div><select id="f-result"><option value="Pending">Pending</option><option value="Won">Won</option><option value="Lost">Lost</option></select></div>
           <div class="form-group" id="fg-pnl"><div class="form-label">P&L (£) <span id="pnl-label-hint" style="font-size:10px;color:#22C55E">${isUnderlay?'auto-calculated':'your figure'}</span></div><input type="number" id="f-pnl" placeholder="0.00" step="0.01" inputmode="decimal" value="${pf.pnl||''}" ${isUnderlay?'readonly style="background:#252830;color:#22C55E"':''}/></div>
           <div id="fg-underlay" style="margin-bottom:8px">
-            <div onclick="isUnderlay=!isUnderlay;updateUnderlayToggle()" style="display:flex;align-items:center;justify-content:space-between;background:#2C3136;border-radius:8px;padding:10px 12px;border:0.5px solid rgba(255,255,255,0.09);cursor:pointer">
+            <div onclick="toggleUnderlay()" style="display:flex;align-items:center;justify-content:space-between;background:#2C3136;border-radius:8px;padding:10px 12px;border:0.5px solid rgba(255,255,255,0.09);cursor:pointer">
               <div>
                 <div style="font-size:13px;font-weight:500;color:#F0EDE8">Underlay</div>
                 <div style="font-size:11px;color:#9A9590;margin-top:1px">Off = lock in profit on loss</div>
@@ -1461,6 +1461,11 @@ function autoCalcUnderlay(){
 
   // Auto-fill P&L only when underlay is on
   if(isUnderlay&&pnlEl)pnlEl.value=total_win.toFixed(2);
+}
+
+function toggleUnderlay(){
+  isUnderlay=!isUnderlay;
+  updateUnderlayToggle();
 }
 
 function updateUnderlayToggle(){
