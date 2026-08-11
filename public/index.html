@@ -548,7 +548,7 @@ function migrateLegacy(){
   // Bookie migration save disabled — was overwriting correct balances
 }
 
-let currentProfile='me',currentTab='dashboard',tradeSubTab='log',formAccount='me',selectedBetType='',exchTransferBank='me',isUnderlay=true;
+let currentProfile='me',currentTab='dashboard',tradeSubTab='log',formAccount='me',selectedBetType='',exchTransferBank='me',isUnderlay=false;
 let recentBookies=[]; // tracks last 8 used bookies
 let lastSavedTrade=null; // for quick duplicate after save
 let lastExchange=''; // tracks last used exchange
@@ -1474,9 +1474,8 @@ function autoCalcUnderlay(){
   const loseLbl=document.getElementById('ul-lose-label');
   if(winLbl)winLbl.textContent=isUnderlay?'Underlay P&L if wins':'Lock-in profit';
   if(loseLbl)loseLbl.textContent=isUnderlay?'Underlay P&L if loses':'Lock-in profit';
-  // Auto-fill P&L for both modes
-  if(pnlEl&&!pnlEl.closest('#fg-pnl')?.querySelector('input[data-manual]'))
-    pnlEl.value=total_win.toFixed(2);
+  // Only auto-fill P&L when underlay is on — lock-in user enters manually
+  if(isUnderlay&&pnlEl)pnlEl.value=total_win.toFixed(2);
 }
 
 function setStrategy(s){
@@ -1522,8 +1521,6 @@ function updateUnderlayToggle(){
 
 function selectBetType(t){
   selectedBetType=t;
-  // Default strategy: Qualifier = Lock-in, everything else = Underlay
-  isUnderlay=(t!=='Qualifier');
   // Update top type buttons
   document.querySelectorAll('[data-toptype]').forEach(el=>{
     const isSelected=el.dataset.toptype===t;
@@ -1567,7 +1564,7 @@ function updateFlowPreview(){
 }
 function bindFormEvents(){const exchSel=document.getElementById('f-exchange');if(exchSel)exchSel.addEventListener('change',updateFlowPreview);}
 function resetForm(){
-  selectedBetType='';exchTransferBank='me';showMoreTypes=false;showComm=false;isUnderlay=true;
+  selectedBetType='';exchTransferBank='me';showMoreTypes=false;showComm=false;
   // Re-render the form completely for a clean slate
   const mc=document.getElementById('main-content');
   if(mc&&(currentTab==='add'||currentTab==='trade'))mc.innerHTML=renderTrade();
