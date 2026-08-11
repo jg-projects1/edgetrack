@@ -1325,11 +1325,11 @@ function renderAdd(prefill){
           </div>
           <div id="underlay-calc" style="background:#2C3136;border-radius:8px;padding:10px 12px;margin-top:6px;display:none">
             <div style="display:flex;justify-content:space-between;margin-bottom:4px">
-              <span style="font-size:11px;color:#9A9590">Underlay P&L if wins</span>
+              <span id="ul-win-label" style="font-size:11px;color:#9A9590">P&L if wins</span>
               <span id="ul-win-display" style="font-size:13px;font-weight:500;color:#22C55E">—</span>
             </div>
             <div style="display:flex;justify-content:space-between;margin-bottom:4px">
-              <span style="font-size:11px;color:#9A9590">Underlay P&L if loses</span>
+              <span id="ul-lose-label" style="font-size:11px;color:#9A9590">P&L if loses</span>
               <span id="ul-lose-display" style="font-size:13px;font-weight:500;color:#9A9590">£0.00</span>
             </div>
             <div style="display:flex;justify-content:space-between;border-top:0.5px solid rgba(255,255,255,0.08);padding-top:4px">
@@ -1462,9 +1462,14 @@ function autoCalcUnderlay(){
   }
   if(stakeEl)stakeEl.textContent='£'+total_lay_stake.toFixed(2);
   if(calc)calc.style.display='block';
-
-  // Auto-fill P&L only when underlay is on
-  if(isUnderlay&&pnlEl)pnlEl.value=total_win.toFixed(2);
+  // Update win/lose labels
+  const winLbl=document.getElementById('ul-win-label');
+  const loseLbl=document.getElementById('ul-lose-label');
+  if(winLbl)winLbl.textContent=isUnderlay?'Underlay P&L if wins':'Lock-in profit';
+  if(loseLbl)loseLbl.textContent=isUnderlay?'Underlay P&L if loses':'Lock-in profit';
+  // Auto-fill P&L for both modes
+  if(pnlEl&&!pnlEl.closest('#fg-pnl')?.querySelector('input[data-manual]'))
+    pnlEl.value=total_win.toFixed(2);
 }
 
 function setStrategy(s){
@@ -1510,35 +1515,13 @@ function updateUnderlayToggle(){
 
 function selectBetType(t){
   selectedBetType=t;
-  // Re-render form so top-type buttons update
-  const mc=document.getElementById('main-content');
-  if(mc&&(currentTab==='add'||currentTab==='trade')){
-    const keepBookie=document.getElementById('f-bookie-search')?.value||'';
-    const keepBookieVal=document.getElementById('f-bookie')?.value||'';
-    const keepExchange=document.getElementById('f-exchange')?.value||'';
-    const keepEvent=document.getElementById('f-event')?.value||'';
-    const keepStake=document.getElementById('f-bstake')?.value||'';
-    const keepOdds=document.getElementById('f-bodds')?.value||'';
-    const keepLodds=document.getElementById('f-lodds')?.value||'';
-    const keepPartial=document.getElementById('f-partial')?.value||'100';
-    const keepPnl=document.getElementById('f-pnl')?.value||'';
-    mc.innerHTML=renderAdd();
-    setTimeout(()=>{
-      const bs=document.getElementById('f-bookie-search');if(bs)bs.value=keepBookie;
-      const bh=document.getElementById('f-bookie');if(bh)bh.value=keepBookieVal;
-      const fe=document.getElementById('f-exchange');if(fe&&keepExchange)fe.value=keepExchange;
-      const fev=document.getElementById('f-event');if(fev)fev.value=keepEvent;
-      const fst=document.getElementById('f-bstake');if(fst)fst.value=keepStake;
-      const fod=document.getElementById('f-bodds');if(fod)fod.value=keepOdds;
-      const flo=document.getElementById('f-lodds');if(flo)flo.value=keepLodds;
-      const fpa=document.getElementById('f-partial');if(fpa)fpa.value=keepPartial;
-      const fp=document.getElementById('f-pnl');if(fp)fp.value=keepPnl;
-      updateFormFields();bindFormEvents();updateUnderlayToggle();autoCalcUnderlay();
-    },10);
-  }else{
-    document.querySelectorAll('.type-pill').forEach(el=>{el.className='type-pill';if(el.dataset.type===t)el.classList.add('sel','sel-'+t.toLowerCase().replace(/\s/g,''));});
-    updateFormFields();
-  }
+  // Update pill styles in place — no re-render
+  document.querySelectorAll('.type-pill').forEach(el=>{
+    el.className='type-pill';
+    if(el.dataset.type===t)el.classList.add('sel','sel-'+t.toLowerCase().split(' ').join(''));
+  });
+  updateFormFields();
+  autoCalcUnderlay();
 }
 function updateFormFields(){
   const isBookieT=BOOKIE_TRANSFER.includes(selectedBetType),isExchT=EXCHANGE_TRANSFER.includes(selectedBetType),isBet=BET_ONLY.includes(selectedBetType),isAmend=selectedBetType==='Balance Amendment';
