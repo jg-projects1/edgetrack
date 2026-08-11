@@ -247,6 +247,7 @@ select option{background:#3D4349;color:#F0EDE8}
 <script>
 const SUPABASE_URL_UNUSED='';
 let syncTimeout=null;
+let _serverLoaded=false;
 
 function setSyncStatus(s){
   const dot=document.getElementById('sync-dot'),label=document.getElementById('sync-label');
@@ -271,6 +272,7 @@ async function loadData(){
       if(parsed.exchanges)state.exchanges=JSON.parse(JSON.stringify(parsed.exchanges));
       lastServerState=JSON.parse(JSON.stringify(parsed));
       setSyncStatus('synced');
+
       // Still fetch from server in background to pick up changes from other devices
       fetchFromServer();
       return;
@@ -362,6 +364,7 @@ async function fetchFromServer(){
     }
     setSyncStatus('synced');
     migrateLegacy();
+    _serverLoaded=true;
     render();
   }catch(e){
     console.error('Server fetch error:',e);
@@ -726,7 +729,9 @@ function renderDashboard(){
   return`
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
     <div class="metric-card" style="grid-column:span 2">
-      <div class="metric-label"><i class="ti ti-trending-up" aria-hidden="true"></i>Combined P&L</div>
+      <div class="metric-label"><i class="ti ti-trending-up" aria-hidden="true"></i>Combined P&L
+        ${!_serverLoaded?'<span style="font-size:9px;color:#BA7517;background:rgba(186,117,23,0.15);padding:2px 7px;border-radius:10px;margin-left:6px">Updating...</span>':''}
+      </div>
       <div class="metric-value ${combinedPnl>=0?'pos':'neg'}">${fmtS(combinedPnl)}</div>
       <div class="metric-sub" style="display:flex;gap:10px;flex-wrap:wrap">
         <span>All accounts · ${totalTrades} trades</span>
@@ -1043,7 +1048,9 @@ function renderDashboard(){
   return`
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
     <div class="metric-card" style="grid-column:span 2">
-      <div class="metric-label"><i class="ti ti-trending-up" aria-hidden="true"></i>Combined P&L</div>
+      <div class="metric-label"><i class="ti ti-trending-up" aria-hidden="true"></i>Combined P&L
+        ${!_serverLoaded?'<span style="font-size:9px;color:#BA7517;background:rgba(186,117,23,0.15);padding:2px 7px;border-radius:10px;margin-left:6px">Updating...</span>':''}
+      </div>
       <div class="metric-value ${combinedPnl>=0?'pos':'neg'}">${fmtS(combinedPnl)}</div>
       <div class="metric-sub" style="display:flex;gap:10px;flex-wrap:wrap">
         <span>All accounts · ${totalTrades} trades</span>
