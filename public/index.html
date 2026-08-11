@@ -310,7 +310,10 @@ async function fetchFromServer(){
           // Union: all IDs from both
           const allIds=new Set([...serverMap.keys(),...localMap.keys()]);
           const merged=[];
+          const deletedIds=new Set((deletedTxIds[pr]||[]).map(String));
           allIds.forEach(id=>{
+            // Skip deleted transactions
+            if(deletedIds.has(String(id)))return;
             const server=serverMap.get(id);
             const local=localMap.get(id);
             if(local&&server){
@@ -320,7 +323,8 @@ async function fetchFromServer(){
             } else if(local){
               merged.push(local); // local-only — keep it (new log not yet on server)
             } else {
-              merged.push(server); // server-only
+              // Server-only — only add if not in deleted list
+              if(!deletedIds.has(String(id)))merged.push(server);
             }
           });
           // Sort by date desc
@@ -926,8 +930,12 @@ function applyBalanceOnSettle(tx,p,result){
 function settleBet(acct,id,result){
   const p=state[acct];const tx=(p.transactions||[]).find(t=>t.id===id);if(!tx||tx.result!=='Pending')return;
   tx.result=result;applyBalanceOnSettle(tx,p,result);
-  // Immediately update localStorage so refresh doesn't revert
-  try{const snap={exchanges:state.exchanges};PROFILES.forEach(pr=>{snap[pr]={bank:state[pr].bank,bookies:state[pr].bookies,transactions:state[pr].transactions,freeBets:state[pr].freeBets||[]};});localStorage.setItem('mbe_state',JSON.stringify(snap));}catch(e){}
+  // Immediately write to localStorage so refresh picks up settled state
+  try{
+    const snap={exchanges:state.exchanges};
+    PROFILES.forEach(pr=>{snap[pr]={bank:state[pr].bank,bookies:state[pr].bookies,transactions:state[pr].transactions,freeBets:state[pr].freeBets||[]};});
+    localStorage.setItem('mbe_state',JSON.stringify(snap));
+  }catch(e){}
   if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('settle');
   const card=document.getElementById('pcard-'+id);
   if(card){card.style.transition='opacity .25s,transform .25s';card.style.opacity='0';card.style.transform='translateY(-6px)';setTimeout(()=>{card.remove();updateBadge();},260);}
@@ -1306,8 +1314,12 @@ function applyBalanceAtLog(tx,p){
 function settleBet(acct,id,result){
   const p=state[acct];const tx=(p.transactions||[]).find(t=>t.id===id);if(!tx||tx.result!=='Pending')return;
   tx.result=result;applyBalanceOnSettle(tx,p,result);
-  // Immediately update localStorage so refresh doesn't revert
-  try{const snap={exchanges:state.exchanges};PROFILES.forEach(pr=>{snap[pr]={bank:state[pr].bank,bookies:state[pr].bookies,transactions:state[pr].transactions,freeBets:state[pr].freeBets||[]};});localStorage.setItem('mbe_state',JSON.stringify(snap));}catch(e){}
+  // Immediately write to localStorage so refresh picks up settled state
+  try{
+    const snap={exchanges:state.exchanges};
+    PROFILES.forEach(pr=>{snap[pr]={bank:state[pr].bank,bookies:state[pr].bookies,transactions:state[pr].transactions,freeBets:state[pr].freeBets||[]};});
+    localStorage.setItem('mbe_state',JSON.stringify(snap));
+  }catch(e){}
   if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('settle');
   const card=document.getElementById('pcard-'+id);
   if(card){card.style.transition='opacity .25s,transform .25s';card.style.opacity='0';card.style.transform='translateY(-6px)';setTimeout(()=>{card.remove();updateBadge();},260);}
@@ -1861,6 +1873,12 @@ function deleteTx(acct,id){
   state[acct].transactions=state[acct].transactions.filter(t=>t.id!==id);
   if(!deletedTxIds[acct])deletedTxIds[acct]=[];
   deletedTxIds[acct].push(id);
+  // Write to localStorage immediately so refresh doesn't restore deleted tx
+  try{
+    const snap={exchanges:state.exchanges};
+    PROFILES.forEach(pr=>{snap[pr]={bank:state[pr].bank,bookies:state[pr].bookies,transactions:state[pr].transactions,freeBets:state[pr].freeBets||[]};});
+    localStorage.setItem('mbe_state',JSON.stringify(snap));
+  }catch(e){}
   if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}
   saveData('deleteTx');showToast('Transaction deleted & balances reversed');render();
 }
