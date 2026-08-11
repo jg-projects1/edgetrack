@@ -850,24 +850,74 @@ function renderPending(){
 }
 
 function applyBalanceOnSettle(tx,p,result){
-  // Underlay lost: P&L = £0, no lay profit to exchange, bookie stays deducted
-  if(tx.underlay&&result==='Lost'){tx.pnl=0;return;}
   const isFB=isFreeBet(tx.type);
-  const bstake=tx.bstake||0,bodds=tx.bodds||0,pnl=tx.pnl||0,exchange=tx.exchange;
-  if(result==='Won'){
-    if(isFB){
-      // Free bet SNR: winnings only = (odds - 1) × stake. Stake not returned.
-      if(tx.bookie&&p.bookies[tx.bookie])
-        p.bookies[tx.bookie].bal=(p.bookies[tx.bookie].bal||0)+((bodds-1)*bstake);
+  const bs=tx.bstake||0,bo=tx.bodds||0,lo=tx.lodds||0,exchange=tx.exchange;
+  const bk=tx.bookie&&p.bookies[tx.bookie]?p.bookies[tx.bookie]:null;
+
+  if(tx.underlay){
+    if(!isFB){
+      // NORMAL UNDERLAY
+      // Won: back wins net of lay liability = bs*(bo-lo)
+      // Lost: £0 — back stake lost, lay profit cancels exactly
+      if(result==='Won'){
+        const winProfit=lo>0?bs*(bo-lo):tx.pnl||0;
+        tx.pnl=winProfit;
+        if(bk)bk.bal=(bk.bal||0)+winProfit+(bs); // return deducted stake + profit
+        if(exchange&&state.exchanges[exchange]!==undefined)
+          state.exchanges[exchange]=(state.exchanges[exchange]||0)-winProfit; // lay liability paid from exchange
+      }else{
+        tx.pnl=0;
+        // bookie stays deducted (back stake lost), lay profit cancels it — net zero
+      }
     }else{
-      // Normal bet won: full return = odds × stake (stake was deducted at log time)
-      if(tx.bookie&&p.bookies[tx.bookie])
-        p.bookies[tx.bookie].bal=(p.bookies[tx.bookie].bal||0)+(bodds*bstake);
+      // FREE BET SNR UNDERLAY
+      // Lay stake = bs*(bo-2)/(lo-1)
+      // Won: profit = bs (effectively get stake back)
+      // Lost: profit = lay stake (lay wins on the exchange)
+      const ul_ls=lo>1&&bo>2?bs*(bo-2)/(lo-1):0;
+      if(result==='Won'){
+        const winProfit=bs; // SNR: back wins (bo-1)*bs, lay loses ul_ls*(lo-1) = bs*(bo-2) → net = bs
+        tx.pnl=winProfit;
+        // Free bet bookie: winnings land in bookie account
+        if(bk)bk.bal=(bk.bal||0)+(bo-1)*bs; // full back winnings to bookie
+        // Pay lay liability from exchange
+        if(exchange&&state.exchanges[exchange]!==undefined)
+          state.exchanges[exchange]=(state.exchanges[exchange]||0)-ul_ls*(lo-1);
+      }else{
+        // Lost: lay wins → profit = lay stake
+        tx.pnl=ul_ls;
+        if(exchange&&state.exchanges[exchange]!==undefined)
+          state.exchanges[exchange]=(state.exchanges[exchange]||0)+ul_ls;
+      }
     }
-  }else if(result==='Lost'){
-    // Lost: lay profit goes to exchange. Bookie already reduced at log time for normal bets.
-    if(exchange&&state.exchanges[exchange]!==undefined)
-      state.exchanges[exchange]=(state.exchanges[exchange]||0)+pnl;
+  }else{
+    // LOCK-IN (standard matched bet)
+    if(result==='Won'){
+      if(isFB){
+        // SNR free bet won: back winnings to bookie, pay lay liability from exchange
+        const li_ls=lo>0?bs*(bo-1)/lo:0;
+        const lockinProfit=li_ls; // same both ways for lock-in
+        tx.pnl=lockinProfit;
+        if(bk)bk.bal=(bk.bal||0)+(bo-1)*bs; // back winnings to bookie
+        if(exchange&&state.exchanges[exchange]!==undefined)
+          state.exchanges[exchange]=(state.exchanges[exchange]||0)-li_ls*(lo-1);
+      }else{
+        // Normal won: full return to bookie, pay lay liability from exchange
+        const li_ls=lo>0?bs*bo/lo:0;
+        const lockinProfit=li_ls-bs;
+        tx.pnl=lockinProfit;
+        if(bk)bk.bal=(bk.bal||0)+(bo*bs); // full return to bookie (stake was deducted at log)
+        if(exchange&&state.exchanges[exchange]!==undefined)
+          state.exchanges[exchange]=(state.exchanges[exchange]||0)-li_ls*(lo-1);
+      }
+    }else{
+      // Lost: lay profit goes to exchange
+      const li_ls=lo>0?(isFB?bs*(bo-1)/lo:bs*bo/lo):0;
+      const lockinProfit=li_ls-bs*(isFB?0:1); // SNR: full lay stake profit; normal: lay stake - back stake
+      tx.pnl=lockinProfit>0?lockinProfit:(tx.expectedPnl||0);
+      if(exchange&&state.exchanges[exchange]!==undefined)
+        state.exchanges[exchange]=(state.exchanges[exchange]||0)+(tx.pnl);
+    }
   }
 }
 
@@ -1169,24 +1219,74 @@ function renderPending(){
 }
 
 function applyBalanceOnSettle(tx,p,result){
-  // Underlay lost: P&L = £0, no lay profit to exchange, bookie stays deducted
-  if(tx.underlay&&result==='Lost'){tx.pnl=0;return;}
   const isFB=isFreeBet(tx.type);
-  const bstake=tx.bstake||0,bodds=tx.bodds||0,pnl=tx.pnl||0,exchange=tx.exchange;
-  if(result==='Won'){
-    if(isFB){
-      // Free bet SNR: winnings only = (odds - 1) × stake. Stake not returned.
-      if(tx.bookie&&p.bookies[tx.bookie])
-        p.bookies[tx.bookie].bal=(p.bookies[tx.bookie].bal||0)+((bodds-1)*bstake);
+  const bs=tx.bstake||0,bo=tx.bodds||0,lo=tx.lodds||0,exchange=tx.exchange;
+  const bk=tx.bookie&&p.bookies[tx.bookie]?p.bookies[tx.bookie]:null;
+
+  if(tx.underlay){
+    if(!isFB){
+      // NORMAL UNDERLAY
+      // Won: back wins net of lay liability = bs*(bo-lo)
+      // Lost: £0 — back stake lost, lay profit cancels exactly
+      if(result==='Won'){
+        const winProfit=lo>0?bs*(bo-lo):tx.pnl||0;
+        tx.pnl=winProfit;
+        if(bk)bk.bal=(bk.bal||0)+winProfit+(bs); // return deducted stake + profit
+        if(exchange&&state.exchanges[exchange]!==undefined)
+          state.exchanges[exchange]=(state.exchanges[exchange]||0)-winProfit; // lay liability paid from exchange
+      }else{
+        tx.pnl=0;
+        // bookie stays deducted (back stake lost), lay profit cancels it — net zero
+      }
     }else{
-      // Normal bet won: full return = odds × stake (stake was deducted at log time)
-      if(tx.bookie&&p.bookies[tx.bookie])
-        p.bookies[tx.bookie].bal=(p.bookies[tx.bookie].bal||0)+(bodds*bstake);
+      // FREE BET SNR UNDERLAY
+      // Lay stake = bs*(bo-2)/(lo-1)
+      // Won: profit = bs (effectively get stake back)
+      // Lost: profit = lay stake (lay wins on the exchange)
+      const ul_ls=lo>1&&bo>2?bs*(bo-2)/(lo-1):0;
+      if(result==='Won'){
+        const winProfit=bs; // SNR: back wins (bo-1)*bs, lay loses ul_ls*(lo-1) = bs*(bo-2) → net = bs
+        tx.pnl=winProfit;
+        // Free bet bookie: winnings land in bookie account
+        if(bk)bk.bal=(bk.bal||0)+(bo-1)*bs; // full back winnings to bookie
+        // Pay lay liability from exchange
+        if(exchange&&state.exchanges[exchange]!==undefined)
+          state.exchanges[exchange]=(state.exchanges[exchange]||0)-ul_ls*(lo-1);
+      }else{
+        // Lost: lay wins → profit = lay stake
+        tx.pnl=ul_ls;
+        if(exchange&&state.exchanges[exchange]!==undefined)
+          state.exchanges[exchange]=(state.exchanges[exchange]||0)+ul_ls;
+      }
     }
-  }else if(result==='Lost'){
-    // Lost: lay profit goes to exchange. Bookie already reduced at log time for normal bets.
-    if(exchange&&state.exchanges[exchange]!==undefined)
-      state.exchanges[exchange]=(state.exchanges[exchange]||0)+pnl;
+  }else{
+    // LOCK-IN (standard matched bet)
+    if(result==='Won'){
+      if(isFB){
+        // SNR free bet won: back winnings to bookie, pay lay liability from exchange
+        const li_ls=lo>0?bs*(bo-1)/lo:0;
+        const lockinProfit=li_ls; // same both ways for lock-in
+        tx.pnl=lockinProfit;
+        if(bk)bk.bal=(bk.bal||0)+(bo-1)*bs; // back winnings to bookie
+        if(exchange&&state.exchanges[exchange]!==undefined)
+          state.exchanges[exchange]=(state.exchanges[exchange]||0)-li_ls*(lo-1);
+      }else{
+        // Normal won: full return to bookie, pay lay liability from exchange
+        const li_ls=lo>0?bs*bo/lo:0;
+        const lockinProfit=li_ls-bs;
+        tx.pnl=lockinProfit;
+        if(bk)bk.bal=(bk.bal||0)+(bo*bs); // full return to bookie (stake was deducted at log)
+        if(exchange&&state.exchanges[exchange]!==undefined)
+          state.exchanges[exchange]=(state.exchanges[exchange]||0)-li_ls*(lo-1);
+      }
+    }else{
+      // Lost: lay profit goes to exchange
+      const li_ls=lo>0?(isFB?bs*(bo-1)/lo:bs*bo/lo):0;
+      const lockinProfit=li_ls-bs*(isFB?0:1); // SNR: full lay stake profit; normal: lay stake - back stake
+      tx.pnl=lockinProfit>0?lockinProfit:(tx.expectedPnl||0);
+      if(exchange&&state.exchanges[exchange]!==undefined)
+        state.exchanges[exchange]=(state.exchanges[exchange]||0)+(tx.pnl);
+    }
   }
 }
 
@@ -1616,7 +1716,8 @@ function submitTx(){
     if(!p.transactions)p.transactions=[];
     // For pending bets, pnl=0 until settled. Store expected P&L separately for reference.
     const storedPnl=result==='Pending'?0:pnl;
-    const tx={id:Date.now(),date,type:selectedBetType,bookie,exchange,event,bstake,bodds,comm,result,pnl:storedPnl,expectedPnl:pnl,notes,underlay:isUnderlay,_acct:formAccount};
+    const lodds=parseFloat(document.getElementById('f-lodds')?.value)||0;
+    const tx={id:Date.now(),date,type:selectedBetType,bookie,exchange,event,bstake,bodds,lodds,comm,result,pnl:storedPnl,expectedPnl:pnl,notes,underlay:isUnderlay,_acct:formAccount};
     p.transactions.push(tx);applyBalanceAtLog(tx,p);
     if(selectedBetType==='Qualifier'){
       if(!p.freeBets)p.freeBets=[];
