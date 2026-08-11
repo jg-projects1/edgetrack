@@ -1350,7 +1350,7 @@ function renderAdd(prefill){
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px" id="fg-result-pnl">
           <div class="form-group" id="fg-result"><div class="form-label">Result</div><select id="f-result"><option value="Pending">Pending</option><option value="Won">Won</option><option value="Lost">Lost</option></select></div>
           <div class="form-group" id="fg-pnl"><div class="form-label">P&L (£) <span id="pnl-label-hint" style="font-size:10px;color:#22C55E">${isUnderlay?'auto-calculated':'your figure'}</span></div><input type="number" id="f-pnl" placeholder="0.00" step="0.01" inputmode="decimal" value="${pf.pnl||''}" ${isUnderlay?'readonly style="background:#252830;color:#22C55E"':''}/></div>
-          <div id="fg-underlay" style="display:none;margin-bottom:8px">
+          <div id="fg-underlay" style="margin-bottom:8px">
             <div onclick="isUnderlay=!isUnderlay;updateUnderlayToggle()" style="display:flex;align-items:center;justify-content:space-between;background:#2C3136;border-radius:8px;padding:10px 12px;border:0.5px solid rgba(255,255,255,0.09);cursor:pointer">
               <div>
                 <div style="font-size:13px;font-weight:500;color:#F0EDE8">Underlay</div>
@@ -1510,7 +1510,7 @@ function updateFormFields(){
   const isBookieT=BOOKIE_TRANSFER.includes(selectedBetType),isExchT=EXCHANGE_TRANSFER.includes(selectedBetType),isBet=BET_ONLY.includes(selectedBetType),isAmend=selectedBetType==='Balance Amendment';
   sh('fg-bookie',isBet||isBookieT);sh('fg-exchange',isBet||isExchT);
   sh('fg-exchbank',isExchT);sh('fg-event',isBet);
-  sh('fg-stake-odds',isBet);sh('fg-bstake',isBet);sh('fg-bodds',isBet);sh('fg-underlay',isBet);const _fgl=document.getElementById('fg-layodds');if(_fgl)_fgl.style.display=isBet?'block':'none';sh('fg-underlay',isBet);
+  sh('fg-stake-odds',isBet);sh('fg-bstake',isBet);sh('fg-bodds',isBet);sh('fg-underlay',isBet);const _fgl=document.getElementById('fg-layodds');if(_fgl)_fgl.style.display=isBet?'block':'none';
   sh('fg-comm-toggle',isBet);sh('fg-result-pnl',isBet);sh('fg-result',isBet);sh('fg-pnl',isBet);
   sh('fg-amount',isBookieT||isExchT);
   sh('fg-amend-target',isAmend);sh('fg-amend-bal',isAmend);
