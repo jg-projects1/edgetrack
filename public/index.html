@@ -1485,6 +1485,8 @@ function selectBetType(t){
     const keepEvent=document.getElementById('f-event')?.value||'';
     const keepStake=document.getElementById('f-bstake')?.value||'';
     const keepOdds=document.getElementById('f-bodds')?.value||'';
+    const keepLodds=document.getElementById('f-lodds')?.value||'';
+    const keepPartial=document.getElementById('f-partial')?.value||'100';
     const keepPnl=document.getElementById('f-pnl')?.value||'';
     mc.innerHTML=renderAdd();
     setTimeout(()=>{
@@ -1494,8 +1496,10 @@ function selectBetType(t){
       const fev=document.getElementById('f-event');if(fev)fev.value=keepEvent;
       const fst=document.getElementById('f-bstake');if(fst)fst.value=keepStake;
       const fod=document.getElementById('f-bodds');if(fod)fod.value=keepOdds;
+      const flo=document.getElementById('f-lodds');if(flo)flo.value=keepLodds;
+      const fpa=document.getElementById('f-partial');if(fpa)fpa.value=keepPartial;
       const fp=document.getElementById('f-pnl');if(fp)fp.value=keepPnl;
-      updateFormFields();bindFormEvents();
+      updateFormFields();bindFormEvents();updateUnderlayToggle();autoCalcUnderlay();
     },10);
   }else{
     document.querySelectorAll('.type-pill').forEach(el=>{el.className='type-pill';if(el.dataset.type===t)el.classList.add('sel','sel-'+t.toLowerCase().replace(/\s/g,''));});
@@ -1609,7 +1613,7 @@ function submitTx(){
       if(keepBookie){const bs=document.getElementById('f-bookie-search');if(bs)bs.value=keepBookie;}
       const bh=document.getElementById('f-bookie');if(bh)bh.value=keepBookieVal;
       const fe=document.getElementById('f-exchange');if(fe&&keepExchange)fe.value=keepExchange;
-      updateFormFields();bindFormEvents();
+      updateFormFields();bindFormEvents();updateUnderlayToggle();autoCalcUnderlay();
     },10);
   }
 }
