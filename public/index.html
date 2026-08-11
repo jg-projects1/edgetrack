@@ -1310,8 +1310,33 @@ function renderAdd(prefill){
         <div class="form-row single" id="fg-event"><div class="form-group"><div class="form-label" style="color:#9A9590">Event <span style="font-size:9px;text-transform:none;letter-spacing:0">(optional)</span></div><input type="text" id="f-event" placeholder="e.g. Arsenal vs Chelsea" value="${pf.event||''}" style="font-size:12px;padding:7px 10px;background:#4A4D58;border-color:rgba(255,255,255,0.09)"/></div></div>
 
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px" id="fg-stake-odds">
-          <div class="form-group" id="fg-bstake"><div class="form-label">Back stake (£)</div><input type="number" id="f-bstake" placeholder="0.00" step="0.01" inputmode="decimal" value="${pf.bstake||''}"/></div>
-          <div class="form-group" id="fg-bodds"><div class="form-label">Back odds</div><input type="number" id="f-bodds" placeholder="2.00" step="0.01" inputmode="decimal" value="${pf.bodds||''}"/></div>
+          <div class="form-group" id="fg-bstake"><div class="form-label">Back stake (£)</div><input type="number" id="f-bstake" placeholder="0.00" step="0.01" inputmode="decimal" value="${pf.bstake||''}" oninput="autoCalcUnderlay()"/></div>
+          <div class="form-group" id="fg-bodds"><div class="form-label">Back odds</div><input type="number" id="f-bodds" placeholder="2.00" step="0.01" inputmode="decimal" value="${pf.bodds||''}" oninput="autoCalcUnderlay()"/></div>
+        </div>
+        <div id="fg-layodds" style="display:none;margin-bottom:8px">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div class="form-group"><div class="form-label">Lay odds</div><input type="number" id="f-lodds" placeholder="2.00" step="0.01" inputmode="decimal" oninput="autoCalcUnderlay()"/></div>
+            <div class="form-group"><div class="form-label">Partial %</div>
+              <div style="display:flex;align-items:center;gap:6px">
+                <input type="number" id="f-partial" placeholder="100" min="1" max="100" step="1" inputmode="numeric" value="100" oninput="autoCalcUnderlay()" style="flex:1"/>
+                <span style="font-size:13px;color:#9A9590">%</span>
+              </div>
+            </div>
+          </div>
+          <div id="underlay-calc" style="background:#2C3136;border-radius:8px;padding:10px 12px;margin-top:6px;display:none">
+            <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+              <span style="font-size:11px;color:#9A9590">Underlay P&L if wins</span>
+              <span id="ul-win-display" style="font-size:13px;font-weight:500;color:#22C55E">—</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+              <span style="font-size:11px;color:#9A9590">Underlay P&L if loses</span>
+              <span id="ul-lose-display" style="font-size:13px;font-weight:500;color:#9A9590">£0.00</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;border-top:0.5px solid rgba(255,255,255,0.08);padding-top:4px">
+              <span style="font-size:11px;color:#9A9590">Lay stake</span>
+              <span id="ul-liab-display" style="font-size:13px;font-weight:500;color:#C8C5BF">—</span>
+            </div>
+          </div>
         </div>
 
         <div style="margin-bottom:8px" id="fg-comm-toggle">
@@ -1324,7 +1349,7 @@ function renderAdd(prefill){
 
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px" id="fg-result-pnl">
           <div class="form-group" id="fg-result"><div class="form-label">Result</div><select id="f-result"><option value="Pending">Pending</option><option value="Won">Won</option><option value="Lost">Lost</option></select></div>
-          <div class="form-group" id="fg-pnl"><div class="form-label">P&L (£) <span style="color:#22C55E;font-size:10px">your figure</span></div><input type="number" id="f-pnl" placeholder="0.00" step="0.01" inputmode="decimal" value="${pf.pnl||''}"/></div>
+          <div class="form-group" id="fg-pnl"><div class="form-label">P&L (£) <span id="pnl-label-hint" style="font-size:10px;color:#22C55E">${isUnderlay?'auto-calculated':'your figure'}</span></div><input type="number" id="f-pnl" placeholder="0.00" step="0.01" inputmode="decimal" value="${pf.pnl||''}" ${isUnderlay?'readonly style="background:#252830;color:#22C55E"':''}/></div>
           <div id="fg-underlay" style="display:none;margin-bottom:8px">
             <div onclick="isUnderlay=!isUnderlay;updateUnderlayToggle()" style="display:flex;align-items:center;justify-content:space-between;background:#2C3136;border-radius:8px;padding:10px 12px;border:0.5px solid rgba(255,255,255,0.09);cursor:pointer">
               <div>
@@ -1369,6 +1394,75 @@ function setFormAccount(a){
   const dd=document.getElementById('bookie-dropdown');if(dd)dd.style.display='none';
 }
 function setExchBank(b){exchTransferBank=b;PROFILES.forEach(pr=>{const el=document.getElementById('ebank-'+pr);if(el)el.className='dest-btn'+(b===pr?' active':'');});updateFlowPreview();}
+function autoCalcUnderlay(){
+  const bs=parseFloat(document.getElementById('f-bstake')?.value)||0;
+  const bo=parseFloat(document.getElementById('f-bodds')?.value)||0;
+  const lo=parseFloat(document.getElementById('f-lodds')?.value)||0;
+  const partial=Math.min(100,Math.max(1,parseFloat(document.getElementById('f-partial')?.value)||100))/100;
+  const isFB=isFreeBet(selectedBetType);
+
+  const calc=document.getElementById('underlay-calc');
+  const pnlEl=document.getElementById('f-pnl');
+  const winEl=document.getElementById('ul-win-display');
+  const loseEl=document.getElementById('ul-lose-display');
+  const stakeEl=document.getElementById('ul-liab-display');
+
+  if(!bs||!bo||!lo){
+    if(calc)calc.style.display='none';
+    return;
+  }
+
+  let total_win, total_lose, total_lay_stake;
+
+  if(!isUnderlay){
+    // Lock-in: standard lay stake calculation
+    if(!isFB){
+      total_lay_stake=bs*bo/lo;
+      total_win=total_lay_stake-bs;
+      total_lose=total_lay_stake-bs;
+    } else {
+      // SNR free bet lock-in
+      total_lay_stake=bs*(bo-1)/lo;
+      total_win=total_lay_stake;
+      total_lose=total_lay_stake;
+    }
+  } else {
+    // Underlay portion
+    const ul_bs=bs*partial;
+    const li_bs=bs*(1-partial);
+
+    let ul_win,ul_lose,ul_ls;
+    if(!isFB){
+      ul_ls=ul_bs; // lay stake = back stake for underlay
+      ul_win=ul_bs*(bo-lo);
+      ul_lose=0;
+    } else {
+      ul_ls=bo>2&&lo>1?ul_bs*(bo-2)/(lo-1):0;
+      ul_win=ul_bs;
+      ul_lose=ul_ls;
+    }
+
+    // Lock-in portion
+    const li_ls=li_bs>0?(!isFB?li_bs*bo/lo:li_bs*(bo-1)/lo):0;
+    const li_profit=li_ls-li_bs;
+
+    total_win=ul_win+li_profit;
+    total_lose=ul_lose+li_profit;
+    total_lay_stake=ul_ls+li_ls;
+  }
+
+  if(winEl)winEl.textContent='£'+total_win.toFixed(2);
+  if(loseEl){
+    loseEl.textContent='£'+total_lose.toFixed(2);
+    loseEl.style.color=total_lose>0?'#22C55E':'#9A9590';
+  }
+  if(stakeEl)stakeEl.textContent='£'+total_lay_stake.toFixed(2);
+  if(calc)calc.style.display='block';
+
+  // Auto-fill P&L only when underlay is on
+  if(isUnderlay&&pnlEl)pnlEl.value=total_win.toFixed(2);
+}
+
 function updateUnderlayToggle(){
   const fg=document.getElementById('fg-underlay');
   if(!fg)return;
@@ -1412,7 +1506,7 @@ function updateFormFields(){
   const isBookieT=BOOKIE_TRANSFER.includes(selectedBetType),isExchT=EXCHANGE_TRANSFER.includes(selectedBetType),isBet=BET_ONLY.includes(selectedBetType),isAmend=selectedBetType==='Balance Amendment';
   sh('fg-bookie',isBet||isBookieT);sh('fg-exchange',isBet||isExchT);
   sh('fg-exchbank',isExchT);sh('fg-event',isBet);
-  sh('fg-stake-odds',isBet);sh('fg-bstake',isBet);sh('fg-bodds',isBet);sh('fg-underlay',isBet);sh('fg-underlay',isBet);
+  sh('fg-stake-odds',isBet);sh('fg-bstake',isBet);sh('fg-bodds',isBet);sh('fg-underlay',isBet);if(isBet)document.getElementById('fg-layodds').style.display='block';else{const fgl=document.getElementById('fg-layodds');if(fgl)fgl.style.display='none';}sh('fg-underlay',isBet);
   sh('fg-comm-toggle',isBet);sh('fg-result-pnl',isBet);sh('fg-result',isBet);sh('fg-pnl',isBet);
   sh('fg-amount',isBookieT||isExchT);
   sh('fg-amend-target',isAmend);sh('fg-amend-bal',isAmend);
