@@ -1533,8 +1533,9 @@ function selectBetType(t){
     el.className='type-pill';
     if(el.dataset.type===t)el.classList.add('sel','sel-'+t.toLowerCase().split(' ').join(''));
   });
+  // Qualifier defaults to Lock-in, all others default to Underlay
+  setStrategy(t==='Qualifier'?'lockin':'underlay');
   updateFormFields();
-  autoCalcUnderlay();
 }
 function updateFormFields(){
   const isBookieT=BOOKIE_TRANSFER.includes(selectedBetType),isExchT=EXCHANGE_TRANSFER.includes(selectedBetType),isBet=BET_ONLY.includes(selectedBetType),isAmend=selectedBetType==='Balance Amendment';
