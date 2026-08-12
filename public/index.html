@@ -585,7 +585,7 @@ function casinoPnl(p){
     return a+(s.netProfit||0);
   },0);
 }
-function sportsPnl(p){return(state[p].transactions||[]).filter(t=>t.type!=='Balance Amendment').reduce((a,t)=>a+(t.pnl||0),0);}
+function sportsPnl(p){return(state[p].transactions||[]).filter(t=>t.type!=='Balance Amendment'&&t.result!=='Pending').reduce((a,t)=>a+(t.pnl||0),0);}
 
 
 function getTypeColor(t){
@@ -596,8 +596,17 @@ function getTypeTextColor(t){
   const map={'Qualifier':'#F5C842','Free Bet':'#86EFAC','Boost':'#F0A500','Mug':'#F5C842'};
   return map[t]||'#C8C5BF';
 }
-function toggleMoreTypes(){showMoreTypes=!showMoreTypes;const el=document.getElementById('main-content');if(el)el.innerHTML=renderAdd();}
-function toggleComm(){showComm=!showComm;const el=document.getElementById('main-content');if(el)el.innerHTML=renderAdd();}
+function toggleMoreTypes(){
+  showMoreTypes=!showMoreTypes;
+  const el=document.getElementById('main-content');
+  if(el)el.innerHTML=renderTrade();
+  setTimeout(bindFormEvents,50);
+}
+function toggleComm(){
+  showComm=!showComm;
+  const commEl=document.getElementById('fg-comm-toggle');
+  if(commEl){const el=document.getElementById('main-content');if(el)el.innerHTML=renderTrade();setTimeout(bindFormEvents,50);}
+}
 
 function statusBadge(s){
   const cls={Active:'badge-active',Restricted:'badge-restricted',Gubbed:'badge-gubbed',Closed:'badge-closed','Not Signed Up':'badge-unsigned'}[s]||'badge-unsigned';
@@ -617,373 +626,41 @@ function showToast(msg,type='success'){
 
 
 
-function switchProfile(p){
-  currentProfile=p;
-  PROFILES.forEach(x=>{const b=document.getElementById('pbtn-'+x);if(b){b.className='profile-btn';if(x===p)b.classList.add('active-'+x);}});
-  const bb=document.getElementById('pbtn-both');if(bb){bb.className='profile-btn';if(p==='both')bb.classList.add('active-both');}
-  render();
-}
-
-function updateBadge(){
-  const n=pendingAll().length;
-  const b=document.getElementById('pending-badge');
-  if(b){b.textContent=n;b.style.display=n?'inline':'none';}
-}
 
 
 
-function monthlyPnl(txs){
-  const map={};
-  txs.forEach(t=>{if(!t.date||!t.pnl||t.type==='Balance Amendment'||t.result==='Pending')return;const pts=t.date.split('/');if(pts.length<3)return;const k=`${pts[2]}-${pts[1]}`;map[k]=(map[k]||0)+(t.pnl||0);});
-  return map;
-}
 
-function renderMonthBars(map,height=90){
-  const keys=Object.keys(map).sort();if(!keys.length)return`<div class="empty">No data yet</div>`;
-  const vals=keys.map(k=>map[k]);const maxAbs=Math.max(...vals.map(Math.abs),0.01);
-  const barH=height-40;
-  return`<div class="month-wrap" style="height:${height}px;align-items:flex-end;gap:4px">
-    ${keys.map(k=>{const v=map[k];const pct=Math.max(Math.abs(v)/maxAbs*barH,2);const col=v>=0?'pos':'neg';const[yr,mo]=k.split('-');const lbl=new Date(+yr,+mo-1).toLocaleString('default',{month:'short'});
-      return`<div class="month-col" style="min-width:40px"><div class="month-val ${col}" style="font-size:10px;font-weight:600">${fmtS(v)}</div><div class="month-bar ${col}" style="height:${pct}px;width:34px"></div><div class="month-lbl" style="font-size:10px;margin-top:2px">${lbl}</div></div>`;
-    }).join('')}
-  </div>`;
-}
+
+
+
+
+
 
 // ── DASHBOARD ────────────────────────────────────────────────────────────────
-function renderDashboardMonthly(){
-  const sportsByMonth={};
-  allTxs().forEach(t=>{
-    if(!t.date||t.type==='Balance Amendment')return;
-    const parts=t.date.split('/');
-    if(parts.length<3)return;
-    const key=parts[2]+'-'+parts[1].padStart(2,'0');
-    if(!sportsByMonth[key])sportsByMonth[key]=0;
-    sportsByMonth[key]+=(t.pnl||0);
-  });
-  const casinoByMonth={};
-  PROFILES.flatMap(p=>(state[p].casino||[]).map(s=>({...s,_acct:p}))).forEach(s=>{
-    const pnl=s.startBal!==undefined?s.endBal-s.startBal:s.netProfit||0;
-    const d=s.date||'';
-    const parts=d.split('/');
-    if(parts.length<3)return;
-    const key=parts[2]+'-'+parts[1].padStart(2,'0');
-    if(!casinoByMonth[key])casinoByMonth[key]=0;
-    casinoByMonth[key]+=pnl;
-  });
-  const allKeys=[...new Set([...Object.keys(sportsByMonth),...Object.keys(casinoByMonth)])].sort().reverse();
-  if(!allKeys.length)return'';
-  const rows=allKeys.map(k=>{
-    const yr=k.slice(0,4),mo=k.slice(5);
-    const label=new Date(+yr,+mo-1).toLocaleString('default',{month:'short'})+' '+yr;
-    const s=sportsByMonth[k]||0;
-    const c=casinoByMonth[k]||0;
-    const t=s+c;
-    return '<tr>'
-      +'<td style="font-size:11px;font-weight:500">'+label+'</td>'
-      +'<td style="text-align:right;font-size:11px;color:'+(s>=0?'#22C55E':'#F87171')+'">'+fmtS(s)+'</td>'
-      +'<td style="text-align:right;font-size:11px;color:'+(c>=0?'#22C55E':'#F87171')+'">'+fmtS(c)+'</td>'
-      +'<td style="text-align:right;font-size:11px;font-weight:500;color:'+(t>=0?'#22C55E':'#F87171')+'">'+fmtS(t)+'</td>'
-      +'</tr>';
-  }).join('');
-  return '<div class="card" style="margin-bottom:12px">'
-    +'<div class="card-header"><span class="card-title">Monthly P&L</span></div>'
-    +'<div style="overflow-x:auto;padding:8px 14px">'
-    +'<table class="data-table" style="width:100%">'
-    +'<thead><tr>'
-    +'<th>Month</th>'
-    +'<th style="text-align:right">Sports (£)</th>'
-    +'<th style="text-align:right">Casino (£)</th>'
-    +'<th style="text-align:right">Total (£)</th>'
-    +'</tr></thead>'
-    +'<tbody>'+rows+'</tbody>'
-    +'</table></div></div>';
-}
 
-function renderPerformanceCard(){
-  const txs=allTxs().filter(t=>t.type!=='Balance Amendment'&&t.result!=='Pending'&&t.result!=='—');
-  if(!txs.length)return'';
-  const won=txs.filter(t=>t.result==='Won').length;
-  const total=txs.length;
-  const winRate=Math.round(won/total*100);
-  const totalPnlVal=txs.reduce((a,t)=>a+(t.pnl||0),0);
-  const avgPnl=totalPnlVal/total;
-  // This month
-  const now=new Date();
-  const thisMonth=txs.filter(t=>{const p=t.date?.split('/');return p&&p.length===3&&+p[1]===now.getMonth()+1&&+p[2]===now.getFullYear();});
-  const monthPnl=thisMonth.reduce((a,t)=>a+(t.pnl||0),0);
-  // Best bookie
-  const bookiePnl={};txs.forEach(t=>{if(!t.bookie)return;bookiePnl[t.bookie]=(bookiePnl[t.bookie]||0)+(t.pnl||0);});
-  const bestBookie=Object.entries(bookiePnl).sort((a,b)=>b[1]-a[1])[0];
-  return '<div class="card" style="margin-bottom:12px">'
-    +'<div class="card-header"><span class="card-title">Performance</span></div>'
-    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:rgba(255,255,255,0.06);border-radius:0 0 10px 10px;overflow:hidden">'
-    +'<div style="background:#343A40;padding:12px"><div style="font-size:10px;color:#9A9590;margin-bottom:3px">Win rate</div><div style="font-size:18px;font-weight:500;color:#F0EDE8">'+winRate+'%</div><div style="font-size:10px;color:#9A9590">'+won+' of '+total+' bets</div></div>'
-    +'<div style="background:#343A40;padding:12px"><div style="font-size:10px;color:#9A9590;margin-bottom:3px">Avg P&L / bet</div><div style="font-size:18px;font-weight:500;color:'+(avgPnl>=0?'#22C55E':'#F87171')+'">'+fmtS(avgPnl)+'</div><div style="font-size:10px;color:#9A9590">all settled bets</div></div>'
-    +'<div style="background:#343A40;padding:12px"><div style="font-size:10px;color:#9A9590;margin-bottom:3px">This month</div><div style="font-size:18px;font-weight:500;color:'+(monthPnl>=0?'#22C55E':'#F87171')+'">'+fmtS(monthPnl)+'</div><div style="font-size:10px;color:#9A9590">'+thisMonth.length+' bets</div></div>'
-    +'<div style="background:#343A40;padding:12px"><div style="font-size:10px;color:#9A9590;margin-bottom:3px">Best bookie</div><div style="font-size:13px;font-weight:500;color:#F0EDE8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(bestBookie?bestBookie[0]:'—')+'</div><div style="font-size:10px;color:'+(bestBookie&&bestBookie[1]>=0?'#22C55E':'#F87171')+'">'+( bestBookie?fmtS(bestBookie[1]):'')+'</div></div>'
-    +'</div></div>';
-}
 
-function renderDashboard(){
-  const allMap=monthlyPnl(allTxs());
-  const totalTrades=PROFILES.reduce((a,p)=>a+(state[p].transactions||[]).length,0);
-  const combinedSports=PROFILES.reduce((a,p)=>a+sportsPnl(p),0);
-  const combinedCasino=PROFILES.reduce((a,p)=>a+casinoPnl(p),0);
-  const combinedPnl=combinedSports+combinedCasino;
-  const totalBank=PROFILES.reduce((a,p)=>a+(state[p].bank||0),0);
-  const totalBookies=PROFILES.reduce((a,p)=>a+totalBookie(p),0);
-  const totalExchanges=Object.values(state.exchanges||{}).reduce((a,v)=>a+(v||0),0);
-  const totalFunds=totalBank+totalBookies+totalExchanges;
-  return`
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
-    <div class="metric-card" style="grid-column:span 2">
-      <div class="metric-label"><i class="ti ti-trending-up" aria-hidden="true"></i>Combined P&L
-        ${!_serverLoaded?'<span style="font-size:9px;color:#BA7517;background:rgba(186,117,23,0.15);padding:2px 7px;border-radius:10px;margin-left:6px">Updating...</span>':''}
-      </div>
-      <div class="metric-value ${combinedPnl>=0?'pos':'neg'}">${fmtS(combinedPnl)}</div>
-      <div class="metric-sub" style="display:flex;gap:10px;flex-wrap:wrap">
-        <span>All accounts · ${totalTrades} trades</span>
-        <span>Sports: <span style="color:${combinedSports>=0?'#22C55E':'#F87171'}">${fmtS(combinedSports)}</span></span>
-        <span>Casino: <span style="color:${combinedCasino>=0?'#22C55E':'#F87171'}">${fmtS(combinedCasino)}</span></span>
-      </div>
-    </div>
-    <div class="metric-card" style="grid-column:span 2">
-      <div class="metric-label"><i class="ti ti-cash" aria-hidden="true"></i>Total funds</div>
-      <div class="metric-value">${fmt(totalFunds)}</div>
-      <div class="metric-sub" style="display:flex;gap:10px;flex-wrap:wrap">
-        <span>Bank: ${fmt(totalBank)}</span>
-        <span>Bookies: ${fmt(totalBookies)}</span>
-        <span>Exchanges: ${fmt(totalExchanges)}</span>
-      </div>
-    </div>
-  </div>
-  <div class="acct-grid">
-    ${PROFILES.map(p=>{
-      const pnl=totalPnl(p);
-      return`<div class="acct-card">
-        <div class="acct-top">
-          <div class="acct-name"><div class="acct-dot dot-${p}"></div>${profileLabel(p)}</div>
-          <div class="acct-pnl ${pnl>=0?'pos':'neg'}">${fmtS(pnl)}</div>
-        </div>
-        <div class="acct-row">
-          <span class="acct-row-label"><i class="ti ti-building-bank" aria-hidden="true"></i>Bank</span>
-          <span class="acct-row-val">${fmt(state[p].bank)}</span>
-        </div>
-        <div class="acct-row">
-          <span class="acct-row-label"><i class="ti ti-wallet" aria-hidden="true"></i>Bookies</span>
-          <span class="acct-row-val">${fmt(totalBookie(p))}</span>
-        </div>
-      </div>`;
-    }).join('')}
-  </div>
-  ${renderDashboardMonthly()}
-  ${renderPerformanceCard()}${renderFreeBetsPanel()}
-`;}
 
-function renderFreeBetsPanel(){
-  const all=PROFILES.flatMap(pr=>(state[pr].freeBets||[]).map(fb=>({...fb,_pr:pr})));
-  const pending=all.filter(fb=>fb.status==='Pending');
-  const used=all.filter(fb=>fb.status==='Used');
-  if(all.length===0)return '';
-  return `<div class="card" style="margin-top:12px">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-      <div style="font-size:13px;font-weight:500;color:#F0F0F5">Free Bets</div>
-      ${pending.length>0?`<span style="font-size:11px;background:#0F6E56;color:#9FE1CB;padding:3px 8px;border-radius:20px">${pending.length} pending</span>`:''}
-    </div>
-    ${pending.length>0?`
-    <div style="margin-bottom:8px">
-      ${pending.map(fb=>`
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:0.5px solid rgba(255,255,255,0.08)">
-        <div>
-          <div style="font-size:13px;color:#F0F0F5">${fb.bookie}</div>
-          <div style="font-size:11px;color:#9A9590">${profileLabel(fb._pr)} · ${fb.date}</div>
-        </div>
-        <button onclick="markFreeBetUsed('${fb._pr}','${fb.id}')" style="font-size:11px;padding:4px 10px;border-radius:6px;border:0.5px solid rgba(255,255,255,0.2);background:#3D4349;color:#F0F0F5;cursor:pointer">Mark used</button>
-      </div>`).join('')}
-    </div>`:''}
-    ${used.length>0?`
-    <details style="margin-top:4px">
-      <summary style="font-size:11px;color:#9A9590;cursor:pointer;list-style:none">▸ ${used.length} used</summary>
-      <div style="margin-top:6px">
-        ${used.map(fb=>`
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:0.5px solid rgba(255,255,255,0.06)">
-          <div>
-            <div style="font-size:12px;color:#888780;text-decoration:line-through">${fb.bookie}</div>
-            <div style="font-size:11px;color:#888780">${profileLabel(fb._pr)} · ${fb.date}</div>
-          </div>
-          <span style="font-size:10px;color:#888780">Used</span>
-        </div>`).join('')}
-      </div>
-    </details>`:''}
-  </div>`;
-}
 
-function markFreeBetUsed(pr,id){
-  const fb=(state[pr].freeBets||[]).find(f=>String(f.id)===String(id));
-  if(fb){fb.status='Used';save('freeBetUsed');render();}
-}
 
-// ── PENDING ──────────────────────────────────────────────────────────────────
-function renderPending(){
-  const pending=pendingAll();
-  if(!pending.length)return`<div style="text-align:center;padding:60px 20px"><i class="ti ti-circle-check" style="font-size:48px;color:#22C55E" aria-hidden="true"></i><div style="font-size:15px;font-weight:500;margin-top:12px;color:#F0EDE8">All settled</div></div>`;
-  return`
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
-    <div class="metric-card"><div class="metric-label">Pending</div><div class="metric-value warn">${pending.length}</div></div>
-    <div class="metric-card"><div class="metric-label">Expected P&L</div><div class="metric-value pos" style="font-size:20px">${fmtS(pending.reduce((a,t)=>a+(t.pnl||0),0))}</div></div>
-  </div>
-  ${pending.map(t=>{
-    const isFB=isFreeBet(t.type);
-    return`<div class="pending-card" id="pcard-${t.id}">
-      <div class="pending-event">${t.event||'Unnamed event'}</div>
-      <div class="pending-meta">
-        <span class="${pillClass(t.type)}">${t.type}</span>${acctPill(t._acct)}
-        <span style="font-size:11px;color:#C8C5BF">${t.date}</span>
-        <span style="font-size:11px;color:#C8C5BF">${t.bookie||'—'}</span>
-        ${t.exchange?`<span style="font-size:11px;color:#9A9590;background:rgba(255,255,255,0.06);padding:2px 6px;border-radius:4px">${t.exchange}</span>`:''}
-        ${isFB?'<span class="badge" style="background:#EAF3DE;color:#3B6D11">SNR</span>':''}
-        ${t.underlay?'<span class="badge" style="background:#0D4F5C;color:#5DCAA5;border:0.5px solid rgba(93,202,165,0.3)">U</span>':''}
-      </div>
-      <div class="pending-info">
-        ${t.bstake?`<div class="pinfo-item"><span class="pinfo-label">Back</span><span class="pinfo-val">£${t.bstake} @ ${t.bodds}</span></div>`:''}
-        <div class="pinfo-item"><span class="pinfo-label">P&L</span><span class="pinfo-val pos">${fmtS(t.pnl||0)}</span></div>
-        <div style="margin-left:auto"><button class="btn-sm btn-sm-edit" onclick="editPnl('${t._acct}',${t.id})">Edit P&L</button></div>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px">
-        <button class="btn-won" onclick="settleBet('${t._acct}',${t.id},'Won')" style="padding:14px;font-size:15px;border-radius:10px"><i class="ti ti-check" aria-hidden="true"></i> Won</button>
-        <button class="btn-lost" onclick="settleBet('${t._acct}',${t.id},'Lost')" style="padding:14px;font-size:15px;border-radius:10px"><i class="ti ti-x" aria-hidden="true"></i> Lost</button>
-      </div>
-    </div>`;
-  }).join('')}`;
-}
 
-function applyBalanceOnSettle(tx,p,result){
-  const isFB=isFreeBet(tx.type);
-  const bs=tx.bstake||0,bo=tx.bodds||0,lo=tx.lodds||0,exchange=tx.exchange;
-  const bk=tx.bookie&&p.bookies[tx.bookie]?p.bookies[tx.bookie]:null;
 
-  if(tx.underlay){
-    if(!isFB){
-      // NORMAL UNDERLAY
-      // Won: back wins net of lay liability = bs*(bo-lo)
-      // Lost: £0 — back stake lost, lay profit cancels exactly
-      if(result==='Won'){
-        const winProfit=lo>0?bs*(bo-lo):tx.pnl||0;
-        tx.pnl=winProfit;
-        if(bk)bk.bal=(bk.bal||0)+winProfit+(bs); // return deducted stake + profit
-        if(exchange&&state.exchanges[exchange]!==undefined)
-          state.exchanges[exchange]=(state.exchanges[exchange]||0)-winProfit; // lay liability paid from exchange
-      }else{
-        tx.pnl=0;
-        // bookie stays deducted (back stake lost), lay profit cancels it — net zero
-      }
-    }else{
-      // FREE BET SNR UNDERLAY
-      // Lay stake = bs*(bo-2)/(lo-1)
-      // Won: profit = bs (effectively get stake back)
-      // Lost: profit = lay stake (lay wins on the exchange)
-      const ul_ls=lo>1&&bo>2?bs*(bo-2)/(lo-1):0;
-      if(result==='Won'){
-        const winProfit=bs; // SNR: back wins (bo-1)*bs, lay loses ul_ls*(lo-1) = bs*(bo-2) → net = bs
-        tx.pnl=winProfit;
-        // Free bet bookie: winnings land in bookie account
-        if(bk)bk.bal=(bk.bal||0)+(bo-1)*bs; // full back winnings to bookie
-        // Pay lay liability from exchange
-        if(exchange&&state.exchanges[exchange]!==undefined)
-          state.exchanges[exchange]=(state.exchanges[exchange]||0)-ul_ls*(lo-1);
-      }else{
-        // Lost: lay wins → profit = lay stake
-        tx.pnl=ul_ls;
-        if(exchange&&state.exchanges[exchange]!==undefined)
-          state.exchanges[exchange]=(state.exchanges[exchange]||0)+ul_ls;
-      }
-    }
-  }else{
-    // LOCK-IN (standard matched bet)
-    if(result==='Won'){
-      if(isFB){
-        // SNR free bet won: back winnings to bookie, pay lay liability from exchange
-        const li_ls=lo>0?bs*(bo-1)/lo:0;
-        const lockinProfit=li_ls; // same both ways for lock-in
-        tx.pnl=lockinProfit;
-        if(bk)bk.bal=(bk.bal||0)+(bo-1)*bs; // back winnings to bookie
-        if(exchange&&state.exchanges[exchange]!==undefined)
-          state.exchanges[exchange]=(state.exchanges[exchange]||0)-li_ls*(lo-1);
-      }else{
-        // Normal won: full return to bookie, pay lay liability from exchange
-        const li_ls=lo>0?bs*bo/lo:0;
-        const lockinProfit=li_ls-bs;
-        tx.pnl=lockinProfit;
-        if(bk)bk.bal=(bk.bal||0)+(bo*bs); // full return to bookie (stake was deducted at log)
-        if(exchange&&state.exchanges[exchange]!==undefined)
-          state.exchanges[exchange]=(state.exchanges[exchange]||0)-li_ls*(lo-1);
-      }
-    }else{
-      // Lost: lay profit goes to exchange
-      const li_ls=lo>0?(isFB?bs*(bo-1)/lo:bs*bo/lo):0;
-      const lockinProfit=li_ls-bs*(isFB?0:1); // SNR: full lay stake profit; normal: lay stake - back stake
-      tx.pnl=lockinProfit>0?lockinProfit:(tx.expectedPnl||0);
-      if(exchange&&state.exchanges[exchange]!==undefined)
-        state.exchanges[exchange]=(state.exchanges[exchange]||0)+(tx.pnl);
-    }
-  }
-}
 
 
 
-function settleBet(acct,id,result){
-  const p=state[acct];const tx=(p.transactions||[]).find(t=>t.id===id);if(!tx||tx.result!=='Pending')return;
-  tx.result=result;applyBalanceOnSettle(tx,p,result);
-  // Immediately write to localStorage so refresh picks up settled state
-  try{
-    const snap={exchanges:state.exchanges,_deletedTxIds:deletedTxIds};
-    PROFILES.forEach(pr=>{snap[pr]={bank:state[pr].bank,bookies:state[pr].bookies,transactions:state[pr].transactions,freeBets:state[pr].freeBets||[]};});
-    localStorage.setItem('mbe_state',JSON.stringify(snap));
-  }catch(e){}
-  if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('settle');
-  const card=document.getElementById('pcard-'+id);
-  if(card){card.style.transition='opacity .25s,transform .25s';card.style.opacity='0';card.style.transform='translateY(-6px)';setTimeout(()=>{card.remove();updateBadge();},260);}
-  showToast(`${result==='Won'?'Won':'Lost'} — ${fmtS(tx.pnl||0)}`,result==='Won'?'success':'error');
-  setTimeout(render,300);
-}
+// ── PENDING ──────────────────────────────────────────────────────────────────
 
-function editPnl(acct,id){
-  const tx=state[acct].transactions.find(t=>t.id===id);if(!tx)return;
-  document.getElementById('modal-root').innerHTML=`
-  <div class="modal-bg" onclick="if(event.target===this)closeModal()">
-    <div class="modal">
-      <div class="modal-handle"></div>
-      <div class="modal-title">Edit P&L</div>
-      <div class="modal-sub">${tx.event||tx.bookie||'Transaction'} · ${tx.date}</div>
-      <div style="margin-bottom:12px">
-        <div class="form-label">Current P&L</div>
-        <div style="font-size:24px;font-weight:500;color:${(tx.pnl||0)>=0?'#22C55E':'#F87171'}">${fmtS(tx.pnl||0)}</div>
-      </div>
-      <div style="margin-bottom:4px">
-        <div class="form-label">New P&L (£)</div>
-        <input type="number" id="modal-pnl" step="0.01" value="${(tx.pnl||0).toFixed(2)}" inputmode="decimal" style="font-size:20px;font-weight:500;border-color:#22C55E;background:#f0faf5"/>
-      </div>
-      <div class="modal-actions">
-        <button class="btn btn-primary" style="flex:1" onclick="confirmPnlEdit('${acct}',${id})">Save</button>
-        <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
-      </div>
-    </div>
-  </div>`;
-  setTimeout(()=>document.getElementById('modal-pnl')?.focus(),50);
-}
 
-function confirmPnlEdit(acct,id){
-  const newPnl=parseFloat(document.getElementById('modal-pnl')?.value);if(isNaN(newPnl))return;
-  const p=state[acct];const tx=p.transactions.find(t=>t.id===id);if(!tx)return;
-  const diff=newPnl-(tx.pnl||0);tx.pnl=newPnl;
-  // P&L edit only affects exchange (lay profit) not bookie balance
-  // Bookie balance is set from odds×stake on settlement, not from P&L
-  if(tx.result==='Lost'&&tx.exchange&&state.exchanges[tx.exchange]!==undefined)
-    state.exchanges[tx.exchange]=(state.exchanges[tx.exchange]||0)+diff;
-  if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('editPnl');closeModal();showToast(`P&L updated to ${fmtS(newPnl)}`);render();
-}
 
-function closeModal(){document.getElementById('modal-root').innerHTML='';}
+
+
+
+
+
+
+
+
+
+
 
 // ── ADD FORM ─────────────────────────────────────────────────────────────────
 
