@@ -1721,15 +1721,22 @@ function verifyBookie(acct,name){
   const ragDot=document.getElementById('rag-'+acct+'-'+safeId2);
   const vs2=getVerifyStatus(p.bookies[name]);
   if(ragDot){ragDot.style.background=vs2.col;}
-  // Update dashboard strip
-  updateDashboardStrip();
+  // Re-render dashboard if currently on it, otherwise just update strip
+  if(currentTab==='dashboard'){
+    render();
+  } else {
+    updateDashboardStrip();
+  }
 }
 
 function getVerifyStats(){
-  const ab=PROFILES.flatMap(pr=>Object.entries(state[pr].bookies||{}).filter(([,d])=>d.status==='Active').map(([,d])=>d));
+  const now=Date.now();
+  const ab=PROFILES.flatMap(pr=>Object.entries(state[pr].bookies||{})
+    .filter(([,d])=>d&&d.status==='Active')
+    .map(([,d])=>d));
   const never=ab.filter(b=>!b.verifiedAt).length;
-  const overdue=ab.filter(b=>b.verifiedAt&&Math.floor((Date.now()-b.verifiedAt)/86400000)>7).length;
-  const recent=ab.filter(b=>b.verifiedAt&&Math.floor((Date.now()-b.verifiedAt)/86400000)<=7).length;
+  const overdue=ab.filter(b=>b.verifiedAt&&Math.floor((now-b.verifiedAt)/86400000)>7).length;
+  const recent=ab.filter(b=>b.verifiedAt&&Math.floor((now-b.verifiedAt)/86400000)<=7).length;
   return{ab,never,overdue,recent,allVerified:!never&&!overdue};
 }
 
