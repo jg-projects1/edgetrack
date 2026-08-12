@@ -684,7 +684,7 @@ function updateBadge(){
 
 function monthlyPnl(txs){
   const map={};
-  txs.forEach(t=>{if(!t.date||!t.pnl||t.type==='Balance Amendment'||t.result==='Pending')return;const pts=t.date.split('/');if(pts.length<3)return;const k=`${pts[2]}-${pts[1]}`;map[k]=(map[k]||0)+(t.pnl||0);});
+  txs.forEach(t=>{if(!t.date||t.pnl===undefined||t.pnl===null||t.type==='Balance Amendment'||t.result==='Pending')return;const pts=t.date.split('/');if(pts.length<3)return;const k=`${pts[2]}-${pts[1]}`;map[k]=(map[k]||0)+(t.pnl||0);});
   return map;
 }
 
@@ -931,14 +931,15 @@ function applyBalanceOnSettle(tx,p,result){
       // Won: back wins net of lay liability = bs*(bo-lo)
       // Lost: £0 — back stake lost, lay profit cancels exactly
       if(result==='Won'){
-        const winProfit=lo>0?bs*(bo-lo):tx.pnl||0;
+        // Bookie receives full return (bo*bs) — stake was already deducted at log
+        // Net profit = bo*bs - bs = bs*(bo-1), but lay costs bs*(lo-1)
+        // So net P&L = bs*(bo-1) - bs*(lo-1) = bs*(bo-lo)
+        const winProfit=lo>0?Math.round(bs*(bo-lo)*100)/100:(tx.pnl||0);
         tx.pnl=winProfit;
-        if(bk)bk.bal=(bk.bal||0)+winProfit+(bs); // return deducted stake + profit
-        if(exchange&&state.exchanges[exchange]!==undefined)
-          state.exchanges[exchange]=(state.exchanges[exchange]||0)-winProfit; // lay liability paid from exchange
+        if(bk)bk.bal=Math.round(((bk.bal||0)+(bo*bs))*100)/100; // full return to bookie
       }else{
         tx.pnl=0;
-        // bookie stays deducted (back stake lost), lay profit cancels it — net zero
+        // bookie stays deducted (back stake lost), lay profit cancels on exchange — net zero
       }
     }else{
       // FREE BET SNR UNDERLAY
@@ -982,12 +983,14 @@ function applyBalanceOnSettle(tx,p,result){
           state.exchanges[exchange]=(state.exchanges[exchange]||0)-li_ls*(lo-1);
       }
     }else{
-      // Lost: lay profit goes to exchange
+      // Lost: lay profit/loss goes to exchange
+      // For normal bets: lay stake = bs*bo/lo, profit = lay_stake - bs (can be negative for qualifiers)
+      // For free bets: lay stake = bs*(bo-1)/lo, profit = lay_stake (always positive)
       const li_ls=lo>0?(isFB?bs*(bo-1)/lo:bs*bo/lo):0;
-      const lockinProfit=li_ls-bs*(isFB?0:1); // SNR: full lay stake profit; normal: lay stake - back stake
-      tx.pnl=lockinProfit>0?lockinProfit:(tx.expectedPnl||0);
+      const lockinProfit=lo>0?(isFB?li_ls:li_ls-bs):(tx.expectedPnl||0);
+      tx.pnl=Math.round(lockinProfit*100)/100;
       if(exchange&&state.exchanges[exchange]!==undefined)
-        state.exchanges[exchange]=(state.exchanges[exchange]||0)+(tx.pnl);
+        state.exchanges[exchange]=(state.exchanges[exchange]||0)+tx.pnl;
     }
   }
 }
