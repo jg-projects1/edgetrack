@@ -834,9 +834,9 @@ function renderDashboard(){
     const recent=ab.filter(b=>b.verifiedAt&&Math.floor((Date.now()-b.verifiedAt)/86400000)<=7).length;
     const allVerified=!never&&!overdue;
     const borderCol=allVerified?'rgba(34,197,94,0.3)':never?'rgba(248,113,113,0.3)':'rgba(240,165,0,0.3)';
-    return'<div onclick="switchTab(\'accounts\')" style="background:#2C3136;border:0.5px solid '+borderCol+';border-radius:10px;padding:10px 14px;margin-bottom:12px;cursor:pointer;display:flex;align-items:center;justify-content:space-between">'
+    return'<div id="verify-strip" onclick="switchTab(\'accounts\')" style="background:#2C3136;border:0.5px solid '+borderCol+';border-radius:10px;padding:10px 14px;margin-bottom:12px;cursor:pointer;display:flex;align-items:center;justify-content:space-between">'
       +'<div style="font-size:11px;color:#9A9590;font-weight:500;text-transform:uppercase;letter-spacing:.3px">Balance Verification</div>'
-      +'<div style="display:flex;gap:10px">'
+      +'<div class="verify-strip-inner" style="display:flex;gap:10px">'
       +(allVerified?'<span style="font-size:11px;color:#22C55E">✓ All '+ab.length+' verified</span>':'')
       +(recent&&!allVerified?'<span style="font-size:11px;color:#22C55E">✓ '+recent+'</span>':'')
       +(overdue?'<span style="font-size:11px;color:#F0A500">⚠ '+overdue+' overdue</span>':'')
@@ -1711,7 +1711,40 @@ function verifyBookie(acct,name){
   }
   p.bookies[name].verifiedAt=Date.now();
   if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('verify');
-  render();
+  // Update bookie row in place
+  const safeId2=name.replace(/[^a-z0-9]/gi,'_');
+  const vrow=document.getElementById('vrow-'+acct+'-'+safeId2);
+  if(vrow){
+    // Update status label colour
+    const statusSpan=vrow.querySelector('span');
+    const vs=getVerifyStatus(p.bookies[name]);
+    if(statusSpan){statusSpan.textContent=vs.label;statusSpan.style.color=vs.col;}
+    vrow.style.display='none';
+  }
+  // Update RAG dot on bookie row
+  const ragDot=document.getElementById('rag-'+acct+'-'+safeId2);
+  const vs2=getVerifyStatus(p.bookies[name]);
+  if(ragDot){ragDot.style.background=vs2.col;}
+  // Update dashboard strip
+  updateDashboardStrip();
+}
+
+function updateDashboardStrip(){
+  const strip=document.getElementById('verify-strip');
+  if(!strip)return;
+  const ab=PROFILES.flatMap(pr=>Object.entries(state[pr].bookies||{}).filter(([,d])=>d.status==='Active'||d.status==='Restricted').map(([,d])=>d));
+  const never=ab.filter(b=>!b.verifiedAt).length;
+  const overdue=ab.filter(b=>b.verifiedAt&&Math.floor((Date.now()-b.verifiedAt)/86400000)>7).length;
+  const recent=ab.filter(b=>b.verifiedAt&&Math.floor((Date.now()-b.verifiedAt)/86400000)<=7).length;
+  const allVerified=!never&&!overdue;
+  strip.style.borderColor=allVerified?'rgba(34,197,94,0.3)':never?'rgba(248,113,113,0.3)':'rgba(240,165,0,0.3)';
+  const inner=strip.querySelector('.verify-strip-inner');
+  if(inner){
+    inner.innerHTML=(allVerified?'<span style="font-size:11px;color:#22C55E">✓ All '+ab.length+' verified</span>':'')
+      +(recent&&!allVerified?'<span style="font-size:11px;color:#22C55E">✓ '+recent+'</span>':'')
+      +(overdue?'<span style="font-size:11px;color:#F0A500;margin-left:10px">⚠ '+overdue+' overdue</span>':'')
+      +(never?'<span style="font-size:11px;color:#F87171;margin-left:10px">● '+never+' unverified</span>':'');
+  }
 }
 
 function getVerifyStatus(bookie){
@@ -1734,6 +1767,7 @@ function renderBookieList(acct,search,statusFilter){
       <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
         <div>
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            ${bk.status!=='Not Signed Up'?`<div id="rag-${acct}-${b.replace(/[^a-z0-9]/gi,'_')}" style="width:8px;height:8px;border-radius:50%;flex-shrink:0;background:${getVerifyStatus(bk).col}" title="${getVerifyStatus(bk).label}"></div>`:''}
             <span style="font-size:13px;font-weight:500;color:#F0EDE8">${b}</span>
             ${statusBadge(bk.status||'Active')}
           </div>
