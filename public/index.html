@@ -827,12 +827,8 @@ function renderDashboard(){
     }).join('')}
   </div>
   ${(()=>{
-    const ab=PROFILES.flatMap(pr=>Object.entries(state[pr].bookies||{}).filter(([,d])=>d.status==='Active'||d.status==='Restricted').map(([,d])=>d));
+    const {ab,never,overdue,recent,allVerified}=getVerifyStats();
     if(!ab.length)return'';
-    const never=ab.filter(b=>!b.verifiedAt).length;
-    const overdue=ab.filter(b=>b.verifiedAt&&Math.floor((Date.now()-b.verifiedAt)/86400000)>7).length;
-    const recent=ab.filter(b=>b.verifiedAt&&Math.floor((Date.now()-b.verifiedAt)/86400000)<=7).length;
-    const allVerified=!never&&!overdue;
     const borderCol=allVerified?'rgba(34,197,94,0.3)':never?'rgba(248,113,113,0.3)':'rgba(240,165,0,0.3)';
     return'<div id="verify-strip" onclick="switchTab(\'accounts\')" style="background:#2C3136;border:0.5px solid '+borderCol+';border-radius:10px;padding:10px 14px;margin-bottom:12px;cursor:pointer;display:flex;align-items:center;justify-content:space-between">'
       +'<div style="font-size:11px;color:#9A9590;font-weight:500;text-transform:uppercase;letter-spacing:.3px">Balance Verification</div>'
@@ -1729,14 +1725,18 @@ function verifyBookie(acct,name){
   updateDashboardStrip();
 }
 
-function updateDashboardStrip(){
-  const strip=document.getElementById('verify-strip');
-  if(!strip)return;
-  const ab=PROFILES.flatMap(pr=>Object.entries(state[pr].bookies||{}).filter(([,d])=>d.status==='Active'||d.status==='Restricted').map(([,d])=>d));
+function getVerifyStats(){
+  const ab=PROFILES.flatMap(pr=>Object.entries(state[pr].bookies||{}).filter(([,d])=>d.status==='Active').map(([,d])=>d));
   const never=ab.filter(b=>!b.verifiedAt).length;
   const overdue=ab.filter(b=>b.verifiedAt&&Math.floor((Date.now()-b.verifiedAt)/86400000)>7).length;
   const recent=ab.filter(b=>b.verifiedAt&&Math.floor((Date.now()-b.verifiedAt)/86400000)<=7).length;
-  const allVerified=!never&&!overdue;
+  return{ab,never,overdue,recent,allVerified:!never&&!overdue};
+}
+
+function updateDashboardStrip(){
+  const strip=document.getElementById('verify-strip');
+  if(!strip)return;
+  const {ab,never,overdue,recent,allVerified}=getVerifyStats();
   strip.style.borderColor=allVerified?'rgba(34,197,94,0.3)':never?'rgba(248,113,113,0.3)':'rgba(240,165,0,0.3)';
   const inner=strip.querySelector('.verify-strip-inner');
   if(inner){
@@ -1767,7 +1767,7 @@ function renderBookieList(acct,search,statusFilter){
       <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
         <div>
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-            ${bk.status!=='Not Signed Up'?`<div id="rag-${acct}-${b.replace(/[^a-z0-9]/gi,'_')}" style="width:8px;height:8px;border-radius:50%;flex-shrink:0;background:${getVerifyStatus(bk).col}" title="${getVerifyStatus(bk).label}"></div>`:''}
+            ${bk.status==='Active'?`<div id="rag-${acct}-${b.replace(/[^a-z0-9]/gi,'_')}" style="width:8px;height:8px;border-radius:50%;flex-shrink:0;background:${getVerifyStatus(bk).col}" title="${getVerifyStatus(bk).label}"></div>`:''}
             <span style="font-size:13px;font-weight:500;color:#F0EDE8">${b}</span>
             ${statusBadge(bk.status||'Active')}
           </div>
@@ -1775,11 +1775,11 @@ function renderBookieList(acct,search,statusFilter){
         </div>
         <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
           <div style="font-size:13px;font-weight:500;color:${(bk.bal||0)>0?'#22C55E':(bk.bal||0)<0?'#F87171':'#C8C5BF'}">${fmt(bk.bal||0)}</div>
-          ${bk.status!=='Not Signed Up'?`<button class="btn-sm" onclick="toggleVerifyRow('${acct}','${b}')">Verify</button>`:''}
+          ${bk.status==='Active'?`<button class="btn-sm" onclick="toggleVerifyRow('${acct}','${b}')">Verify</button>`:''}
           <button class="btn-sm" onclick="showBookieModal('${acct}','${b}')">Edit</button>
         </div>
       </div>
-      ${bk.status!=='Not Signed Up'?`<div id="vrow-${acct}-${b.replace(/[^a-z0-9]/gi,'_')}" style="display:none;align-items:center;gap:6px;padding:2px 0 4px">
+      ${bk.status==='Active'?`<div id="vrow-${acct}-${b.replace(/[^a-z0-9]/gi,'_')}" style="display:none;align-items:center;gap:6px;padding:2px 0 4px">
         <input type="number" id="vinput-${acct}-${b.replace(/[^a-z0-9]/gi,'_')}" placeholder="${(bk.bal||0).toFixed(2)}" step="0.01" inputmode="decimal" style="width:100px;padding:5px 8px;font-size:12px;border-radius:6px;background:#3D4349;border:0.5px solid rgba(255,255,255,0.1);color:#F0EDE8"/>
         <button onclick="verifyBookie('${acct}','${b}')" class="btn-sm btn-sm-edit">Confirm</button>
         <span style="font-size:10px;color:${getVerifyStatus(bk).col}">${getVerifyStatus(bk).label}</span>
