@@ -48,7 +48,8 @@ export default async function handler(req, res) {
       if (!mergedSports[pr]) mergedSports[pr] = { bank: 0, bookies: {}, transactions: [] };
       newSessions.forEach(s => {
         const casino = s.casino;
-        const net = s.netProfit || 0;
+        // Handle both new format (startBal/endBal) and old format (netProfit)
+        const net = (s.startBal !== undefined && s.endBal !== undefined) ? (s.endBal - s.startBal) : (s.netProfit || 0);
         const deposit = s.deposit || 0;
         if (!mergedSports[pr].bookies[casino]) mergedSports[pr].bookies[casino] = { bal: 0, status: 'Active', notes: '' };
         if (deposit > 0) {
@@ -61,7 +62,7 @@ export default async function handler(req, res) {
       // Reverse deleted session balance changes
       deletedSessions.forEach(s => {
         const casino = s.casino;
-        const net = s.netProfit || 0;
+        const net = (s.startBal !== undefined && s.endBal !== undefined) ? (s.endBal - s.startBal) : (s.netProfit || 0);
         const deposit = s.deposit || 0;
         if (!mergedSports[pr].bookies) mergedSports[pr].bookies = {};
         if (!mergedSports[pr].bookies[casino]) mergedSports[pr].bookies[casino] = { bal: 0, status: 'Active', notes: '' };
@@ -126,7 +127,6 @@ export default async function handler(req, res) {
 
     return res.status(200).json({ ok: true });
   } catch (e) {
-    console.error('Save casino error:', e);
     return res.status(500).json({ ok: false, error: e.message });
   }
 }
