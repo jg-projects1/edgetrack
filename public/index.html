@@ -248,12 +248,18 @@ select option{background:#3D4349;color:#F0EDE8}
 const SUPABASE_URL_UNUSED='';
 let syncTimeout=null;
 let _serverLoaded=false;
+let _saveQueue=[];        // queue of failed saves to retry
+let _retryTimeout=null;  // retry timer handle
+let _retrying=false;     // prevents concurrent retries
 
 function setSyncStatus(s){
   const dot=document.getElementById('sync-dot'),label=document.getElementById('sync-label');
   if(!dot||!label)return;
   dot.className='sync-dot'+(s==='syncing'?' syncing':s==='error'?' error':'');
-  label.textContent=s==='syncing'?'Saving':s==='error'?'Offline':'Saved';
+  const qLen=_saveQueue.length;
+  if(s==='syncing')label.textContent='Saving'+(qLen?` (${qLen} queued)`:'');
+  else if(s==='error')label.textContent=qLen?`Offline · ${qLen} pending`:'Offline';
+  else label.textContent=qLen?`Saved · ${qLen} queued`:'Saved';
 }
 
 async function loadData(){
@@ -379,6 +385,78 @@ async function fetchFromServer(){
   }
 }
 
+// ── SAVE QUEUE ───────────────────────────────────────────────────────────────
+function persistQueue(){
+  try{localStorage.setItem('mbe_save_queue',JSON.stringify(_saveQueue));}catch(e){}
+}
+
+function restoreQueue(){
+  try{
+    const q=localStorage.getItem('mbe_save_queue');
+    if(q){_saveQueue=JSON.parse(q)||[];
+      if(_saveQueue.length){
+        console.error('Restored',_saveQueue.length,'queued saves');
+        scheduleRetry();
+      }
+    }
+  }catch(e){_saveQueue=[];}
+}
+
+function queueSave(source){
+  // Merge with existing queue — don't stack duplicates, just update source
+  const existing=_saveQueue.findIndex(s=>s.source===source);
+  const entry={source,timestamp:Date.now(),state:buildSavePayload()};
+  if(existing>=0)_saveQueue[existing]=entry;
+  else _saveQueue.push(entry);
+  persistQueue();
+  setSyncStatus('error');
+  scheduleRetry();
+}
+
+function scheduleRetry(){
+  if(_retryTimeout)clearTimeout(_retryTimeout);
+  _retryTimeout=setTimeout(drainQueue,15000); // retry in 15 seconds
+}
+
+async function drainQueue(){
+  if(_retrying||_saveQueue.length===0)return;
+  _retrying=true;
+  setSyncStatus('syncing');
+  const entry=_saveQueue[0]; // try oldest first
+  try{
+    const [sportsRes,casinoRes]=await Promise.all([
+      fetch('/api/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(entry.state.sports)}),
+      fetch('/api/save-casino',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(entry.state.casino)})
+    ]);
+    if(!sportsRes.ok||!casinoRes.ok)throw new Error('Retry save failed');
+    _saveQueue.shift(); // remove successfully sent item
+    persistQueue();
+    if(_saveQueue.length>0){
+      setSyncStatus('syncing');
+      setTimeout(drainQueue,2000); // drain next item
+    }else{
+      setSyncStatus('synced');
+    }
+  }catch(e){
+    setSyncStatus('error');
+    scheduleRetry(); // try again in 15s
+  }finally{
+    _retrying=false;
+  }
+}
+
+function buildSavePayload(){
+  const sports={exchanges:state.exchanges,_source:'queue',_serverState:lastServerState};
+  PROFILES.forEach(pr=>{
+    sports[pr]={bank:state[pr]?.bank||0,bookies:state[pr]?.bookies||{},
+      transactions:state[pr]?.transactions||[],freeBets:state[pr]?.freeBets||[],
+      deletedIds:deletedTxIds[pr]||[]};
+  });
+  const casino={};
+  PROFILES.forEach(pr=>{casino[pr]={casino:state[pr]?.casino||[],deletedIds:casinoDeletedIds[pr]||[]};});
+  return{sports,casino};
+}
+
 async function saveData(source='unknown'){
   if(window._appLoading){console.log('Save blocked during load');return;}
   // If a save is already in progress, queue this one and return
@@ -453,8 +531,8 @@ async function saveData(source='unknown'){
     setSyncStatus('synced');
   }catch(e){
     console.error('Save error:',e);
-    setSyncStatus('error');
-    showToast('⚠ Save failed: '+e.message);
+    queueSave(source); // queue for retry
+    showToast('⚠ Offline — save queued','error');
   }finally{
     saveInProgress=false;
     if(pendingSave){const nextSource=pendingSave;pendingSave=null;saveData(nextSource);}
@@ -2465,6 +2543,7 @@ document.addEventListener('wheel', function(e){
 
 async function loadApp(){
   window._appLoading=true;
+  restoreQueue(); // restore any queued saves from last session
   // Version check — clear localStorage cache if bookie list version changed
   const BOOKIE_VERSION='v8';
   if(localStorage.getItem('mbe_bookie_ver')!==BOOKIE_VERSION){
@@ -2530,6 +2609,18 @@ function checkPin(){
 async function init(){
   checkPin();
 }
+
+// Auto-drain queue when connection returns
+window.addEventListener('online',function(){
+  if(_saveQueue.length){
+    showToast('Connection restored — syncing '+_saveQueue.length+' pending save'+(_saveQueue.length>1?'s':''));
+    drainQueue();
+  }
+});
+window.addEventListener('offline',function(){
+  setSyncStatus('error');
+  showToast('⚠ You are offline — saves will queue','error');
+});
 
 if('serviceWorker' in navigator){
   navigator.serviceWorker.getRegistrations().then(regs=>{
