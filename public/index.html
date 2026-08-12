@@ -926,7 +926,7 @@ function renderFreeBetsPanel(){
   const pending=all.filter(fb=>fb.status==='Pending');
   const used=all.filter(fb=>fb.status==='Used');
   if(all.length===0)return '';
-  return `<div class="card" style="margin-top:12px">
+  return `<div class="card" data-panel="freebets" style="margin-top:12px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
       <div style="font-size:13px;font-weight:500;color:#F0F0F5">Free Bets</div>
       ${pending.length>0?`<span style="font-size:11px;background:#0F6E56;color:#9FE1CB;padding:3px 8px;border-radius:20px">${pending.length} pending</span>`:''}
@@ -961,7 +961,13 @@ function renderFreeBetsPanel(){
 
 function markFreeBetUsed(pr,id){
   const fb=(state[pr].freeBets||[]).find(f=>String(f.id)===String(id));
-  if(fb){fb.status='Used';save('freeBetUsed');render();}
+  if(fb){
+    fb.status='Used';save('freeBetUsed');
+    // Smart update: just re-render the free bets panel
+    const fbPanel=document.querySelector('.card[data-panel="freebets"]');
+    if(fbPanel){fbPanel.outerHTML=renderFreeBetsPanel();}
+    else{render();}
+  }
 }
 
 // ── PENDING ──────────────────────────────────────────────────────────────────
@@ -1099,7 +1105,17 @@ function settleBet(acct,id,result){
   const card=document.getElementById('pcard-'+id);
   if(card){card.style.transition='opacity .25s,transform .25s';card.style.opacity='0';card.style.transform='translateY(-6px)';setTimeout(()=>{card.remove();updateBadge();},260);}
   showToast(`${result==='Won'?'Won':'Lost'} — ${fmtS(tx.pnl||0)}`,result==='Won'?'success':'error');
-  setTimeout(render,300);
+  // Smart update: only rebuild what changed
+  setTimeout(function(){
+    updateBadge();
+    // If on dashboard, refresh just the P&L figures
+    if(currentTab==='dashboard')render();
+    // If on pending tab, check if any pending remain
+    else if(currentTab==='pending'&&pendingAll().length===0){
+      const mc=document.getElementById('main-content');
+      if(mc)mc.innerHTML='<div style="text-align:center;padding:60px 20px"><i class="ti ti-circle-check" style="font-size:48px;color:#22C55E"></i><div style="font-size:15px;font-weight:500;margin-top:12px;color:#F0EDE8">All settled</div></div>';
+    }
+  },300);
 }
 
 function editPnl(acct,id){
@@ -1563,11 +1579,11 @@ function renderHistory(){
   return`
   ${profBar}
   <div class="filter-row">
-    <select class="filter-select" onchange="render()"><option value="">All types</option>${BET_TYPES.map(t=>`<option>${t}</option>`).join('')}</select>
-    <select class="filter-select" onchange="render()"><option value="">All results</option><option>Won</option><option>Lost</option><option>Pending</option></select>
+    <select class="filter-select" id="hist-type-filter" onchange="filterHistoryInPlace()"><option value="">All types</option>${BET_TYPES.map(t=>`<option>${t}</option>`).join('')}</select>
+    <select class="filter-select" id="hist-result-filter" onchange="filterHistoryInPlace()"><option value="">All results</option><option>Won</option><option>Lost</option><option>Pending</option></select>
     <button class="btn-sm" onclick="exportCSV()" style="margin-left:auto"><i class="ti ti-download" aria-hidden="true"></i> CSV</button>
   </div>
-  <div style="font-size:11px;color:#C8C5BF;margin-bottom:10px">${txs.length} transactions</div>
+  <div style="font-size:11px;color:#C8C5BF;margin-bottom:10px" data-txcount>${txs.length} transactions</div>
   ${renderTxTable(txs,showAll)}`;
 }
 
@@ -1580,7 +1596,7 @@ function renderTxTable(txs,showAcct){
     const isBookieT=BOOKIE_TRANSFER.includes(t.type),isExchT=EXCHANGE_TRANSFER.includes(t.type),isAmend=t.type==='Balance Amendment',isBet=BET_ONLY.includes(t.type);
     const pnlStr=t.result==='Pending'?`<span class="warn">pending</span>`:`<span class="${(t.pnl||0)>=0?'pos':'neg'}">${fmtS(t.pnl||0)}</span>`;
     const resStr=t.result==='Won'?'<span class="pos">Won</span>':t.result==='Lost'?'<span class="neg">Lost</span>':t.result==='—'?'<span class="muted">—</span>':'<span class="warn">pending</span>';
-    return`<tr>
+    return`<tr data-txid="${t.id}">
       <td style="white-space:nowrap;font-size:11px;color:#C8C5BF">${t.date}</td>
       ${showAcct?`<td>${acctPill(t._acct)}</td>`:''}
       <td><span class="${pillClass(t.type)}">${t.type}</span></td>
@@ -1655,7 +1671,13 @@ function deleteTx(acct,id){
     localStorage.setItem('mbe_state',JSON.stringify(snap));
   }catch(e){}
   if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}
-  saveData('deleteTx');showToast('Transaction deleted & balances reversed');render();
+  saveData('deleteTx');showToast('Transaction deleted & balances reversed');
+  // Smart update: remove just that row
+  const row=document.querySelector(`tr[data-txid="${id}"]`)||document.getElementById('pcard-'+id);
+  if(row){
+    row.style.transition='opacity .2s';row.style.opacity='0';
+    setTimeout(function(){row.remove();updateBadge();},200);
+  }else{render();}
 }
 
 
@@ -2321,7 +2343,7 @@ function renderCasinoHistory(){
   if(!sessions.length)return '<div class="empty">No new casino sessions yet — log one above</div>';
   const rows=sessions.map(s=>{
     const pnl=s.endBal-s.startBal;
-    return '<tr>'
+    return '<tr data-csid="'+s.id+'">'
       +'<td style="font-size:11px;white-space:nowrap">'+(s.date||'')+'</td>'
       +'<td style="text-align:center"><span class="dot-'+s._acct+'" style="display:inline-block;width:6px;height:6px;border-radius:50%"></span> '+profileLabel(s._acct)+'</td>'
       +'<td style="text-align:center;font-size:11px">'+(s.operator||'JG')+'</td>'
@@ -2345,6 +2367,19 @@ function renderCasinoHistory(){
 }
 
 
+
+function filterHistoryInPlace(){
+  const typeFilter=document.getElementById('hist-type-filter')?.value||'';
+  const resultFilter=document.getElementById('hist-result-filter')?.value||'';
+  let txs=profileTxs(currentProfile);
+  if(typeFilter)txs=txs.filter(t=>t.type===typeFilter);
+  if(resultFilter)txs=txs.filter(t=>t.result===resultFilter);
+  const showAll=currentProfile==='both';
+  const tableEl=document.querySelector('.table-wrap');
+  if(tableEl)tableEl.outerHTML=renderTxTable(txs,showAll);
+  const countEl=document.querySelector('[data-txcount]');
+  if(countEl)countEl.textContent=txs.length+' transactions';
+}
 
 // ── ROUTING ──────────────────────────────────────────────────────────────────
 function render(){
@@ -2506,7 +2541,13 @@ function saveCasinoSession(){
     notes:document.getElementById('c-notes')?.value||'',_acct:casinoFormAcct,
   });
   if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('casinoSession');
-  showToast('Casino session saved!');render();
+  showToast('Casino session saved!');
+  // Smart update: only re-render casino tab content
+  if(currentTab==='casino'){
+    casinoView='history'; // switch to history to show what was just saved
+    const mc=document.getElementById('main-content');
+    if(mc)mc.innerHTML=renderCasino();
+  }else{render();}
 }
 
 function resetCasinoForm(){
@@ -2531,7 +2572,13 @@ function deleteCasinoSession(acct,id){
   }
   state[acct].casino=(state[acct].casino||[]).filter(function(s){return s.id!==id;});
   if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('deleteCasino');
-  showToast('Session deleted');render();
+  showToast('Session deleted');
+  // Smart update: remove just that row
+  const casinoRow=document.querySelector(`tr[data-csid="${id}"]`);
+  if(casinoRow){
+    casinoRow.style.transition='opacity .2s';casinoRow.style.opacity='0';
+    setTimeout(function(){casinoRow.remove();},200);
+  }else{render();}
 }
 
 // Prevent scroll wheel changing number inputs
