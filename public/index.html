@@ -826,6 +826,20 @@ function renderDashboard(){
       </div>`;
     }).join('')}
   </div>
+  ${(()=>{
+    const ab=PROFILES.flatMap(pr=>Object.entries(state[pr].bookies||{}).filter(([,d])=>d.status==='Active'||d.status==='Restricted').map(([,d])=>d));
+    if(!ab.length)return'';
+    const never=ab.filter(b=>!b.verifiedAt).length;
+    const overdue=ab.filter(b=>b.verifiedAt&&Math.floor((Date.now()-b.verifiedAt)/86400000)>7).length;
+    const recent=ab.filter(b=>b.verifiedAt&&Math.floor((Date.now()-b.verifiedAt)/86400000)<=7).length;
+    return'<div onclick="switchTab(\'accounts\')" style="background:#2C3136;border:0.5px solid rgba(255,255,255,0.09);border-radius:10px;padding:10px 14px;margin-bottom:12px;cursor:pointer;display:flex;align-items:center;justify-content:space-between">'
+      +'<div style="font-size:11px;color:#9A9590;font-weight:500;text-transform:uppercase;letter-spacing:.3px">Balance Verification</div>'
+      +'<div style="display:flex;gap:10px">'
+      +(recent?'<span style="font-size:11px;color:#22C55E">✓ '+recent+' verified</span>':'')
+      +(overdue?'<span style="font-size:11px;color:#F0A500">⚠ '+overdue+' overdue</span>':'')
+      +(never?'<span style="font-size:11px;color:#F87171">● '+never+' never verified</span>':'')
+      +'</div></div>';
+  })()}
   ${renderDashboardMonthly()}
   ${renderPerformanceCard()}${renderFreeBetsPanel()}
 `;}
