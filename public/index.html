@@ -1593,12 +1593,129 @@ function exportCSV(){
 }
 
 // ── REPORTS ──────────────────────────────────────────────────────────────────
+function runBalanceAudit(){
+  const results=[];
+  PROFILES.forEach(pr=>{
+    const p=state[pr];
+    const txs=(p.transactions||[]).filter(t=>t.result!=='Pending');
+    const bookies={};
+
+    // Replay all transactions
+    txs.forEach(t=>{
+      const bk=t.bookie;
+      const bs=t.bstake||0;
+      const bo=t.bodds||0;
+      const type=t.type||'';
+      const result=t.result||'';
+      const isFB=isFreeBet(type);
+      const isBookieT=BOOKIE_TRANSFER.includes(type);
+      const isAmend=type==='Balance Amendment';
+
+      if(!bk&&!isAmend)return;
+
+      if(!bookies[bk])bookies[bk]=0;
+
+      if(isBookieT){
+        // Deposit: +amount, Withdrawal: -amount
+        const amt=t.amount||0;
+        bookies[bk]+=(type==='Deposit'?amt:-amt);
+      } else if(isAmend){
+        // Balance amendment — affects target
+        const target=t.target;
+        if(target&&target!=='Bank'){
+          if(!bookies[target])bookies[target]=0;
+          bookies[target]+=(t.diff||0);
+        }
+      } else if(result==='Won'){
+        if(isFB){
+          // Free bet won: back winnings only (stake not returned)
+          bookies[bk]+=(bo-1)*bs;
+        } else {
+          // Normal won: full return = odds × stake (stake was deducted at log)
+          bookies[bk]+=bo*bs;
+        }
+      } else if(result==='Lost'){
+        // Lost: stake already deducted at log — nothing more
+        // (for normal bets; free bets never deducted stake)
+      } else if(result==='—'||result==='Void'){
+        // Void: return stake
+        if(!isFB)bookies[bk]+=bs;
+      }
+
+      // At log time, stake was deducted for non-free bets
+      // We need to account for that separately — find pending logs
+    });
+
+    // Also replay stake deductions from ALL bets (including pending)
+    (p.transactions||[]).forEach(t=>{
+      const bk=t.bookie;
+      const bs=t.bstake||0;
+      const type=t.type||'';
+      const isFB=isFreeBet(type);
+      const isBookieT=BOOKIE_TRANSFER.includes(type);
+      const isAmend=type==='Balance Amendment';
+      if(!bk||isBookieT||isAmend||isFB)return;
+      if(!bookies[bk])bookies[bk]=0;
+      bookies[bk]-=bs; // stake deducted at log time
+    });
+
+    // Also replay casino sessions
+    (p.casino||[]).forEach(s=>{
+      const bk=s.casino;
+      if(!bk)return;
+      if(!bookies[bk])bookies[bk]=0;
+      const pnl=s.startBal!==undefined?s.endBal-s.startBal:s.netProfit||0;
+      bookies[bk]+=pnl;
+    });
+
+    // Compare calculated vs stored
+    const stored=p.bookies||{};
+    const allBks=new Set([...Object.keys(bookies),...Object.keys(stored)]);
+    allBks.forEach(bk=>{
+      const calc=Math.round((bookies[bk]||0)*100)/100;
+      const actual=Math.round((stored[bk]?.bal||0)*100)/100;
+      const diff=Math.round((actual-calc)*100)/100;
+      if(Math.abs(diff)>0.01){
+        results.push({pr,bk,calc,actual,diff});
+      }
+    });
+  });
+  return results;
+}
+
+function renderBalanceAudit(){
+  const results=runBalanceAudit();
+  if(!results.length){
+    return '<div style="background:#14532D;border-radius:10px;padding:14px 16px;display:flex;align-items:center;gap:10px;margin-bottom:12px">'
+      +'<i class="ti ti-circle-check" style="font-size:20px;color:#86EFAC"></i>'
+      +'<div><div style="font-size:13px;font-weight:500;color:#86EFAC">All balances verified</div>'
+      +'<div style="font-size:11px;color:#5DCAA5;margin-top:2px">Calculated vs stored — no discrepancies found</div></div></div>';
+  }
+  return '<div class="card" style="margin-bottom:12px">'
+    +'<div class="card-header"><span class="card-title">Balance Discrepancies</span>'
+    +'<span style="font-size:11px;color:#F87171">'+results.length+' found</span></div>'
+    +'<div>'
+    +results.map(r=>{
+      const diffStr=(r.diff>0?'+':'')+fmtS(r.diff);
+      const col=Math.abs(r.diff)<1?'#F0A500':'#F87171';
+      return '<div class="list-row">'
+        +'<div class="list-row-left">'
+        +'<div class="list-row-title">'+r.bk+'</div>'
+        +'<div class="list-row-meta"><span class="pill pill-'+r.pr+'">'+profileLabel(r.pr)+'</span>'
+        +'<span style="font-size:11px;color:#9A9590">Stored: '+fmtS(r.actual)+' · Calculated: '+fmtS(r.calc)+'</span></div>'
+        +'</div>'
+        +'<div style="font-size:13px;font-weight:500;color:'+col+'">'+diffStr+'</div>'
+        +'</div>';
+    }).join('')
+    +'</div></div>';
+}
+
 function renderReports(){
   const allMap=monthlyPnl(allTxs());
   const bookiePnl={};allTxs().filter(t=>t.result!=='Pending').forEach(t=>{if(!t.bookie||!t.pnl||t.type==='Balance Amendment')return;bookiePnl[t.bookie]=(bookiePnl[t.bookie]||0)+t.pnl;});
   const topBookies=Object.entries(bookiePnl).sort((a,b)=>b[1]-a[1]).slice(0,10);
   const typePnl={};allTxs().forEach(t=>{if(!t.type||!t.pnl||t.type==='Balance Amendment')return;typePnl[t.type]=(typePnl[t.type]||0)+t.pnl;});
-  return`
+  return renderBalanceAudit()+`
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
     <div style="font-size:16px;font-weight:500;color:#F0EDE8">Reports</div>
     <button class="btn-sm" onclick="exportCSV()"><i class="ti ti-download" aria-hidden="true"></i> Export CSV</button>
