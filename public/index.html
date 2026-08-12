@@ -1661,11 +1661,23 @@ function renderAccountsMain(){
   </div>`;
 }
 
+function toggleVerifyRow(acct,name){
+  const safeId=name.replace(/[^a-z0-9]/gi,'_');
+  const row=document.getElementById('vrow-'+acct+'-'+safeId);
+  if(!row)return;
+  row.style.display=row.style.display==='none'?'flex':'none';
+  if(row.style.display==='flex'){
+    const inp=document.getElementById('vinput-'+acct+'-'+safeId);
+    if(inp)inp.focus();
+  }
+}
+
 function verifyBookie(acct,name){
   const p=state[acct];
   if(!p.bookies[name])return;
   const stored=p.bookies[name].bal||0;
-  const input=document.getElementById('verify-input-'+acct+'-'+name.replace(/[^a-z0-9]/gi,''));
+  const safeId=name.replace(/[^a-z0-9]/gi,'_');
+  const input=document.getElementById('vinput-'+acct+'-'+safeId);
   if(!input)return;
   const entered=parseFloat(input.value);
   if(isNaN(entered)){showToast('Enter a valid balance','error');return;}
@@ -1712,9 +1724,15 @@ function renderBookieList(acct,search,statusFilter){
         </div>
         <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
           <div style="font-size:13px;font-weight:500;color:${(bk.bal||0)>0?'#22C55E':(bk.bal||0)<0?'#F87171':'#C8C5BF'}">${fmt(bk.bal||0)}</div>
+          ${bk.status!=='Not Signed Up'?`<button class="btn-sm" onclick="toggleVerifyRow('${acct}','${b}')">Verify</button>`:''}
           <button class="btn-sm" onclick="showBookieModal('${acct}','${b}')">Edit</button>
         </div>
       </div>
+      ${bk.status!=='Not Signed Up'?`<div id="vrow-${acct}-${b.replace(/[^a-z0-9]/gi,'_')}" style="display:none;align-items:center;gap:6px;padding:2px 0 4px">
+        <input type="number" id="vinput-${acct}-${b.replace(/[^a-z0-9]/gi,'_')}" placeholder="${(bk.bal||0).toFixed(2)}" step="0.01" inputmode="decimal" style="width:100px;padding:5px 8px;font-size:12px;border-radius:6px;background:#3D4349;border:0.5px solid rgba(255,255,255,0.1);color:#F0EDE8"/>
+        <button onclick="verifyBookie('${acct}','${b}')" class="btn-sm btn-sm-edit">Confirm</button>
+        <span style="font-size:10px;color:${getVerifyStatus(bk).col}">${getVerifyStatus(bk).label}</span>
+      </div>`:''}
     </div>`;
   }).join('');
 }
