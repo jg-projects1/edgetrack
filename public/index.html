@@ -355,7 +355,11 @@ async function fetchFromServer(){
             }
             // In all other cases server wins — don't let local 0 overwrite server balance
           });
-          // Just use merged bookies as-is — migrateLegacy will clean up
+          // Preserve local verifiedAt — server doesn't track this
+          Object.keys(mergedBk).forEach(function(bk){
+            const loc=localBk[bk];
+            if(loc&&loc.verifiedAt)mergedBk[bk].verifiedAt=loc.verifiedAt;
+          });
           state[pr].bookies=mergedBk;
           state[pr].transactions=merged;
           state[pr].freeBets=saved[pr].freeBets||state[pr].freeBets||[];
@@ -497,8 +501,22 @@ async function saveData(source='unknown'){
       PROFILES.forEach(pr=>{
         if(sportsJson.data[pr]){
           state[pr].bank=sportsJson.data[pr].bank;
-          // Use server bookies as-is — migrateLegacy will clean up
-          state[pr].bookies=sportsJson.data[pr].bookies||{};
+          // Merge bookies — server wins for bal/status/notes, but preserve local verifiedAt
+          const serverBk=sportsJson.data[pr].bookies||{};
+          const localBk=state[pr].bookies||{};
+          const mergedBk={};
+          const allBkKeys=new Set([...Object.keys(serverBk),...Object.keys(localBk)]);
+          allBkKeys.forEach(function(bk){
+            const srv=serverBk[bk];
+            const loc=localBk[bk];
+            if(srv&&loc){
+              // Server wins for balance/status/notes, local wins for verifiedAt
+              mergedBk[bk]=Object.assign({},srv,{verifiedAt:loc.verifiedAt||srv.verifiedAt||null});
+            } else {
+              mergedBk[bk]=srv||loc;
+            }
+          });
+          state[pr].bookies=mergedBk;
           // Merge transactions — union of server + local, prefer settled over pending
           const serverTxs=sportsJson.data[pr].transactions||[];
           const localTxs=state[pr].transactions||[];
