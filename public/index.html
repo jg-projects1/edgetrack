@@ -1222,7 +1222,7 @@ function renderAdd(prefill){
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px" id="fg-stake-odds">
           <div class="form-group" id="fg-bstake"><div class="form-label">Stake</div><input type="number" id="f-bstake" placeholder="0.00" step="0.01" inputmode="decimal" value="${pf.bstake||''}" oninput="autoCalcUnderlay()" style="padding:7px 8px"/></div>
           <div class="form-group" id="fg-bodds"><div class="form-label">Back odds</div><input type="number" id="f-bodds" placeholder="2.00" step="0.01" inputmode="decimal" value="${pf.bodds||''}" oninput="autoCalcUnderlay()" style="padding:7px 8px"/></div>
-          <div class="form-group" id="fg-layodds"><div class="form-label">Lay odds</div><input type="number" id="f-lodds" placeholder="2.00" step="0.01" inputmode="decimal" oninput="autoCalcUnderlay()" style="padding:7px 8px"/></div>
+          <div class="form-group" id="fg-layodds"><div class="form-label">Lay odds</div><input type="number" id="f-lodds" placeholder="2.00" step="0.01" inputmode="decimal" oninput="autoCalcUnderlay()" value="${pf.lodds||''}" style="padding:7px 8px"/></div>
         </div>
         <div id="fg-partial-wrap" style="display:none;margin-bottom:8px">
           <div style="display:flex;align-items:center;gap:8px">
@@ -1565,7 +1565,12 @@ function duplicateTrade(acct,id,rawTx){
   updateBadge();bindFormEvents();updateFormFields();
   document.querySelectorAll('.type-pill').forEach(el=>{el.className='type-pill';if(el.dataset.type===tx.type)el.classList.add('sel','sel-'+tx.type.toLowerCase().replace(/\s/g,''));});
   const fb=document.getElementById('f-bookie');if(fb&&tx.bookie)fb.value=tx.bookie;
+  const fbs=document.getElementById('f-bookie-search');if(fbs&&tx.bookie)fbs.value=tx.bookie;
   const fe=document.getElementById('f-exchange');if(fe&&tx.exchange)fe.value=tx.exchange;
+  // Set strategy and trigger calculator
+  if(tx.underlay!==undefined)isUnderlay=tx.underlay;
+  setStrategy(isUnderlay?'underlay':'lockin');
+  autoCalcUnderlay();
   showToast('Duplicated — edit and save');window.scrollTo(0,0);
 }
 
