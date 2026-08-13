@@ -1,4 +1,4 @@
-// ONE-TIME migration: splits edgetrack_main into per-profile keys
+// ONE-TIME migration: splits edgetrack_main + edgetrack_casino into per-profile keys
 // Call once via GET /api/migrate — safe to call multiple times (idempotent)
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -28,24 +28,24 @@ export default async function handler(req, res) {
         body: JSON.stringify(JSON.stringify(value))
       });
       if (!r.ok) throw new Error(`KV set error on ${key}: ${r.status}`);
-      return true;
     };
 
     // Check if already migrated
     const alreadyMigrated = await kvGet('edgetrack_me');
-    if (alreadyMigrated) {
+    if (alreadyMigrated && (alreadyMigrated.transactions?.length || 0) > 0) {
       return res.status(200).json({
         ok: true,
         message: 'Already migrated',
-        txCounts: profiles.reduce((a, pr) => ({
-          ...a,
-          [pr]: alreadyMigrated.transactions?.length || 0
-        }), {})
+        me: { transactions: alreadyMigrated.transactions?.length, casino: alreadyMigrated.casino?.length }
       });
     }
 
-    // Load legacy data
-    const legacy = await kvGet('edgetrack_main');
+    // Load both legacy keys
+    const [legacy, casinoLegacy] = await Promise.all([
+      kvGet('edgetrack_main'),
+      kvGet('edgetrack_casino')
+    ]);
+
     if (!legacy) {
       return res.status(200).json({ ok: false, message: 'No legacy data found' });
     }
@@ -53,27 +53,24 @@ export default async function handler(req, res) {
     const report = {};
     const errors = [];
 
-    // Write each profile to its own key
     await Promise.all(profiles.map(async pr => {
-      const profileData = legacy[pr];
-      if (!profileData) {
-        report[pr] = { status: 'skipped', reason: 'no data' };
-        return;
-      }
+      const sportData = legacy[pr];
+      const casinoData = casinoLegacy?.[pr];
+
       try {
         const payload = {
-          bank: profileData.bank || 0,
-          bookies: profileData.bookies || {},
-          transactions: profileData.transactions || [],
-          freeBets: profileData.freeBets || [],
-          casino: profileData.casino || []
+          bank: sportData?.bank || 0,
+          bookies: sportData?.bookies || {},
+          transactions: sportData?.transactions || [],
+          freeBets: sportData?.freeBets || [],
+          casino: casinoData?.casino || sportData?.casino || []
         };
         await kvSet(`edgetrack_${pr}`, payload);
         report[pr] = {
           status: 'migrated',
           transactions: payload.transactions.length,
-          bookies: Object.keys(payload.bookies).length,
-          casino: payload.casino.length
+          casino: payload.casino.length,
+          bookies: Object.keys(payload.bookies).length
         };
       } catch (e) {
         errors.push(`${pr}: ${e.message}`);
@@ -81,7 +78,7 @@ export default async function handler(req, res) {
       }
     }));
 
-    // Write exchanges
+    // Migrate exchanges
     if (legacy.exchanges) {
       await kvSet('edgetrack_exchanges', legacy.exchanges);
       report.exchanges = 'migrated';
