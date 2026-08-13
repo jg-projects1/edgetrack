@@ -1718,7 +1718,17 @@ function renderReports(){
   return`
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
     <div style="font-size:16px;font-weight:500;color:#F0EDE8">Reports</div>
-    <button class="btn-sm" onclick="exportCSV()"><i class="ti ti-download" aria-hidden="true"></i> Export CSV</button>
+    <div style="display:flex;gap:6px">
+      <button class="btn-sm" onclick="exportCSV()"><i class="ti ti-download" aria-hidden="true"></i> CSV</button>
+      <button class="btn-sm btn-sm-edit" onclick="downloadBackup()"><i class="ti ti-database-export" aria-hidden="true"></i> Backup</button>
+    </div>
+  </div>
+  <div style="background:#2C3136;border:0.5px solid rgba(255,255,255,0.09);border-radius:10px;padding:12px 14px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between">
+    <div>
+      <div style="font-size:12px;font-weight:500;color:#F0EDE8;margin-bottom:2px">Full data backup</div>
+      <div id="backup-status" style="font-size:11px;color:#9A9590">Checking...</div>
+    </div>
+    <button class="btn btn-primary" onclick="downloadBackup()" style="padding:8px 14px;font-size:12px"><i class="ti ti-download"></i> Download</button>
   </div>
   <div class="card" style="margin-bottom:12px">
     <div class="card-header"><span class="card-title">Monthly P&L — Sports (All Accounts)</span></div>
@@ -2381,6 +2391,80 @@ function filterHistoryInPlace(){
   if(countEl)countEl.textContent=txs.length+' transactions';
 }
 
+// ── BACKUP ───────────────────────────────────────────────────────────────────
+function buildFullBackup(){
+  return{
+    version:2,
+    exportedAt:new Date().toISOString(),
+    exportedBy:'MBWorld',
+    state:{
+      exchanges:state.exchanges,
+      profiles:Object.fromEntries(PROFILES.map(pr=>[pr,{
+        bank:state[pr].bank,
+        bookies:state[pr].bookies,
+        transactions:state[pr].transactions,
+        freeBets:state[pr].freeBets||[],
+        casino:state[pr].casino||[]
+      }]))
+    }
+  };
+}
+
+function downloadBackup(){
+  const backup=buildFullBackup();
+  const json=JSON.stringify(backup,null,2);
+  const blob=new Blob([json],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  const date=todayStr().replace(/\//g,'-');
+  a.href=url;a.download=`mbworld-backup-${date}.json`;a.click();
+  URL.revokeObjectURL(url);
+  localStorage.setItem('mbe_last_backup',Date.now().toString());
+  showToast('Full backup downloaded ✓');
+  updateBackupStatus();
+}
+
+function getLastBackupDays(){
+  const last=localStorage.getItem('mbe_last_backup');
+  if(!last)return null;
+  return Math.floor((Date.now()-parseInt(last))/86400000);
+}
+
+function updateBackupStatus(){
+  const el=document.getElementById('backup-status');
+  if(!el)return;
+  const days=getLastBackupDays();
+  if(days===null){el.textContent='Never backed up';el.style.color='#F87171';}
+  else if(days===0){el.textContent='Backed up today';el.style.color='#22C55E';}
+  else if(days<=7){el.textContent=`Last backup ${days}d ago`;el.style.color='#22C55E';}
+  else if(days<=14){el.textContent=`Last backup ${days}d ago`;el.style.color='#F0A500';}
+  else{el.textContent=`Last backup ${days}d ago — overdue`;el.style.color='#F87171';}
+}
+
+function checkAutoBackup(){
+  // Auto-backup: trigger on first Monday open if last backup > 6 days ago
+  const now=new Date();
+  const isMonday=now.getDay()===1;
+  const days=getLastBackupDays();
+  const lastAutoCheck=localStorage.getItem('mbe_auto_backup_check');
+  const todayKey=now.toISOString().slice(0,10);
+  if(lastAutoCheck===todayKey)return; // already checked today
+  localStorage.setItem('mbe_auto_backup_check',todayKey);
+  if(isMonday&&(days===null||days>6)){
+    // Show backup prompt after 3 seconds
+    setTimeout(function(){
+      showBackupPrompt();
+    },3000);
+  }
+}
+
+function showBackupPrompt(){
+  const days=getLastBackupDays();
+  const msg=days===null?'You have never backed up your data.':'Your last backup was '+days+' days ago.';
+  document.getElementById('modal-root').innerHTML=
+    '<div class="modal-bg">'    +'<div class="modal">'    +'<div class="modal-handle"></div>'    +'<div class="modal-title">Weekly Backup</div>'    +'<div class="modal-sub">'+msg+' Download a full backup now?</div>'    +'<div style="background:#2C3136;border-radius:10px;padding:12px 14px;margin-bottom:16px">'    +'<div style="font-size:12px;color:#9A9590;margin-bottom:4px">Your backup includes:</div>'    +'<div style="font-size:12px;color:#C8C5BF">All transactions · Bookie balances · Casino sessions · Free bets · Exchange balances</div>'    +'</div>'    +'<div class="modal-actions">'    +'<button class="btn btn-primary" style="flex:1" onclick="downloadBackup();closeModal()"><i class="ti ti-download"></i> Download backup</button>'    +'<button class="btn btn-ghost" onclick="localStorage.setItem(\'mbe_last_backup\',Date.now().toString());closeModal()">Skip for now</button>'    +'</div>'    +'</div></div>';
+}
+
 // ── ROUTING ──────────────────────────────────────────────────────────────────
 function render(){
   const el=document.getElementById('main-content');
@@ -2417,6 +2501,7 @@ function setAccountsTab(i){
   window._accountsSubTab=['accounts','risk','reports'][i];
   currentTab='accounts';
   document.getElementById('main-content').innerHTML=renderAccounts();
+  if(i===2)setTimeout(updateBackupStatus,50);
 }
 
 function setCasinoView(i){
@@ -2608,6 +2693,7 @@ async function loadApp(){
   const pb=document.getElementById('profile-bar');if(pb)pb.style.display='none';
   switchProfile('me');
   render();
+  checkAutoBackup();
 }
 
 function checkPin(){
