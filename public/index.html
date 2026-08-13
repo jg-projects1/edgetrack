@@ -461,7 +461,8 @@ function buildSavePayload(){
     sports[pr]={bank:state[pr]?.bank||0,bookies:state[pr]?.bookies||{},
       transactions:state[pr]?.transactions||[],freeBets:state[pr]?.freeBets||[],
       casino:state[pr]?.casino||[],
-      deletedIds:deletedTxIds[pr]||[]};
+      deletedIds:deletedTxIds[pr]||[],
+      deletedCasinoIds:casinoDeletedIds[pr]||[]};
   });
   const casino={};
   PROFILES.forEach(pr=>{casino[pr]={casino:state[pr]?.casino||[],deletedIds:casinoDeletedIds[pr]||[]};});
