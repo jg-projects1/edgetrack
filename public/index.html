@@ -277,7 +277,9 @@ async function loadData(){
         PROFILES.forEach(pr=>{
           if(parsed[pr]){
             state[pr]=JSON.parse(JSON.stringify(parsed[pr]));
-            if(!state[pr].casino)state[pr].casino=[];
+            // Casino data now comes from split key via /api/load
+          if(saved[pr].casino)state[pr].casino=JSON.parse(JSON.stringify(saved[pr].casino));
+          else if(!state[pr].casino)state[pr].casino=[];
             if(!state[pr].freeBets)state[pr].freeBets=[];
           }
         });
@@ -303,10 +305,8 @@ async function loadData(){
 
 async function fetchFromServer(){
   try{
-    const [sportsRes, casinoRes] = await Promise.all([
-      fetch('/api/load?t='+Date.now()),
-      fetch('/api/load-casino?t='+Date.now())
-    ]);
+    const sportsRes = await fetch('/api/load?t='+Date.now());
+    const casinoRes = null;
     if(!sportsRes.ok)throw new Error('HTTP '+sportsRes.status);
     const sportsJson=await sportsRes.json();
     if(sportsJson.ok&&sportsJson.data){
@@ -377,23 +377,15 @@ async function fetchFromServer(){
           state[pr].bookies=mergedBk;
           state[pr].transactions=merged;
           state[pr].freeBets=saved[pr].freeBets||state[pr].freeBets||[];
-          if(!state[pr].casino)state[pr].casino=[];
+          // Casino data now comes from split key via /api/load
+          if(saved[pr].casino)state[pr].casino=JSON.parse(JSON.stringify(saved[pr].casino));
+          else if(!state[pr].casino)state[pr].casino=[];
         });
         if(saved.exchanges)state.exchanges=JSON.parse(JSON.stringify(saved.exchanges));
         lastServerState=JSON.parse(JSON.stringify(saved));
       }
     }
-    if(casinoRes&&casinoRes.ok){
-      const casinoJson=await casinoRes.json();
-      if(casinoJson.ok&&casinoJson.data){
-        PROFILES.forEach(pr=>{
-          if(casinoJson.data[pr]?.casino){
-            if(!state[pr])state[pr]={transactions:[],casino:[],bank:0,bookies:{}};
-            state[pr].casino=JSON.parse(JSON.stringify(casinoJson.data[pr].casino));
-          }
-        });
-      }
-    }
+// Casino loaded from /api/load (split key)
     setSyncStatus('synced');
     migrateLegacy();
     _serverLoaded=true;
@@ -468,6 +460,7 @@ function buildSavePayload(){
   PROFILES.forEach(pr=>{
     sports[pr]={bank:state[pr]?.bank||0,bookies:state[pr]?.bookies||{},
       transactions:state[pr]?.transactions||[],freeBets:state[pr]?.freeBets||[],
+      casino:state[pr]?.casino||[],
       deletedIds:deletedTxIds[pr]||[]};
   });
   const casino={};
@@ -494,6 +487,7 @@ async function saveData(source='unknown'){
         bookies:state[pr]?.bookies||{},
         transactions:state[pr]?.transactions||[],
         freeBets:state[pr]?.freeBets||[],
+        casino:state[pr]?.casino||[],
         deletedIds:deletedTxIds[pr]||[]
       };
     });
@@ -554,7 +548,9 @@ async function saveData(source='unknown'){
           mergedTxs.sort((a,b)=>{const da=parseDate(a.date),db=parseDate(b.date);return db!==da?db-da:b.id-a.id;});
           state[pr].transactions=mergedTxs;
           // Preserve casino data — not included in sports response
-          if(!state[pr].casino)state[pr].casino=[];
+          // Casino data now comes from split key via /api/load
+          if(saved[pr].casino)state[pr].casino=JSON.parse(JSON.stringify(saved[pr].casino));
+          else if(!state[pr].casino)state[pr].casino=[];
           if(!state[pr].freeBets)state[pr].freeBets=[];
         }
       });
