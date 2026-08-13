@@ -230,7 +230,6 @@ select option{background:#3D4349;color:#F0EDE8}
       <button class="profile-btn" id="pbtn-both" onclick="switchProfile('both')">All</button>
     </div>
   </div>
-  <div id="qc-container" style="display:none;padding:14px 16px 0;max-width:680px;margin:0 auto;width:100%"></div>
   <div class="content" id="main-content">
     <div class="loading"><div class="spinner"></div>Loading…</div>
   </div>
@@ -895,6 +894,7 @@ function renderDashboard(){
   const totalExchanges=Object.values(state.exchanges||{}).reduce((a,v)=>a+(v||0),0);
   const totalFunds=totalBank+totalBookies+totalExchanges;
   return`
+  <div id="qc-container">${renderQuickCalc()}</div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
     <div class="metric-card" style="grid-column:span 2">
       <div class="metric-label"><i class="ti ti-trending-up" aria-hidden="true"></i>Combined P&L
@@ -2499,17 +2499,19 @@ function copyLayStake(){
 
 function setCalcBetType(t){
   calcBetType=t;
-  const mc=document.getElementById('qc-container');
-  if(mc){mc.innerHTML=renderQuickCalc();}
-  const s=document.getElementById('qc-stake');if(s)s.value=window._qcStake||'';
-  const b=document.getElementById('qc-bodds');if(b)b.value=window._qcBodds||'';
-  const l=document.getElementById('qc-lodds');if(l)l.value=window._qcLodds||'';
-  calcQuick();
+  const qc=document.getElementById('qc-container');
+  if(qc){
+    qc.innerHTML=renderQuickCalc();
+    const s=document.getElementById('qc-stake');if(s)s.value=window._qcStake||'';
+    const b=document.getElementById('qc-bodds');if(b)b.value=window._qcBodds||'';
+    const l=document.getElementById('qc-lodds');if(l)l.value=window._qcLodds||'';
+    calcQuick();
+  }
 }
 
 function setCalcStrategy(s){
   calcStrategy=s;
-  setCalcBetType(calcBetType); // re-render with preserved values
+  setCalcBetType(calcBetType);
 }
 
 function calcQuick(){
@@ -2698,10 +2700,17 @@ function render(){
   const activeTab=document.getElementById('tab-'+currentTab);
   if(activeTab)activeTab.classList.add('active');
   if(currentTab==='dashboard'){
-    try{el.innerHTML=renderDashboard();}
-    catch(e){
-      console.error('renderDashboard error:',e);
-      el.innerHTML='<div style="padding:20px;color:#F87171;font-size:13px">Dashboard error: '+e.message+'</div>';
+    try{
+      const _s=document.getElementById('qc-stake')?.value||'';
+      const _b=document.getElementById('qc-bodds')?.value||'';
+      const _l=document.getElementById('qc-lodds')?.value||'';
+      el.innerHTML=renderDashboard();
+      const qs=document.getElementById('qc-stake');if(qs&&_s)qs.value=_s;
+      const qb=document.getElementById('qc-bodds');if(qb&&_b)qb.value=_b;
+      const ql=document.getElementById('qc-lodds');if(ql&&_l)ql.value=_l;
+      if(_s&&_b&&_l)calcQuick();
+    }catch(e){
+      el.innerHTML='<div style="padding:20px;color:#F87171;font-size:13px">Error: '+e.message+'</div>';
     }
   }
   else if(currentTab==='pending')el.innerHTML=renderPending();
@@ -2719,15 +2728,6 @@ function switchTab(t){
   currentTab=t;
   const pb=document.getElementById('profile-bar');
   if(pb)pb.style.display=(t==='dashboard'||t==='trade'||t==='casino')?'none':'flex';
-  const qc=document.getElementById('qc-container');
-  if(qc){
-    if(t==='dashboard'){
-      qc.style.display='block';
-      if(!qc.hasChildNodes())qc.innerHTML=renderQuickCalc();
-    } else {
-      qc.style.display='none';
-    }
-  }
   render();window.scrollTo(0,0);
 }
 
@@ -2934,9 +2934,6 @@ async function loadApp(){
   switchProfile('me');
   render();
   checkAutoBackup();
-  // Init quick calculator
-  const qc=document.getElementById('qc-container');
-  if(qc&&currentTab==='dashboard'){qc.style.display='block';qc.innerHTML=renderQuickCalc();}
 }
 
 function checkPin(){
