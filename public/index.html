@@ -277,9 +277,7 @@ async function loadData(){
         PROFILES.forEach(pr=>{
           if(parsed[pr]){
             state[pr]=JSON.parse(JSON.stringify(parsed[pr]));
-            // Casino data now comes from split key via /api/load
-          if(saved[pr].casino)state[pr].casino=JSON.parse(JSON.stringify(saved[pr].casino));
-          else if(!state[pr].casino)state[pr].casino=[];
+            if(!state[pr].casino)state[pr].casino=[];
             if(!state[pr].freeBets)state[pr].freeBets=[];
           }
         });
@@ -403,11 +401,10 @@ function persistQueue(){
 function restoreQueue(){
   try{
     const q=localStorage.getItem('mbe_save_queue');
-    if(q){_saveQueue=JSON.parse(q)||[];
-      if(_saveQueue.length){
-        console.error('Restored',_saveQueue.length,'queued saves');
-        scheduleRetry();
-      }
+    if(q){
+      _saveQueue=JSON.parse(q)||[];
+      // Don't retry immediately — wait until app is fully loaded
+      // drainQueue is called after loadApp completes
     }
   }catch(e){_saveQueue=[];}
 }
@@ -554,6 +551,9 @@ async function saveData(source='unknown'){
       try{const _sd=JSON.parse(JSON.stringify(sportsJson.data));_sd._deletedTxIds=deletedTxIds;localStorage.setItem('mbe_state',JSON.stringify(_sd));}catch(e){}
     }
     PROFILES.forEach(pr=>{casinoDeletedIds[pr]=[];deletedTxIds[pr]=[];});
+    // Clear save queue on successful save
+    _saveQueue=[];
+    persistQueue();
     setSyncStatus('synced');
   }catch(e){
     console.error('Save error:',e);
@@ -2943,6 +2943,11 @@ async function loadApp(){
   switchProfile('me');
   render();
   checkAutoBackup();
+  // Now drain any queued saves - app is fully loaded
+  if(_saveQueue.length){
+    console.log('Draining',_saveQueue.length,'queued saves after load');
+    setTimeout(drainQueue, 2000);
+  }
 }
 
 function checkPin(){
