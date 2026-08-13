@@ -667,8 +667,8 @@ let lastSavedTrade=null; // for quick duplicate after save
 let lastExchange=''; // tracks last used exchange
 let showMoreTypes=false; // toggle for extra bet types
 let showComm=false; // toggle for commission field
-let calcBetType='Boost'; // quick calculator last used bet type
-let calcStrategy='underlay'; // quick calculator last used strategy
+let calcBetType='Boost';
+let calcStrategy='underlay';
 
 function fmt(v){const n=parseFloat(v)||0;return(n<0?'-':'')+'£'+Math.abs(n).toFixed(2);}
 function fmtS(v){const n=parseFloat(v)||0;return(n>=0?'+':'-')+'£'+Math.abs(n).toFixed(2);}
