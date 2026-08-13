@@ -345,15 +345,23 @@ async function fetchFromServer(){
           // (local is more recent, server may be stale replica)
           const serverBk=saved[pr].bookies||{};
           const localBk=state[pr].bookies||{};
-          // Server wins for balances — local only wins if it has a non-zero balance and server has zero
+          // Local wins for balances — local state is always more recent than server
+          // Server only provides bookies that don't exist locally yet
           const mergedBk={...serverBk};
-          Object.keys(localBk).forEach(k=>{
-            if(!mergedBk[k]&&(localBk[k].bal||0)!==0)mergedBk[k]=localBk[k];
-            else if(mergedBk[k]&&(localBk[k].bal||0)!==0&&(mergedBk[k].bal||0)===0){
-              // Local has a balance but server doesn't — local wins
-              mergedBk[k]={...mergedBk[k],bal:localBk[k].bal};
+          Object.keys(localBk).forEach(function(k){
+            if(!mergedBk[k]){
+              // Bookie only exists locally — keep it
+              mergedBk[k]=localBk[k];
+            } else {
+              // Bookie exists on both — local wins for bal, status, notes, verifiedAt
+              // Server wins for nothing (local is always more recent after a save)
+              mergedBk[k]=Object.assign({},mergedBk[k],{
+                bal:localBk[k].bal,
+                status:localBk[k].status||mergedBk[k].status,
+                notes:localBk[k].notes!==undefined?localBk[k].notes:mergedBk[k].notes,
+                verifiedAt:localBk[k].verifiedAt||mergedBk[k].verifiedAt||null
+              });
             }
-            // In all other cases server wins — don't let local 0 overwrite server balance
           });
           // Preserve local verifiedAt — server doesn't track this
           Object.keys(mergedBk).forEach(function(bk){
@@ -501,19 +509,20 @@ async function saveData(source='unknown'){
       PROFILES.forEach(pr=>{
         if(sportsJson.data[pr]){
           state[pr].bank=sportsJson.data[pr].bank;
-          // Merge bookies — server wins for bal/status/notes, but preserve local verifiedAt
+          // Merge bookies — local always wins (we just saved, local is freshest)
           const serverBk=sportsJson.data[pr].bookies||{};
           const localBk=state[pr].bookies||{};
-          const mergedBk={};
-          const allBkKeys=new Set([...Object.keys(serverBk),...Object.keys(localBk)]);
-          allBkKeys.forEach(function(bk){
-            const srv=serverBk[bk];
-            const loc=localBk[bk];
-            if(srv&&loc){
-              // Server wins for balance/status/notes, local wins for verifiedAt
-              mergedBk[bk]=Object.assign({},srv,{verifiedAt:loc.verifiedAt||srv.verifiedAt||null});
+          const mergedBk=Object.assign({},serverBk);
+          Object.keys(localBk).forEach(function(bk){
+            if(!mergedBk[bk]){
+              mergedBk[bk]=localBk[bk];
             } else {
-              mergedBk[bk]=srv||loc;
+              mergedBk[bk]=Object.assign({},mergedBk[bk],{
+                bal:localBk[bk].bal,
+                status:localBk[bk].status||mergedBk[bk].status,
+                notes:localBk[bk].notes!==undefined?localBk[bk].notes:mergedBk[bk].notes,
+                verifiedAt:localBk[bk].verifiedAt||mergedBk[bk].verifiedAt||null
+              });
             }
           });
           state[pr].bookies=mergedBk;
