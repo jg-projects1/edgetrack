@@ -1,75 +1,99 @@
+// ONE-TIME migration: splits edgetrack_main into per-profile keys
+// Call once via GET /api/migrate — safe to call multiple times (idempotent)
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'GET') return res.status(405).end();
 
   try {
     const kvUrl = process.env.KV_REST_API_URL;
     const kvToken = process.env.KV_REST_API_TOKEN;
-
-    // Step 1: Read current combined data from edgetrack_main
-    const loadRes = await fetch(`${kvUrl}/get/edgetrack_main`, {
-      headers: { Authorization: `Bearer ${kvToken}` }
-    });
-    if (!loadRes.ok) throw new Error(`Load failed: ${loadRes.status}`);
-    const loadData = await loadRes.json();
-    if (!loadData.result) return res.status(200).json({ ok: false, error: 'No data found in edgetrack_main' });
-
-    let combined = JSON.parse(loadData.result);
-    if (typeof combined === 'string') combined = JSON.parse(combined);
-
     const profiles = ['me', 'wife', 'bp', 'rq'];
 
-    // Step 2: Build sports-only state (strip casino sessions)
-    const sportsState = { exchanges: combined.exchanges || {} };
-    profiles.forEach(pr => {
-      sportsState[pr] = {
-        bank: combined[pr]?.bank || 0,
-        bookies: combined[pr]?.bookies || {},
-        transactions: combined[pr]?.transactions || []
-      };
-    });
+    const kvGet = async (key) => {
+      const r = await fetch(`${kvUrl}/get/${key}`, {
+        headers: { Authorization: `Bearer ${kvToken}` }
+      });
+      if (!r.ok) return null;
+      const d = await r.json();
+      if (!d.result) return null;
+      let parsed = JSON.parse(d.result);
+      if (typeof parsed === 'string') parsed = JSON.parse(parsed);
+      return parsed;
+    };
 
-    // Step 3: Build casino-only state
-    const casinoState = {};
-    profiles.forEach(pr => {
-      casinoState[pr] = { casino: combined[pr]?.casino || [] };
-    });
-
-    // Step 4: Write both keys
-    const [sportsRes, casinoRes] = await Promise.all([
-      fetch(`${kvUrl}/set/edgetrack_main`, {
+    const kvSet = async (key, value) => {
+      const r = await fetch(`${kvUrl}/set/${key}`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${kvToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(JSON.stringify(sportsState))
-      }),
-      fetch(`${kvUrl}/set/edgetrack_casino`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${kvToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(JSON.stringify(casinoState))
-      })
-    ]);
+        body: JSON.stringify(JSON.stringify(value))
+      });
+      if (!r.ok) throw new Error(`KV set error on ${key}: ${r.status}`);
+      return true;
+    };
 
-    if (!sportsRes.ok) throw new Error(`Sports save failed: ${sportsRes.status}`);
-    if (!casinoRes.ok) throw new Error(`Casino save failed: ${casinoRes.status}`);
+    // Check if already migrated
+    const alreadyMigrated = await kvGet('edgetrack_me');
+    if (alreadyMigrated) {
+      return res.status(200).json({
+        ok: true,
+        message: 'Already migrated',
+        txCounts: profiles.reduce((a, pr) => ({
+          ...a,
+          [pr]: alreadyMigrated.transactions?.length || 0
+        }), {})
+      });
+    }
 
-    // Report what was migrated
-    const sportsTxCount = profiles.reduce((a, pr) => a + (sportsState[pr]?.transactions?.length || 0), 0);
-    const casinoCount = profiles.reduce((a, pr) => a + (casinoState[pr]?.casino?.length || 0), 0);
+    // Load legacy data
+    const legacy = await kvGet('edgetrack_main');
+    if (!legacy) {
+      return res.status(200).json({ ok: false, message: 'No legacy data found' });
+    }
+
+    const report = {};
+    const errors = [];
+
+    // Write each profile to its own key
+    await Promise.all(profiles.map(async pr => {
+      const profileData = legacy[pr];
+      if (!profileData) {
+        report[pr] = { status: 'skipped', reason: 'no data' };
+        return;
+      }
+      try {
+        const payload = {
+          bank: profileData.bank || 0,
+          bookies: profileData.bookies || {},
+          transactions: profileData.transactions || [],
+          freeBets: profileData.freeBets || [],
+          casino: profileData.casino || []
+        };
+        await kvSet(`edgetrack_${pr}`, payload);
+        report[pr] = {
+          status: 'migrated',
+          transactions: payload.transactions.length,
+          bookies: Object.keys(payload.bookies).length,
+          casino: payload.casino.length
+        };
+      } catch (e) {
+        errors.push(`${pr}: ${e.message}`);
+        report[pr] = { status: 'error', error: e.message };
+      }
+    }));
+
+    // Write exchanges
+    if (legacy.exchanges) {
+      await kvSet('edgetrack_exchanges', legacy.exchanges);
+      report.exchanges = 'migrated';
+    }
 
     return res.status(200).json({
-      ok: true,
-      message: 'Migration complete',
-      sports_transactions: sportsTxCount,
-      casino_sessions: casinoCount,
-      profiles: profiles.map(pr => ({
-        profile: pr,
-        transactions: sportsState[pr]?.transactions?.length || 0,
-        casino: casinoState[pr]?.casino?.length || 0
-      }))
+      ok: errors.length === 0,
+      message: errors.length === 0 ? 'Migration complete' : 'Migration completed with errors',
+      report,
+      errors
     });
   } catch (e) {
-    console.error('Migration error:', e);
     return res.status(500).json({ ok: false, error: e.message });
   }
 }
