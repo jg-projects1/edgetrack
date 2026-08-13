@@ -951,6 +951,7 @@ function renderDashboard(){
     }).join('')}
   </div>
   ${(()=>{
+    try{
     const {ab,never,overdue,recent,allVerified}=getVerifyStats();
     if(!ab.length)return'';
     const borderCol=allVerified?'rgba(34,197,94,0.3)':never?'rgba(248,113,113,0.3)':'rgba(240,165,0,0.3)';
@@ -962,6 +963,7 @@ function renderDashboard(){
       +(overdue?'<span style="font-size:11px;color:#F0A500">⚠ '+overdue+' overdue</span>':'')
       +(never?'<span style="font-size:11px;color:#F87171">● '+never+' unverified</span>':'')
       +'</div></div>';
+    }catch(e){return '';}
   })()}
   ${renderDashboardMonthly()}
   ${renderPerformanceCard()}${renderFreeBetsPanel()}
@@ -2709,7 +2711,13 @@ function render(){
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   const activeTab=document.getElementById('tab-'+currentTab);
   if(activeTab)activeTab.classList.add('active');
-  if(currentTab==='dashboard')el.innerHTML=renderDashboard();
+  if(currentTab==='dashboard'){
+    try{el.innerHTML=renderDashboard();}
+    catch(e){
+      console.error('renderDashboard error:',e);
+      el.innerHTML='<div style="padding:20px;color:#F87171;font-size:13px">Dashboard error: '+e.message+'</div>';
+    }
+  }
   else if(currentTab==='pending')el.innerHTML=renderPending();
   else if(currentTab==='trade'){
     el.innerHTML=renderTrade();
