@@ -548,9 +548,8 @@ async function saveData(source='unknown'){
           });
           mergedTxs.sort((a,b)=>{const da=parseDate(a.date),db=parseDate(b.date);return db!==da?db-da:b.id-a.id;});
           state[pr].transactions=mergedTxs;
-          // Preserve casino data — not included in sports response
-          // Casino data now comes from split key via /api/load
-          if(saved[pr].casino)state[pr].casino=JSON.parse(JSON.stringify(saved[pr].casino));
+          // Casino data from save response
+          if(sportsJson.data[pr].casino)state[pr].casino=JSON.parse(JSON.stringify(sportsJson.data[pr].casino));
           else if(!state[pr].casino)state[pr].casino=[];
           if(!state[pr].freeBets)state[pr].freeBets=[];
         }
