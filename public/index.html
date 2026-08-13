@@ -492,7 +492,11 @@ async function saveData(source='unknown'){
     // Casino included in sportsState payload
     // Single save — casino now included in sports payload
     const sportsRes=await fetch('/api/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(sportsState)});
-    if(!sportsRes.ok)throw new Error('Sports save failed: '+sportsRes.status);
+    if(!sportsRes.ok){
+      let errBody='';
+      try{const j=await sportsRes.json();errBody=j.error||'';}catch(_){}
+      throw new Error('Save '+sportsRes.status+(errBody?' — '+errBody:''));
+    }
     // Update state from server's merged response — avoids stale load on next refresh
     const sportsJson=await sportsRes.json();
     if(sportsJson.ok&&sportsJson.data){
@@ -553,8 +557,13 @@ async function saveData(source='unknown'){
     setSyncStatus('synced');
   }catch(e){
     console.error('Save error:',e);
-    queueSave(source); // queue for retry
-    showToast('⚠ Offline — save queued','error');
+    // Try to get server error message
+    let errMsg=e.message||'unknown';
+    try{
+      if(e.response){const j=await e.response.json();errMsg=j.error||errMsg;}
+    }catch(_){}
+    queueSave(source);
+    showToast('⚠ Save failed: '+errMsg,'error');
   }finally{
     saveInProgress=false;
     if(pendingSave){const nextSource=pendingSave;pendingSave=null;saveData(nextSource);}
