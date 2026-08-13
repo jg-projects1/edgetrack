@@ -73,19 +73,39 @@ export default async function handler(req, res) {
       return merged;
     };
 
-    // Save each profile to its own KV key in parallel
+    const mergeCasino = (serverSessions, incomingSessions, deletedIds) => {
+      const serverMap = new Map(serverSessions.map(s => [String(s.id), s]));
+      const incomingMap = new Map(incomingSessions.map(s => [String(s.id), s]));
+      const allIds = new Set([...serverMap.keys(), ...incomingMap.keys()]);
+      const merged = [];
+      allIds.forEach(id => {
+        if (deletedIds.has(id)) return;
+        const srv = serverMap.get(id);
+        const inc = incomingMap.get(id);
+        merged.push(inc || srv);
+      });
+      return merged;
+    };
+
     const responseData = { exchanges: incoming.exchanges || {} };
 
     await Promise.all(profiles.map(async pr => {
       if (!incoming[pr]) return;
       const key = `edgetrack_${pr}`;
-      const server = await kvGet(key) || { transactions: [], bank: 0, bookies: {}, freeBets: [] };
-      const deletedIds = new Set((incoming[pr].deletedIds || []).map(String));
+      const server = await kvGet(key) || { transactions: [], bank: 0, bookies: {}, freeBets: [], casino: [] };
+      const deletedTxIds = new Set((incoming[pr].deletedIds || []).map(String));
+      const deletedCasinoIds = new Set((incoming[pr].deletedCasinoIds || []).map(String));
 
       const mergedTxs = mergeTxs(
         server.transactions || [],
         incoming[pr].transactions || [],
-        deletedIds
+        deletedTxIds
+      );
+
+      const mergedCasinoSessions = mergeCasino(
+        server.casino || [],
+        incoming[pr].casino || [],
+        deletedCasinoIds
       );
 
       const fbMap = new Map();
@@ -101,14 +121,14 @@ export default async function handler(req, res) {
         bank: incoming[pr].bank !== undefined ? incoming[pr].bank : server.bank,
         bookies: mergedBookies,
         transactions: mergedTxs,
-        freeBets: Array.from(fbMap.values())
+        freeBets: Array.from(fbMap.values()),
+        casino: mergedCasinoSessions
       };
 
       await kvSet(key, merged);
       responseData[pr] = merged;
     }));
 
-    // Save exchanges separately
     await kvSet('edgetrack_exchanges', incoming.exchanges || {});
 
     return res.status(200).json({ ok: true, data: responseData });
