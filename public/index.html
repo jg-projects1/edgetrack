@@ -698,9 +698,11 @@ function profileLabel(p){return PROFILE_LABELS[p]||p;}
 function isFreeBet(type){return FREE_BET_TYPES.includes(type);}
 function casinoPnl(p){
   return(state[p].casino||[]).reduce((a,s)=>{
-    // New format: has startBal and endBal
-    if(s.startBal!==undefined&&s.endBal!==undefined) return a+(s.endBal-s.startBal);
-    // Old format: has netProfit
+    // New format: has non-zero startBal or endBal
+    if(s.startBal!==undefined&&s.endBal!==undefined&&(s.startBal!==0||s.endBal!==0)){
+      return a+(s.endBal-s.startBal);
+    }
+    // Old format or zero-balance session: use netProfit
     return a+(s.netProfit||0);
   },0);
 }
@@ -2285,7 +2287,7 @@ let casinoOperator='JG';
 function renderCasino(){
   const allSessions=PROFILES.flatMap(p=>(state[p].casino||[]).map(s=>({...s,_acct:p}))).sort((a,b)=>b.id-a.id);
   const totalCasino=PROFILES.reduce((a,p)=>a+casinoPnl(p),0);
-  const sessionPnlAmt=s=>s.startBal!==undefined?s.endBal-s.startBal:s.netProfit||0;
+  const sessionPnlAmt=s=>(s.startBal!==undefined&&s.endBal!==undefined&&(s.startBal!==0||s.endBal!==0))?s.endBal-s.startBal:(s.netProfit||0);
   const jgPnl=allSessions.reduce((a,s)=>{
     if(s.operator&&s.operator!=='JG')return a; // default to JG if no operator
     return a+sessionPnlAmt(s);
@@ -2332,7 +2334,7 @@ function renderCasinoMonthly(){
     if(parts.length<3)return;
     const key=parts[2]+'-'+parts[1].padStart(2,'0');
     if(!monthlyMap[key])monthlyMap[key]={JG:0,JP:0,total:0};
-    const pnl=s.startBal!==undefined&&s.endBal!==undefined?s.endBal-s.startBal:(s.netProfit||0);
+    const pnl=(s.startBal!==undefined&&s.endBal!==undefined&&(s.startBal!==0||s.endBal!==0))?s.endBal-s.startBal:(s.netProfit||0);
     const op=s.operator||'JG';if(monthlyMap[key][op]===undefined)monthlyMap[key][op]=0;monthlyMap[key][op]+=pnl;
     monthlyMap[key].total+=pnl;
   });
@@ -2360,7 +2362,7 @@ function renderCasinoMonthly(){
 
 function renderCasinoSummaryView(){
   const allSessions=PROFILES.flatMap(p=>(state[p].casino||[]).map(s=>({...s,_acct:p})));
-  const sessionPnl=s=>s.startBal!==undefined?s.endBal-s.startBal:s.netProfit||0;
+  const sessionPnl=s=>(s.startBal!==undefined&&s.endBal!==undefined&&(s.startBal!==0||s.endBal!==0))?s.endBal-s.startBal:(s.netProfit||0);
 
   // Split by operator — default to JG if no operator field (old sessions)
   const jgSessions=allSessions.filter(s=>!s.operator||s.operator==='JG');
@@ -2412,7 +2414,7 @@ function renderCasinoHistory(){
     .map(s=>({...s,_acct:p}))).sort((a,b)=>b.id-a.id);
   if(!sessions.length)return '<div class="empty">No new casino sessions yet — log one above</div>';
   const rows=sessions.map(s=>{
-    const pnl=s.startBal!==undefined&&s.endBal!==undefined?s.endBal-s.startBal:(s.netProfit||0);
+    const pnl=(s.startBal!==undefined&&s.endBal!==undefined&&(s.startBal!==0||s.endBal!==0))?s.endBal-s.startBal:(s.netProfit||0);
     const startStr=s.startBal!==undefined?fmt(s.startBal):'—';
     const endStr=s.endBal!==undefined?fmt(s.endBal):'—';
     return '<tr data-csid="'+s.id+'">'
