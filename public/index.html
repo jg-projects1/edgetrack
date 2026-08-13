@@ -230,6 +230,7 @@ select option{background:#3D4349;color:#F0EDE8}
       <button class="profile-btn" id="pbtn-both" onclick="switchProfile('both')">All</button>
     </div>
   </div>
+  <div id="qc-container" style="display:none;max-width:680px;margin:0 auto;width:100%;padding:0 16px"></div>
   <div class="content" id="main-content">
     <div class="loading"><div class="spinner"></div>Loading…</div>
   </div>
@@ -892,7 +893,6 @@ function renderDashboard(){
   const totalExchanges=Object.values(state.exchanges||{}).reduce((a,v)=>a+(v||0),0);
   const totalFunds=totalBank+totalBookies+totalExchanges;
   return`
-  <div id="qc-container">${renderQuickCalc()}</div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
     <div class="metric-card" style="grid-column:span 2">
       <div class="metric-label"><i class="ti ti-trending-up" aria-hidden="true"></i>Combined P&L
@@ -2483,12 +2483,9 @@ function setCalcBetType(t){
   const mc=document.getElementById('qc-container');
   if(mc)mc.innerHTML=renderQuickCalc();
   // Restore values
-  const s=document.getElementById('qc-stake');
-  const b=document.getElementById('qc-bodds');
-  const l=document.getElementById('qc-lodds');
-  if(s)s.value=window._qcStake||'';
-  if(b)b.value=window._qcBodds||'';
-  if(l)l.value=window._qcLodds||'';
+  const s=document.getElementById('qc-stake');if(s)s.value=window._qcStake||'';
+  const b=document.getElementById('qc-bodds');if(b)b.value=window._qcBodds||'';
+  const l=document.getElementById('qc-lodds');if(l)l.value=window._qcLodds||'';
   calcQuick();
 }
 
@@ -2696,6 +2693,16 @@ function switchTab(t){
   currentTab=t;
   const pb=document.getElementById('profile-bar');
   if(pb)pb.style.display=(t==='dashboard'||t==='trade'||t==='casino')?'none':'flex';
+  // Show quick calculator only on dashboard
+  const qc=document.getElementById('qc-container');
+  if(qc){
+    if(t==='dashboard'){
+      if(!qc.innerHTML)qc.innerHTML=renderQuickCalc();
+      qc.style.display='block';
+    } else {
+      qc.style.display='none';
+    }
+  }
   render();window.scrollTo(0,0);
 }
 
@@ -2901,6 +2908,9 @@ async function loadApp(){
   const pb=document.getElementById('profile-bar');if(pb)pb.style.display='none';
   switchProfile('me');
   render();
+  // Show quick calculator on dashboard
+  const qc=document.getElementById('qc-container');
+  if(qc){qc.innerHTML=renderQuickCalc();qc.style.display='block';}
   checkAutoBackup();
 }
 
