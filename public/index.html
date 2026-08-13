@@ -268,24 +268,30 @@ async function loadData(){
     const cached=localStorage.getItem('mbe_state');
     if(cached){
       const parsed=JSON.parse(cached);
-      PROFILES.forEach(pr=>{
-        if(parsed[pr]){
-          state[pr]=JSON.parse(JSON.stringify(parsed[pr]));
-          if(!state[pr].casino)state[pr].casino=[];
-          if(!state[pr].freeBets)state[pr].freeBets=[];
+      // Sanity check: if cache has mostly Not Signed Up bookies, it's stale — discard
+      const meBookies=parsed['me']?.bookies||{};
+      const activeCount=Object.values(meBookies).filter(b=>b&&b.status&&b.status!=='Not Signed Up').length;
+      const totalCount=Object.keys(meBookies).length;
+      const cacheIsValid=totalCount===0||(activeCount/totalCount)>0.05; // at least 5% non-default
+      if(cacheIsValid){
+        PROFILES.forEach(pr=>{
+          if(parsed[pr]){
+            state[pr]=JSON.parse(JSON.stringify(parsed[pr]));
+            if(!state[pr].casino)state[pr].casino=[];
+            if(!state[pr].freeBets)state[pr].freeBets=[];
+          }
+        });
+        if(parsed.exchanges)state.exchanges=JSON.parse(JSON.stringify(parsed.exchanges));
+        if(parsed._deletedTxIds){
+          PROFILES.forEach(pr=>{if(parsed._deletedTxIds[pr])deletedTxIds[pr]=parsed._deletedTxIds[pr];});
         }
-      });
-      if(parsed.exchanges)state.exchanges=JSON.parse(JSON.stringify(parsed.exchanges));
-      // Restore deletedTxIds from cache
-      if(parsed._deletedTxIds){
-        PROFILES.forEach(pr=>{if(parsed._deletedTxIds[pr])deletedTxIds[pr]=parsed._deletedTxIds[pr];});
-      }
-      lastServerState=JSON.parse(JSON.stringify(parsed));
-      setSyncStatus('synced');
+        lastServerState=JSON.parse(JSON.stringify(parsed));
+        setSyncStatus('synced');
 
       // Still fetch from server in background to pick up changes from other devices
       fetchFromServer();
       return;
+      } // end cacheIsValid
     }
     // No cache — load from server directly
     await fetchFromServer();
@@ -353,7 +359,7 @@ async function fetchFromServer(){
             } else {
               const localTs=localBk[k].balUpdatedAt||0;
               const serverTs=mergedBk[k].balUpdatedAt||0;
-              const localWins=localTs>=serverTs;
+              const localWins=localTs>0&&localTs>serverTs;
               mergedBk[k]=Object.assign({},mergedBk[k],{
                 bal:localWins?localBk[k].bal:mergedBk[k].bal,
                 status:localWins?(localBk[k].status||mergedBk[k].status):mergedBk[k].status,
@@ -519,7 +525,7 @@ async function saveData(source='unknown'){
             } else {
               const localTs=localBk[bk].balUpdatedAt||0;
               const serverTs=mergedBk[bk].balUpdatedAt||0;
-              const localWins=localTs>=serverTs;
+              const localWins=localTs>0&&localTs>serverTs;
               mergedBk[bk]=Object.assign({},mergedBk[bk],{
                 bal:localWins?localBk[bk].bal:mergedBk[bk].bal,
                 status:localWins?(localBk[bk].status||mergedBk[bk].status):mergedBk[bk].status,
