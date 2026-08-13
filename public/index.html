@@ -2285,13 +2285,14 @@ let casinoOperator='JG';
 function renderCasino(){
   const allSessions=PROFILES.flatMap(p=>(state[p].casino||[]).map(s=>({...s,_acct:p}))).sort((a,b)=>b.id-a.id);
   const totalCasino=PROFILES.reduce((a,p)=>a+casinoPnl(p),0);
+  const sessionPnlAmt=s=>s.startBal!==undefined?s.endBal-s.startBal:s.netProfit||0;
   const jgPnl=allSessions.reduce((a,s)=>{
-    if(s.operator!=='JG')return a;
-    return a+(s.startBal!==undefined?s.endBal-s.startBal:s.netProfit||0);
+    if(s.operator&&s.operator!=='JG')return a; // default to JG if no operator
+    return a+sessionPnlAmt(s);
   },0);
   const jpPnl=allSessions.reduce((a,s)=>{
     if(s.operator!=='JP')return a;
-    return a+(s.startBal!==undefined?s.endBal-s.startBal:s.netProfit||0);
+    return a+sessionPnlAmt(s);
   },0);
   const profilePnlHtml=PROFILES.map(p=>'<span>'+profileLabel(p)+': <span style="color:'+(casinoPnl(p)>=0?'#22C55E':'#F87171')+'">'+fmtS(casinoPnl(p))+'</span></span>').join('');
 
@@ -2332,7 +2333,7 @@ function renderCasinoMonthly(){
     const key=parts[2]+'-'+parts[1].padStart(2,'0');
     if(!monthlyMap[key])monthlyMap[key]={JG:0,JP:0,total:0};
     const pnl=s.startBal!==undefined&&s.endBal!==undefined?s.endBal-s.startBal:(s.netProfit||0);
-    monthlyMap[key][s.operator||'JG']+=pnl;
+    const op=s.operator||'JG';if(monthlyMap[key][op]===undefined)monthlyMap[key][op]=0;monthlyMap[key][op]+=pnl;
     monthlyMap[key].total+=pnl;
   });
   const monthKeys=Object.keys(monthlyMap).sort().reverse();
@@ -2361,8 +2362,8 @@ function renderCasinoSummaryView(){
   const allSessions=PROFILES.flatMap(p=>(state[p].casino||[]).map(s=>({...s,_acct:p})));
   const sessionPnl=s=>s.startBal!==undefined?s.endBal-s.startBal:s.netProfit||0;
 
-  // Split by operator
-  const jgSessions=allSessions.filter(s=>(s.operator||'JG')==='JG');
+  // Split by operator — default to JG if no operator field (old sessions)
+  const jgSessions=allSessions.filter(s=>!s.operator||s.operator==='JG');
   const jpSessions=allSessions.filter(s=>s.operator==='JP');
   const jgPnl=jgSessions.reduce((a,s)=>a+sessionPnl(s),0);
   const jpPnl=jpSessions.reduce((a,s)=>a+sessionPnl(s),0);
