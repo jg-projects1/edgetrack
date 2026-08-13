@@ -548,7 +548,15 @@ async function saveData(source='unknown'){
       // Track confirmed server state so next save can skip stale KV read
       lastServerState=JSON.parse(JSON.stringify(sportsJson.data));
       // Cache in sessionStorage so pull-to-refresh gets fresh data
-      try{const _sd=JSON.parse(JSON.stringify(sportsJson.data));_sd._deletedTxIds=deletedTxIds;localStorage.setItem('mbe_state',JSON.stringify(_sd));}catch(e){}
+      try{
+        const _sd=JSON.parse(JSON.stringify(sportsJson.data));
+        _sd._deletedTxIds=deletedTxIds;
+        // Ensure casino is included in localStorage snapshot
+        PROFILES.forEach(pr=>{
+          if(_sd[pr]&&!_sd[pr].casino)_sd[pr].casino=state[pr].casino||[];
+        });
+        localStorage.setItem('mbe_state',JSON.stringify(_sd));
+      }catch(e){}
     }
     PROFILES.forEach(pr=>{casinoDeletedIds[pr]=[];deletedTxIds[pr]=[];});
     // Clear save queue on successful save
@@ -1155,7 +1163,7 @@ function settleBet(acct,id,result){
   // Immediately write to localStorage so refresh picks up settled state
   try{
     const snap={exchanges:state.exchanges,_deletedTxIds:deletedTxIds};
-    PROFILES.forEach(pr=>{snap[pr]={bank:state[pr].bank,bookies:state[pr].bookies,transactions:state[pr].transactions,freeBets:state[pr].freeBets||[]};});
+    PROFILES.forEach(pr=>{snap[pr]={bank:state[pr].bank,bookies:state[pr].bookies,transactions:state[pr].transactions,freeBets:state[pr].freeBets||[],casino:state[pr].casino||[]};});
     localStorage.setItem('mbe_state',JSON.stringify(snap));
   }catch(e){}
   if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('settle');
@@ -1729,7 +1737,7 @@ function deleteTx(acct,id){
   // Write to localStorage immediately so refresh doesn't restore deleted tx
   try{
     const snap={exchanges:state.exchanges,_deletedTxIds:deletedTxIds};
-    PROFILES.forEach(pr=>{snap[pr]={bank:state[pr].bank,bookies:state[pr].bookies,transactions:state[pr].transactions,freeBets:state[pr].freeBets||[]};});
+    PROFILES.forEach(pr=>{snap[pr]={bank:state[pr].bank,bookies:state[pr].bookies,transactions:state[pr].transactions,freeBets:state[pr].freeBets||[],casino:state[pr].casino||[]};});
     localStorage.setItem('mbe_state',JSON.stringify(snap));
   }catch(e){}
   if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}
