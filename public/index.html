@@ -434,11 +434,8 @@ async function drainQueue(){
   setSyncStatus('syncing');
   const entry=_saveQueue[0]; // try oldest first
   try{
-    const [sportsRes,casinoRes]=await Promise.all([
-      fetch('/api/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(entry.state.sports)}),
-      fetch('/api/save-casino',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(entry.state.casino)})
-    ]);
-    if(!sportsRes.ok||!casinoRes.ok)throw new Error('Retry save failed');
+    const sportsRes=await fetch('/api/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(entry.state.sports)});
+    if(!sportsRes.ok)throw new Error('Retry save failed: '+sportsRes.status);
     _saveQueue.shift(); // remove successfully sent item
     persistQueue();
     if(_saveQueue.length>0){
@@ -492,18 +489,10 @@ async function saveData(source='unknown'){
         deletedIds:deletedTxIds[pr]||[]
       };
     });
-    // Build casino-only state
-    const casinoState={};
-    PROFILES.forEach(pr=>{
-      casinoState[pr]={casino:state[pr]?.casino||[],deletedIds:casinoDeletedIds[pr]||[]};
-    });
-    // Save both in parallel
-    const [sportsRes,casinoRes]=await Promise.all([
-      fetch('/api/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(sportsState)}),
-      fetch('/api/save-casino',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(casinoState)})
-    ]);
-    if(!sportsRes.ok)throw new Error('Sports save failed');
-    if(!casinoRes.ok)throw new Error('Casino save failed');
+    // Casino included in sportsState payload
+    // Single save — casino now included in sports payload
+    const sportsRes=await fetch('/api/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(sportsState)});
+    if(!sportsRes.ok)throw new Error('Sports save failed: '+sportsRes.status);
     // Update state from server's merged response — avoids stale load on next refresh
     const sportsJson=await sportsRes.json();
     if(sportsJson.ok&&sportsJson.data){
