@@ -230,6 +230,7 @@ select option{background:#3D4349;color:#F0EDE8}
       <button class="profile-btn" id="pbtn-both" onclick="switchProfile('both')">All</button>
     </div>
   </div>
+  <div id="qc-container" style="display:none;padding:14px 16px 0;max-width:680px;margin:0 auto;width:100%"></div>
   <div class="content" id="main-content">
     <div class="loading"><div class="spinner"></div>Loading…</div>
   </div>
@@ -2512,8 +2513,7 @@ function copyLayStake(){
 function setCalcBetType(t){
   calcBetType=t;
   const mc=document.getElementById('qc-container');
-  if(mc)mc.innerHTML=renderQuickCalc();
-  // Restore values
+  if(mc){mc.innerHTML=renderQuickCalc();}
   const s=document.getElementById('qc-stake');if(s)s.value=window._qcStake||'';
   const b=document.getElementById('qc-bodds');if(b)b.value=window._qcBodds||'';
   const l=document.getElementById('qc-lodds');if(l)l.value=window._qcLodds||'';
@@ -2710,18 +2710,7 @@ function render(){
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   const activeTab=document.getElementById('tab-'+currentTab);
   if(activeTab)activeTab.classList.add('active');
-  if(currentTab==='dashboard'){
-    // Preserve calculator values before re-render
-    const _s=document.getElementById('qc-stake')?.value||'';
-    const _b=document.getElementById('qc-bodds')?.value||'';
-    const _l=document.getElementById('qc-lodds')?.value||'';
-    el.innerHTML=renderDashboard();
-    // Restore calculator values
-    const qs=document.getElementById('qc-stake');if(qs&&_s)qs.value=_s;
-    const qb=document.getElementById('qc-bodds');if(qb&&_b)qb.value=_b;
-    const ql=document.getElementById('qc-lodds');if(ql&&_l)ql.value=_l;
-    if(_s&&_b&&_l)calcQuick();
-  }
+  if(currentTab==='dashboard')el.innerHTML=renderDashboard();
   else if(currentTab==='pending')el.innerHTML=renderPending();
   else if(currentTab==='trade'){
     el.innerHTML=renderTrade();
@@ -2737,6 +2726,15 @@ function switchTab(t){
   currentTab=t;
   const pb=document.getElementById('profile-bar');
   if(pb)pb.style.display=(t==='dashboard'||t==='trade'||t==='casino')?'none':'flex';
+  const qc=document.getElementById('qc-container');
+  if(qc){
+    if(t==='dashboard'){
+      qc.style.display='block';
+      if(!qc.hasChildNodes())qc.innerHTML=renderQuickCalc();
+    } else {
+      qc.style.display='none';
+    }
+  }
   render();window.scrollTo(0,0);
 }
 
@@ -2943,6 +2941,9 @@ async function loadApp(){
   switchProfile('me');
   render();
   checkAutoBackup();
+  // Init quick calculator
+  const qc=document.getElementById('qc-container');
+  if(qc&&currentTab==='dashboard'){qc.style.display='block';qc.innerHTML=renderQuickCalc();}
 }
 
 function checkPin(){
