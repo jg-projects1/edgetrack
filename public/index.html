@@ -345,21 +345,21 @@ async function fetchFromServer(){
           // (local is more recent, server may be stale replica)
           const serverBk=saved[pr].bookies||{};
           const localBk=state[pr].bookies||{};
-          // Local wins for balances — local state is always more recent than server
-          // Server only provides bookies that don't exist locally yet
+          // Timestamp-based merge — most recently updated balance wins
           const mergedBk={...serverBk};
           Object.keys(localBk).forEach(function(k){
             if(!mergedBk[k]){
-              // Bookie only exists locally — keep it
               mergedBk[k]=localBk[k];
             } else {
-              // Bookie exists on both — local wins for bal, status, notes, verifiedAt
-              // Server wins for nothing (local is always more recent after a save)
+              const localTs=localBk[k].balUpdatedAt||0;
+              const serverTs=mergedBk[k].balUpdatedAt||0;
+              const localWins=localTs>=serverTs;
               mergedBk[k]=Object.assign({},mergedBk[k],{
-                bal:localBk[k].bal,
-                status:localBk[k].status||mergedBk[k].status,
-                notes:localBk[k].notes!==undefined?localBk[k].notes:mergedBk[k].notes,
-                verifiedAt:localBk[k].verifiedAt||mergedBk[k].verifiedAt||null
+                bal:localWins?localBk[k].bal:mergedBk[k].bal,
+                status:localWins?(localBk[k].status||mergedBk[k].status):mergedBk[k].status,
+                notes:localWins?(localBk[k].notes!==undefined?localBk[k].notes:mergedBk[k].notes):mergedBk[k].notes,
+                verifiedAt:localBk[k].verifiedAt||mergedBk[k].verifiedAt||null,
+                balUpdatedAt:Math.max(localTs,serverTs)
               });
             }
           });
@@ -509,7 +509,7 @@ async function saveData(source='unknown'){
       PROFILES.forEach(pr=>{
         if(sportsJson.data[pr]){
           state[pr].bank=sportsJson.data[pr].bank;
-          // Merge bookies — local always wins (we just saved, local is freshest)
+          // Timestamp-based merge on save response
           const serverBk=sportsJson.data[pr].bookies||{};
           const localBk=state[pr].bookies||{};
           const mergedBk=Object.assign({},serverBk);
@@ -517,11 +517,15 @@ async function saveData(source='unknown'){
             if(!mergedBk[bk]){
               mergedBk[bk]=localBk[bk];
             } else {
+              const localTs=localBk[bk].balUpdatedAt||0;
+              const serverTs=mergedBk[bk].balUpdatedAt||0;
+              const localWins=localTs>=serverTs;
               mergedBk[bk]=Object.assign({},mergedBk[bk],{
-                bal:localBk[bk].bal,
-                status:localBk[bk].status||mergedBk[bk].status,
-                notes:localBk[bk].notes!==undefined?localBk[bk].notes:mergedBk[bk].notes,
-                verifiedAt:localBk[bk].verifiedAt||mergedBk[bk].verifiedAt||null
+                bal:localWins?localBk[bk].bal:mergedBk[bk].bal,
+                status:localWins?(localBk[bk].status||mergedBk[bk].status):mergedBk[bk].status,
+                notes:localWins?(localBk[bk].notes!==undefined?localBk[bk].notes:mergedBk[bk].notes):mergedBk[bk].notes,
+                verifiedAt:localBk[bk].verifiedAt||mergedBk[bk].verifiedAt||null,
+                balUpdatedAt:Math.max(localTs,serverTs)
               });
             }
           });
@@ -1071,7 +1075,7 @@ function applyBalanceOnSettle(tx,p,result){
         // So net P&L = bs*(bo-1) - bs*(lo-1) = bs*(bo-lo)
         const winProfit=lo>0?Math.round(bs*(bo-lo)*100)/100:(tx.pnl||0);
         tx.pnl=winProfit;
-        if(bk)bk.bal=Math.round(((bk.bal||0)+(bo*bs))*100)/100; // full return to bookie
+        if(bk){bk.bal=Math.round(((bk.bal||0)+(bo*bs))*100)/100;bk.balUpdatedAt=Date.now();}
       }else{
         tx.pnl=0;
         // bookie stays deducted (back stake lost), lay profit cancels on exchange — net zero
@@ -1086,7 +1090,7 @@ function applyBalanceOnSettle(tx,p,result){
         const winProfit=bs; // SNR: back wins (bo-1)*bs, lay loses ul_ls*(lo-1) = bs*(bo-2) → net = bs
         tx.pnl=winProfit;
         // Free bet bookie: winnings land in bookie account
-        if(bk)bk.bal=(bk.bal||0)+(bo-1)*bs; // full back winnings to bookie
+        if(bk){bk.bal=(bk.bal||0)+(bo-1)*bs;bk.balUpdatedAt=Date.now();}
         // Pay lay liability from exchange
         if(exchange&&state.exchanges[exchange]!==undefined)
           state.exchanges[exchange]=(state.exchanges[exchange]||0)-ul_ls*(lo-1);
@@ -1113,7 +1117,7 @@ function applyBalanceOnSettle(tx,p,result){
         const li_ls=lo>0?bs*bo/lo:0;
         const lockinProfit=li_ls-bs;
         tx.pnl=lockinProfit;
-        if(bk)bk.bal=(bk.bal||0)+(bo*bs); // full return to bookie (stake was deducted at log)
+        if(bk){bk.bal=(bk.bal||0)+(bo*bs);bk.balUpdatedAt=Date.now();}
         if(exchange&&state.exchanges[exchange]!==undefined)
           state.exchanges[exchange]=(state.exchanges[exchange]||0)-li_ls*(lo-1);
       }
@@ -1133,8 +1137,10 @@ function applyBalanceOnSettle(tx,p,result){
 function applyBalanceAtLog(tx,p){
   if(tx.result==='Pending'){
     // Only deduct stake for normal bets — free bets don't use your money
-    if(!isFreeBet(tx.type)&&tx.bookie&&p.bookies[tx.bookie])
+    if(!isFreeBet(tx.type)&&tx.bookie&&p.bookies[tx.bookie]){
       p.bookies[tx.bookie].bal=(p.bookies[tx.bookie].bal||0)-(tx.bstake||0);
+      p.bookies[tx.bookie].balUpdatedAt=Date.now();
+    }
   }else{
     // Logged as already settled — for normal bets deduct stake first, then apply result
     if(!isFreeBet(tx.type)&&tx.result==='Lost'&&tx.bookie&&p.bookies[tx.bookie])
@@ -1550,8 +1556,8 @@ function submitTx(){
     if(!amount){msg.textContent='Enter an amount.';return;}
     const p=state[formAccount];
     if(!p.bookies[bookie])p.bookies[bookie]={bal:0,status:'Active',notes:''};
-    if(selectedBetType==='Deposit'){p.bookies[bookie].bal=(p.bookies[bookie].bal||0)+amount;p.bank-=amount;}
-    else{p.bookies[bookie].bal=(p.bookies[bookie].bal||0)-amount;p.bank+=amount;}
+    if(selectedBetType==='Deposit'){p.bookies[bookie].bal=(p.bookies[bookie].bal||0)+amount;p.bookies[bookie].balUpdatedAt=Date.now();p.bank-=amount;}
+    else{p.bookies[bookie].bal=(p.bookies[bookie].bal||0)-amount;p.bookies[bookie].balUpdatedAt=Date.now();p.bank+=amount;}
     if(!p.transactions)p.transactions=[];
     p.transactions.push({id:Date.now(),date,type:selectedBetType,bookie,amount,pnl:0,notes,result:'—',_acct:formAccount});
   }else if(isExchT){
@@ -1869,7 +1875,7 @@ function verifyBookie(acct,name){
     const date=todayStr();
     p.transactions=p.transactions||[];
     p.transactions.push({id:Date.now(),date,type:'Balance Amendment',target:name,oldVal:stored,newVal:entered,diff,pnl:diff,notes:'Balance verified',result:'—',_acct:acct});
-    p.bookies[name].bal=entered;
+    p.bookies[name].bal=entered;p.bookies[name].balUpdatedAt=Date.now();
     showToast(name+' updated by '+fmtS(diff));
   } else {
     showToast(name+' balance confirmed ✓');
@@ -2860,7 +2866,7 @@ function saveCasinoSession(){
   const net=endBal-startBal;
   const p=state[casinoFormAcct];
   if(!p.bookies[casino])p.bookies[casino]={bal:0,status:'Active',notes:''};
-  p.bookies[casino].bal=(p.bookies[casino].bal||0)+net;
+  p.bookies[casino].bal=(p.bookies[casino].bal||0)+net;p.bookies[casino].balUpdatedAt=Date.now();
   if(!p.casino)p.casino=[];
   p.casino.push({
     id:Date.now(),
