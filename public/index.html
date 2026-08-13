@@ -843,17 +843,33 @@ function renderDashboardMonthly(){
       +'</tr>';
   }).join('');
   return '<div class="card" style="margin-bottom:12px">'
-    +'<div class="card-header"><span class="card-title">Monthly P&L</span></div>'
-    +'<div style="overflow-x:auto;padding:8px 14px">'
-    +'<table class="data-table" style="width:100%">'
-    +'<thead><tr>'
-    +'<th>Month</th>'
-    +'<th style="text-align:right">Sports (£)</th>'
-    +'<th style="text-align:right">Casino (£)</th>'
-    +'<th style="text-align:right">Total (£)</th>'
-    +'</tr></thead>'
-    +'<tbody>'+rows+'</tbody>'
-    +'</table></div></div>';
+    +'<div class="card-header"><span class="card-title">Quick Calculator</span>'
+    +'<span style="font-size:10px;color:#9A9590">get lay stake instantly</span></div>'
+    +'<div class="card-body">'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:10px">'
+    +'<div class="form-group"><div class="form-label">Stake</div>'
+    +'<input type="number" id="qc-stake" placeholder="0.00" step="0.01" inputmode="decimal" oninput="calcQuick()" style="padding:8px;font-size:14px;font-weight:500"/></div>'
+    +'<div class="form-group"><div class="form-label">Back odds</div>'
+    +'<input type="number" id="qc-bodds" placeholder="2.00" step="0.01" inputmode="decimal" oninput="calcQuick()" style="padding:8px;font-size:14px;font-weight:500"/></div>'
+    +'<div class="form-group"><div class="form-label">Lay odds</div>'
+    +'<input type="number" id="qc-lodds" placeholder="2.00" step="0.01" inputmode="decimal" oninput="calcQuick()" style="padding:8px;font-size:14px;font-weight:500"/></div>'
+    +'</div>'
+    +'<div style="display:flex;gap:6px;margin-bottom:8px">'+typeBtns+'</div>'
+    +'<div style="display:flex;gap:6px;margin-bottom:10px">'+stratBtns+'</div>'
+    +'<div id="qc-results" style="display:none;background:#252830;border-radius:10px;padding:12px 14px;margin-bottom:12px">'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">'
+    +'<div><div style="font-size:10px;color:#9A9590;margin-bottom:3px">Lay stake</div>'
+    +'<div style="display:flex;align-items:center;gap:6px">'
+    +'<div id="qc-laystake" style="font-size:20px;font-weight:500;color:#F0EDE8">—</div>'
+    +'<button id="qc-copy-btn" onclick="copyLayStake()" style="display:none;padding:3px 8px;border-radius:6px;border:0.5px solid rgba(255,255,255,0.15);background:#3D4349;color:#C8C5BF;font-family:system-ui;font-size:10px;cursor:pointer"><i class="ti ti-copy"></i></button>'
+    +'</div></div>'
+    +'<div><div style="font-size:10px;color:#9A9590;margin-bottom:3px">If wins</div>'
+    +'<div id="qc-win" style="font-size:20px;font-weight:500;color:#22C55E">—</div></div>'
+    +'<div><div style="font-size:10px;color:#9A9590;margin-bottom:3px">If loses</div>'
+    +'<div id="qc-lose" style="font-size:20px;font-weight:500;color:#9A9590">—</div></div>'
+    +'</div></div>'
+    +'<button id="qc-log-btn" onclick="logFromCalc()" style="display:none;width:100%;padding:13px;border-radius:10px;border:none;background:#22C55E;color:#fff;font-family:system-ui;font-size:15px;font-weight:500;cursor:pointer"><i class="ti ti-plus"></i> Log this bet</button>'
+    +'</div></div>';
 }
 
 function renderPerformanceCard(){
@@ -2478,6 +2494,21 @@ function renderQuickCalc(){
 }
 
 
+function copyLayStake(){
+  const el=document.getElementById('qc-laystake');
+  if(!el)return;
+  const val=el.textContent.replace('£','').trim();
+  navigator.clipboard.writeText(val).then(function(){
+    const btn=document.getElementById('qc-copy-btn');
+    if(btn){btn.innerHTML='<i class="ti ti-check"></i>';setTimeout(function(){btn.innerHTML='<i class="ti ti-copy"></i>';},1500);}
+  }).catch(function(){
+    // Fallback for browsers without clipboard API
+    const ta=document.createElement('textarea');
+    ta.value=val;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);
+    showToast('Lay stake copied: £'+val);
+  });
+}
+
 function setCalcBetType(t){
   calcBetType=t;
   const mc=document.getElementById('qc-container');
@@ -2543,6 +2574,8 @@ function calcQuick(){
 
   if(res)res.style.display='block';
   if(btn)btn.style.display='block';
+  const copyBtn=document.getElementById('qc-copy-btn');
+  if(copyBtn)copyBtn.style.display='inline-flex';
 }
 
 function logFromCalc(){
