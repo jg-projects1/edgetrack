@@ -2324,21 +2324,19 @@ function renderCasino(){
 
 function renderCasinoMonthly(){
   const allSessions=PROFILES.flatMap(p=>(state[p].casino||[]).map(s=>({...s,_acct:p})));
-  const newSessions=allSessions.filter(s=>s.startBal!==undefined&&s.endBal!==undefined);
   const monthlyMap={};
-  newSessions.forEach(s=>{
+  allSessions.forEach(s=>{
     const d=s.date||'';
     const parts=d.split('/');
     if(parts.length<3)return;
     const key=parts[2]+'-'+parts[1].padStart(2,'0');
     if(!monthlyMap[key])monthlyMap[key]={JG:0,JP:0,total:0};
-    const pnl=s.endBal-s.startBal;
+    const pnl=s.startBal!==undefined&&s.endBal!==undefined?s.endBal-s.startBal:(s.netProfit||0);
     monthlyMap[key][s.operator||'JG']+=pnl;
     monthlyMap[key].total+=pnl;
   });
-  const histTotal=allSessions.filter(s=>s.startBal===undefined).reduce((a,s)=>a+(s.netProfit||0),0);
   const monthKeys=Object.keys(monthlyMap).sort().reverse();
-  if(!monthKeys.length&&histTotal===0)return '<div class="empty">No casino sessions yet</div>';
+  if(!monthKeys.length)return '<div class="empty">No casino sessions yet</div>';
   const rows=monthKeys.map(k=>{
     const mo=monthlyMap[k];
     const label=k.slice(0,4)+'/'+k.slice(5);
@@ -2349,20 +2347,12 @@ function renderCasinoMonthly(){
       +'<td style="text-align:right;font-size:12px;font-weight:500;color:'+(mo.total>=0?'#22C55E':'#F87171')+'">'+fmtS(mo.total)+'</td>'
       +'</tr>';
   }).join('');
-  const histRow=histTotal!==0
-    ?'<tr style="border-top:1px solid rgba(255,255,255,0.10)">'
-      +'<td style="font-size:11px;color:#9A9590">Historical</td>'
-      +'<td style="text-align:right;font-size:11px;color:#9A9590">—</td>'
-      +'<td style="text-align:right;font-size:11px;color:#9A9590">—</td>'
-      +'<td style="text-align:right;font-size:11px;color:'+(histTotal>=0?'#22C55E':'#F87171')+'">'+fmtS(histTotal)+'</td>'
-      +'</tr>'
-    :'';
   return '<div class="card">'
     +'<div class="card-header"><span class="card-title">Monthly Casino P&L by Operator</span></div>'
     +'<div style="overflow-x:auto">'
     +'<table class="data-table" style="width:100%">'
     +'<thead><tr><th>Month</th><th style="text-align:right">JG (£)</th><th style="text-align:right">JP (£)</th><th style="text-align:right">Total (£)</th></tr></thead>'
-    +'<tbody>'+rows+histRow+'</tbody>'
+    +'<tbody>'+rows+'</tbody>'
     +'</table></div></div>';
 }
 
@@ -2418,18 +2408,19 @@ function renderCasinoSummaryView(){
 
 function renderCasinoHistory(){
   const sessions=PROFILES.flatMap(p=>(state[p].casino||[])
-    .filter(s=>s.startBal!==undefined&&s.endBal!==undefined)
     .map(s=>({...s,_acct:p}))).sort((a,b)=>b.id-a.id);
   if(!sessions.length)return '<div class="empty">No new casino sessions yet — log one above</div>';
   const rows=sessions.map(s=>{
-    const pnl=s.endBal-s.startBal;
+    const pnl=s.startBal!==undefined&&s.endBal!==undefined?s.endBal-s.startBal:(s.netProfit||0);
+    const startStr=s.startBal!==undefined?fmt(s.startBal):'—';
+    const endStr=s.endBal!==undefined?fmt(s.endBal):'—';
     return '<tr data-csid="'+s.id+'">'
       +'<td style="font-size:11px;white-space:nowrap">'+(s.date||'')+'</td>'
       +'<td style="text-align:center"><span class="dot-'+s._acct+'" style="display:inline-block;width:6px;height:6px;border-radius:50%"></span> '+profileLabel(s._acct)+'</td>'
       +'<td style="text-align:center;font-size:11px">'+(s.operator||'JG')+'</td>'
       +'<td style="font-size:11px">'+(s.casino||'')+'</td>'
-      +'<td style="text-align:right;font-size:12px">'+fmt(s.startBal)+'</td>'
-      +'<td style="text-align:right;font-size:12px">'+fmt(s.endBal)+'</td>'
+      +'<td style="text-align:right;font-size:12px">'+startStr+'</td>'
+      +'<td style="text-align:right;font-size:12px">'+endStr+'</td>'
       +'<td style="text-align:right;font-size:12px;font-weight:500;color:'+(pnl>=0?'#22C55E':'#F87171')+'">'+fmtS(pnl)+'</td>'
       +'<td><button onclick="deleteCasinoSession(\x27'+s._acct+'\x27,'+s.id+')" style="background:none;border:none;color:#F87171;cursor:pointer;padding:4px"><i class="ti ti-trash" style="font-size:13px"></i></button></td>'
       +'</tr>';
