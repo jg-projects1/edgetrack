@@ -977,7 +977,7 @@ function renderPending(){
   return`
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
     <div class="metric-card"><div class="metric-label">Pending</div><div class="metric-value warn">${pending.length}</div></div>
-    <div class="metric-card"><div class="metric-label">Expected P&L</div><div class="metric-value pos" style="font-size:20px">${fmtS(pending.reduce((a,t)=>a+(t.pnl||0),0))}</div></div>
+    <div class="metric-card"><div class="metric-label">Expected P&L</div><div class="metric-value pos" style="font-size:20px">${fmtS(pending.reduce((a,t)=>a+(t.expectedPnl||0),0))}</div></div>
   </div>
   ${pending.map(t=>{
     const isFB=isFreeBet(t.type);
@@ -993,7 +993,24 @@ function renderPending(){
       </div>
       <div class="pending-info">
         ${t.bstake?`<div class="pinfo-item"><span class="pinfo-label">Back</span><span class="pinfo-val">£${t.bstake} @ ${t.bodds}</span></div>`:''}
-        <div class="pinfo-item"><span class="pinfo-label">P&L</span><span class="pinfo-val pos">${fmtS(t.pnl||0)}</span></div>
+        <div class="pinfo-item">
+          <span class="pinfo-label">If wins</span>
+          <span class="pinfo-val pos">${fmtS(t.expectedPnl||0)}</span>
+        </div>
+        ${(()=>{
+          const isFB=isFreeBet(t.type);
+          const bs=t.bstake||0,bo=t.bodds||0,lo=t.lodds||0;
+          if(t.underlay&&isFB&&lo>1&&bo>2){
+            const ul_ls=bs*(bo-2)/(lo-1);
+            return '<div class="pinfo-item"><span class="pinfo-label">If loses</span><span class="pinfo-val pos">'+fmtS(ul_ls)+'</span></div>';
+          }
+          if(!t.underlay&&lo>0){
+            const li_ls=isFB?bs*(bo-1)/lo:bs*bo/lo;
+            const lose_pnl=isFB?li_ls:li_ls-bs;
+            return '<div class="pinfo-item"><span class="pinfo-label">If loses</span><span class="pinfo-val '+(lose_pnl>=0?'pos':'neg')+'">'+fmtS(lose_pnl)+'</span></div>';
+          }
+          return '';
+        })()}
         <div style="margin-left:auto"><button class="btn-sm btn-sm-edit" onclick="editPnl('${t._acct}',${t.id})">Edit P&L</button></div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px">
