@@ -11,78 +11,107 @@ export default async function handler(req, res) {
     const incoming = req.body;
     const profiles = ['me', 'wife', 'bp', 'rq'];
 
-    // Use client-provided server state to avoid stale KV reads
-    let server = {};
-    if (incoming._serverState && typeof incoming._serverState === 'object' && Object.keys(incoming._serverState).length > 0) {
-      server = incoming._serverState;
-    } else {
-      const loadRes = await fetch(`${kvUrl}/get/edgetrack_main`, {
+    const kvGet = async (key) => {
+      const r = await fetch(`${kvUrl}/get/${key}`, {
         headers: { Authorization: `Bearer ${kvToken}` }
       });
-      if (!loadRes.ok) throw new Error(`KV load error: ${loadRes.status}`);
-      const loadData = await loadRes.json();
-      if (loadData.result) {
-        let parsed = JSON.parse(loadData.result);
-        if (typeof parsed === 'string') parsed = JSON.parse(parsed);
-        server = parsed;
-      }
-    }
+      if (!r.ok) return null;
+      const d = await r.json();
+      if (!d.result) return null;
+      let parsed = JSON.parse(d.result);
+      if (typeof parsed === 'string') parsed = JSON.parse(parsed);
+      return parsed;
+    };
 
-    const merged = JSON.parse(JSON.stringify(server));
+    const kvSet = async (key, value) => {
+      const r = await fetch(`${kvUrl}/set/${key}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${kvToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(JSON.stringify(value))
+      });
+      if (!r.ok) throw new Error(`KV set error on ${key}: ${r.status}`);
+    };
 
-    profiles.forEach(pr => {
-      if (!merged[pr]) merged[pr] = { transactions: [], bank: 0, bookies: {} };
-      if (!incoming[pr]) return;
+    const mergeBookies = (serverBk, incomingBk) => {
+      const merged = { ...serverBk };
+      Object.keys(incomingBk).forEach(k => {
+        if (!merged[k]) {
+          merged[k] = incomingBk[k];
+        } else {
+          const localTs = incomingBk[k].balUpdatedAt || 0;
+          const serverTs = merged[k].balUpdatedAt || 0;
+          const localWins = localTs > 0 && localTs > serverTs;
+          merged[k] = Object.assign({}, merged[k], {
+            bal: localWins ? incomingBk[k].bal : merged[k].bal,
+            status: localWins ? (incomingBk[k].status || merged[k].status) : merged[k].status,
+            notes: localWins ? (incomingBk[k].notes !== undefined ? incomingBk[k].notes : merged[k].notes) : merged[k].notes,
+            verifiedAt: incomingBk[k].verifiedAt || merged[k].verifiedAt || null,
+            balUpdatedAt: Math.max(localTs, serverTs)
+          });
+        }
+      });
+      return merged;
+    };
 
-      // Merge transactions — union by ID, respect deletes, prefer settled over pending
-      const serverTxs = server[pr]?.transactions || [];
-      const incomingTxs = incoming[pr]?.transactions || [];
-      const deletedIds = new Set((incoming[pr]?.deletedIds || []).map(String));
+    const mergeTxs = (serverTxs, incomingTxs, deletedIds) => {
       const serverMap = new Map(serverTxs.map(t => [String(t.id), t]));
       const incomingMap = new Map(incomingTxs.map(t => [String(t.id), t]));
       const allIds = new Set([...serverMap.keys(), ...incomingMap.keys()]);
-      const mergedTxs = [];
-
+      const merged = [];
       allIds.forEach(id => {
         if (deletedIds.has(id)) return;
         const srv = serverMap.get(id);
         const inc = incomingMap.get(id);
         if (inc && srv) {
-          // Prefer settled over pending; otherwise incoming wins
-          mergedTxs.push(srv.result !== 'Pending' && inc.result === 'Pending' ? srv : inc);
+          merged.push(srv.result !== 'Pending' && inc.result === 'Pending' ? srv : inc);
         } else if (inc) {
-          mergedTxs.push(inc);
-        } else if (srv && !deletedIds.has(id)) {
-          mergedTxs.push(srv);
+          merged.push(inc);
+        } else if (srv) {
+          merged.push(srv);
         }
       });
+      return merged;
+    };
 
-      merged[pr].transactions = mergedTxs;
-      if (incoming[pr].bank !== undefined) merged[pr].bank = incoming[pr].bank;
+    // Save each profile to its own KV key in parallel
+    const responseData = { exchanges: incoming.exchanges || {} };
 
-      // Merge freeBets
+    await Promise.all(profiles.map(async pr => {
+      if (!incoming[pr]) return;
+      const key = `edgetrack_${pr}`;
+      const server = await kvGet(key) || { transactions: [], bank: 0, bookies: {}, freeBets: [] };
+      const deletedIds = new Set((incoming[pr].deletedIds || []).map(String));
+
+      const mergedTxs = mergeTxs(
+        server.transactions || [],
+        incoming[pr].transactions || [],
+        deletedIds
+      );
+
       const fbMap = new Map();
-      (server[pr]?.freeBets || []).forEach(fb => fbMap.set(String(fb.id), fb));
-      (incoming[pr]?.freeBets || []).forEach(fb => fbMap.set(String(fb.id), fb));
-      merged[pr].freeBets = Array.from(fbMap.values());
+      (server.freeBets || []).forEach(fb => fbMap.set(String(fb.id), fb));
+      (incoming[pr].freeBets || []).forEach(fb => fbMap.set(String(fb.id), fb));
 
-      // Merge bookies — incoming wins
-      if (incoming[pr].bookies && Object.keys(incoming[pr].bookies).length > 0) {
-        merged[pr].bookies = { ...server[pr]?.bookies || {}, ...incoming[pr].bookies };
-      }
-    });
+      const mergedBookies = mergeBookies(
+        server.bookies || {},
+        incoming[pr].bookies || {}
+      );
 
-    if (incoming.exchanges) merged.exchanges = incoming.exchanges;
+      const merged = {
+        bank: incoming[pr].bank !== undefined ? incoming[pr].bank : server.bank,
+        bookies: mergedBookies,
+        transactions: mergedTxs,
+        freeBets: Array.from(fbMap.values())
+      };
 
-    // Save to KV
-    const saveRes = await fetch(`${kvUrl}/set/edgetrack_main`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${kvToken}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(JSON.stringify(merged))
-    });
-    if (!saveRes.ok) throw new Error(`KV save error: ${saveRes.status}`);
+      await kvSet(key, merged);
+      responseData[pr] = merged;
+    }));
 
-    return res.status(200).json({ ok: true, data: merged });
+    // Save exchanges separately
+    await kvSet('edgetrack_exchanges', incoming.exchanges || {});
+
+    return res.status(200).json({ ok: true, data: responseData });
   } catch (e) {
     return res.status(500).json({ ok: false, error: e.message });
   }
