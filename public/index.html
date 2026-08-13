@@ -640,6 +640,8 @@ let lastSavedTrade=null; // for quick duplicate after save
 let lastExchange=''; // tracks last used exchange
 let showMoreTypes=false; // toggle for extra bet types
 let showComm=false; // toggle for commission field
+let calcBetType='Boost'; // quick calculator last used bet type
+let calcStrategy='underlay'; // quick calculator last used strategy
 
 function fmt(v){const n=parseFloat(v)||0;return(n<0?'-':'')+'£'+Math.abs(n).toFixed(2);}
 function fmtS(v){const n=parseFloat(v)||0;return(n>=0?'+':'-')+'£'+Math.abs(n).toFixed(2);}
@@ -863,6 +865,7 @@ function renderDashboard(){
   const totalExchanges=Object.values(state.exchanges||{}).reduce((a,v)=>a+(v||0),0);
   const totalFunds=totalBank+totalBookies+totalExchanges;
   return`
+  <div id="qc-container">${renderQuickCalc()}</div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
     <div class="metric-card" style="grid-column:span 2">
       <div class="metric-label"><i class="ti ti-trending-up" aria-hidden="true"></i>Combined P&L
@@ -2399,6 +2402,162 @@ function renderCasinoHistory(){
 }
 
 
+
+// ── QUICK CALCULATOR ─────────────────────────────────────────────────────────
+function renderQuickCalc(){
+  const isFB=calcBetType==='Free Bet';
+  const isUL=calcStrategy==='underlay';
+  const types=['Boost','Free Bet','Qualifier','Mug'];
+  const typeBg={Boost:'#5C3800','Free Bet':'#14532D',Qualifier:'#7A4F00',Mug:'#042C53'};
+  const typeCol={Boost:'#F0A500','Free Bet':'#86EFAC',Qualifier:'#F5C842',Mug:'#F5C842'};
+  const typeBtns=types.map(function(t){
+    const active=calcBetType===t;
+    const bg=active?(typeBg[t]||'#3D4349'):'#3D4349';
+    const col=active?(typeCol[t]||'#C8C5BF'):'#C8C5BF';
+    return '<button onclick="setCalcBetType('+JSON.stringify(t)+')" style="flex:1;padding:8px 4px;border-radius:8px;border:0.5px solid rgba(255,255,255,0.1);background:'+bg+';color:'+col+';font-family:system-ui;font-size:11px;font-weight:500;cursor:pointer">'+t+'</button>';
+  }).join('');
+
+  const stratBtns=
+    '<button onclick="setCalcStrategy('+JSON.stringify('underlay')+')" class="btn '+(isUL?'btn-primary':'btn-ghost')+'" style="flex:1;padding:8px;font-size:12px">Underlay</button>'
+    +'<button onclick="setCalcStrategy('+JSON.stringify('lockin')+')" class="btn '+(isUL?'btn-ghost':'btn-primary')+'" style="flex:1;padding:8px;font-size:12px">Lock-in</button>';
+
+  return '<div class="card" style="margin-bottom:12px">'
+    +'<div class="card-header"><span class="card-title">Quick Calculator</span>'
+    +'<span style="font-size:10px;color:#9A9590">get lay stake instantly</span></div>'
+    +'<div class="card-body">'
+    +'<div style="margin-bottom:10px"><div class="form-label">Bet type</div>'
+    +'<div style="display:flex;gap:6px">'+typeBtns+'</div></div>'
+    +'<div style="margin-bottom:10px"><div class="form-label">Strategy</div>'
+    +'<div style="display:flex;gap:6px">'+stratBtns+'</div></div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:10px">'
+    +'<div class="form-group"><div class="form-label">Stake</div>'
+    +'<input type="number" id="qc-stake" placeholder="0.00" step="0.01" inputmode="decimal" oninput="calcQuick()" style="padding:8px;font-size:14px;font-weight:500"/></div>'
+    +'<div class="form-group"><div class="form-label">Back odds</div>'
+    +'<input type="number" id="qc-bodds" placeholder="2.00" step="0.01" inputmode="decimal" oninput="calcQuick()" style="padding:8px;font-size:14px;font-weight:500"/></div>'
+    +'<div class="form-group"><div class="form-label">Lay odds</div>'
+    +'<input type="number" id="qc-lodds" placeholder="2.00" step="0.01" inputmode="decimal" oninput="calcQuick()" style="padding:8px;font-size:14px;font-weight:500"/></div>'
+    +'</div>'
+    +'<div id="qc-results" style="display:none;background:#252830;border-radius:10px;padding:12px 14px;margin-bottom:12px">'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">'
+    +'<div><div style="font-size:10px;color:#9A9590;margin-bottom:3px">Lay stake</div>'
+    +'<div id="qc-laystake" style="font-size:20px;font-weight:500;color:#F0EDE8">—</div></div>'
+    +'<div><div style="font-size:10px;color:#9A9590;margin-bottom:3px">If wins</div>'
+    +'<div id="qc-win" style="font-size:20px;font-weight:500;color:#22C55E">—</div></div>'
+    +'<div><div style="font-size:10px;color:#9A9590;margin-bottom:3px">If loses</div>'
+    +'<div id="qc-lose" style="font-size:20px;font-weight:500;color:#9A9590">—</div></div>'
+    +'</div></div>'
+    +'<button id="qc-log-btn" onclick="logFromCalc()" style="display:none;width:100%;padding:13px;border-radius:10px;border:none;background:#22C55E;color:#fff;font-family:system-ui;font-size:15px;font-weight:500;cursor:pointer"><i class="ti ti-plus"></i> Log this bet</button>'
+    +'</div></div>';
+}
+
+
+function setCalcBetType(t){
+  calcBetType=t;
+  const mc=document.getElementById('qc-container');
+  if(mc)mc.innerHTML=renderQuickCalc();
+  // Restore values
+  const s=document.getElementById('qc-stake');
+  const b=document.getElementById('qc-bodds');
+  const l=document.getElementById('qc-lodds');
+  if(s)s.value=window._qcStake||'';
+  if(b)b.value=window._qcBodds||'';
+  if(l)l.value=window._qcLodds||'';
+  calcQuick();
+}
+
+function setCalcStrategy(s){
+  calcStrategy=s;
+  setCalcBetType(calcBetType); // re-render with preserved values
+}
+
+function calcQuick(){
+  const bs=parseFloat(document.getElementById('qc-stake')?.value)||0;
+  const bo=parseFloat(document.getElementById('qc-bodds')?.value)||0;
+  const lo=parseFloat(document.getElementById('qc-lodds')?.value)||0;
+  // Store values for re-render preservation
+  window._qcStake=bs||'';
+  window._qcBodds=bo||'';
+  window._qcLodds=lo||'';
+
+  const res=document.getElementById('qc-results');
+  const btn=document.getElementById('qc-log-btn');
+  if(!bs||!bo||!lo){if(res)res.style.display='none';if(btn)btn.style.display='none';return;}
+
+  const isFB=calcBetType==='Free Bet';
+  const isUL=calcStrategy==='underlay';
+  let layStake,winPnl,losePnl;
+
+  if(isUL){
+    if(!isFB){
+      layStake=bs;
+      winPnl=bs*(bo-lo);
+      losePnl=0;
+    }else{
+      layStake=lo>1&&bo>2?bs*(bo-2)/(lo-1):0;
+      winPnl=bs;
+      losePnl=layStake;
+    }
+  }else{
+    if(!isFB){
+      layStake=lo>0?bs*bo/lo:0;
+      winPnl=layStake-bs;
+      losePnl=layStake-bs;
+    }else{
+      layStake=lo>0?bs*(bo-1)/lo:0;
+      winPnl=layStake;
+      losePnl=layStake;
+    }
+  }
+
+  const lsEl=document.getElementById('qc-laystake');
+  const winEl=document.getElementById('qc-win');
+  const loseEl=document.getElementById('qc-lose');
+
+  if(lsEl)lsEl.textContent='£'+layStake.toFixed(2);
+  if(winEl){winEl.textContent=fmtS(winPnl);winEl.style.color=winPnl>=0?'#22C55E':'#F87171';}
+  if(loseEl){loseEl.textContent=fmtS(losePnl);loseEl.style.color=losePnl>0?'#22C55E':losePnl<0?'#F87171':'#9A9590';}
+
+  if(res)res.style.display='block';
+  if(btn)btn.style.display='block';
+}
+
+function logFromCalc(){
+  // Pre-fill the log form with calculator values and switch to Trade tab
+  const bs=window._qcStake||'';
+  const bo=window._qcBodds||'';
+  const lo=window._qcLodds||'';
+  // Set form state
+  selectedBetType=calcBetType;
+  isUnderlay=calcStrategy==='underlay';
+  currentTab='trade';tradeSubTab='log';
+  // Switch to Trade tab
+  document.querySelectorAll('.tab').forEach(el=>el.classList.remove('active'));
+  document.getElementById('tab-trade')?.classList.add('active');
+  document.getElementById('profile-bar').style.display='none';
+  const mc=document.getElementById('main-content');
+  if(mc)mc.innerHTML=renderTrade();
+  setTimeout(function(){
+    const fs=document.getElementById('f-bstake');if(fs)fs.value=bs;
+    const fb=document.getElementById('f-bodds');if(fb)fb.value=bo;
+    const fl=document.getElementById('f-lodds');if(fl)fl.value=lo;
+    // Set strategy buttons
+    setStrategy(calcStrategy);
+    // Update type buttons
+    document.querySelectorAll('[data-toptype]').forEach(function(el){
+      const isSelected=el.dataset.toptype===calcBetType;
+      el.style.background=isSelected?getTypeColor(calcBetType):'#252629';
+      el.style.color=isSelected?getTypeTextColor(calcBetType):'#C8C5BF';
+      el.style.borderColor=isSelected?'transparent':'rgba(255,255,255,0.10)';
+    });
+    document.querySelectorAll('.type-pill').forEach(function(el){
+      el.className='type-pill';
+      if(el.dataset.type===calcBetType)el.classList.add('sel','sel-'+calcBetType.toLowerCase().split(' ').join(''));
+    });
+    updateFormFields();
+    bindFormEvents();
+    autoCalcUnderlay();
+  },50);
+}
 
 function filterHistoryInPlace(){
   const typeFilter=document.getElementById('hist-type-filter')?.value||'';
