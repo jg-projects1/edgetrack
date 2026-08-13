@@ -2648,18 +2648,35 @@ function buildFullBackup(){
   };
 }
 
-function downloadBackup(){
-  const backup=buildFullBackup();
-  const json=JSON.stringify(backup,null,2);
-  const blob=new Blob([json],{type:'application/json'});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');
-  const date=todayStr().replace(/\//g,'-');
-  a.href=url;a.download=`mbworld-backup-${date}.json`;a.click();
-  URL.revokeObjectURL(url);
-  localStorage.setItem('mbe_last_backup',Date.now().toString());
-  showToast('Full backup downloaded ✓');
-  updateBackupStatus();
+async function downloadBackup(){
+  showToast('Preparing backup…','info');
+  try{
+    // Use server-side backup — reads directly from KV, always complete
+    const res=await fetch('/api/backup');
+    if(!res.ok)throw new Error('Backup failed: '+res.status);
+    const json=await res.json();
+    const blob=new Blob([JSON.stringify(json,null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    const date=todayStr().replace(/\//g,'-');
+    a.href=url;a.download=`mbworld-backup-${date}.json`;a.click();
+    URL.revokeObjectURL(url);
+    localStorage.setItem('mbe_last_backup',Date.now().toString());
+    showToast('Full backup downloaded ✓ (includes casino)');
+    updateBackupStatus();
+  }catch(e){
+    // Fallback to local backup
+    const backup=buildFullBackup();
+    const blob=new Blob([JSON.stringify(backup,null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    const date=todayStr().replace(/\//g,'-');
+    a.href=url;a.download=`mbworld-backup-${date}.json`;a.click();
+    URL.revokeObjectURL(url);
+    localStorage.setItem('mbe_last_backup',Date.now().toString());
+    showToast('Backup downloaded (local)');
+    updateBackupStatus();
+  }
 }
 
 function getLastBackupDays(){
