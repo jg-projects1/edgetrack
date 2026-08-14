@@ -70,7 +70,14 @@ html{height:100%;-webkit-text-size-adjust:100%}
 [data-theme="stone"] .data-table th{background:var(--bg-input)}
 [data-theme="stone"] select,[data-theme="stone"] input,[data-theme="stone"] textarea{background:var(--bg-input);color:var(--text-primary);border-color:rgba(0,0,0,0.12)}
 [data-theme="stone"] .filter-select{background:var(--bg-card);color:var(--text-primary);border-color:rgba(0,0,0,0.10)}
-[data-theme="stone"] .search-input{background:var(--bg-input);color:var(--text-primary)}
+[data-theme="stone"] .search-input{background:var(--bg-input);color:var(--text-primary);border:0.5px solid var(--border-col)}
+input::placeholder{color:var(--text-muted)}
+select{background:var(--bg-input);color:var(--text-primary);border:0.5px solid var(--border-col)}
+textarea{background:var(--bg-input);color:var(--text-primary);border:0.5px solid var(--border-col)}
+[data-theme="stone"] input,[data-theme="stone"] select,[data-theme="stone"] textarea{
+  background:var(--bg-input);color:#1A1A1A;border:0.5px solid rgba(0,0,0,0.15)
+}
+[data-theme="stone"] input::placeholder{color:#8A8078}
 [data-theme="stone"] .badge-active{background:#C8E6D4;color:#1B5E35;border-color:#B0D4BC}
 [data-theme="stone"] .badge-restricted{background:#FDE8CC;color:#7A3000;border-color:#F5C898}
 [data-theme="stone"] .badge-gubbed{background:#FAD4D4;color:#8B0000;border-color:#F0B0B0}
@@ -79,7 +86,10 @@ html{height:100%;-webkit-text-size-adjust:100%}
 [data-theme="slate"] .metric-card,[data-theme="slate"] .card,[data-theme="slate"] .acct-card{border-color:rgba(255,255,255,0.06)}
 [data-theme="slate"] select,[data-theme="slate"] input,[data-theme="slate"] textarea{background:var(--bg-input);color:var(--text-primary);border-color:rgba(255,255,255,0.08)}
 [data-theme="slate"] .filter-select{background:var(--bg-card);color:var(--text-primary)}
-[data-theme="slate"] .search-input{background:var(--bg-input);color:var(--text-primary)}
+[data-theme="slate"] .search-input{background:var(--bg-input);color:var(--text-primary);border:0.5px solid var(--border-col)}
+input::placeholder{color:var(--text-muted)}
+select{background:var(--bg-input);color:var(--text-primary);border:0.5px solid var(--border-col)}
+textarea{background:var(--bg-input);color:var(--text-primary);border:0.5px solid var(--border-col)}
 
 [data-theme="slate"]{
   --bg-page:#1F1C18;
@@ -779,7 +789,7 @@ let recentBookies=[]; // tracks last 8 used bookies
 let lastSavedTrade=null; // for quick duplicate after save
 let _duplicateMode=false; // true when form was opened via duplicate
 let _dashHidden=true; // hidden by default
-let _theme='dark'; // dark | stone | slate
+let _theme='stone'; // stone | slate
 let lastExchange='Smarkets'; // tracks last used exchange
 let showMoreTypes=false; // toggle for extra bet types
 let showComm=false; // toggle for commission field
@@ -2063,9 +2073,9 @@ function getVerifyStats(){
 function setTheme(t){
   _theme=t;
   localStorage.setItem('mbe_theme',t);
-  document.documentElement.setAttribute('data-theme',t==='dark'?'':t);
+  document.documentElement.setAttribute('data-theme',t);
   // Update theme buttons
-  ['dark','stone','slate'].forEach(function(th){
+  ['stone','slate'].forEach(function(th){
     const btn=document.getElementById('theme-btn-'+th);
     if(btn)btn.style.background=_theme===th?'rgba(255,255,255,0.15)':'transparent';
   });
@@ -2159,6 +2169,8 @@ function showBookieModal(acct,name){
 function confirmBookieEdit(acct,name){
   const newBal=parseFloat(document.getElementById('modal-bal')?.value),newStatus=document.getElementById('modal-status')?.value||'Active',newNotes=document.getElementById('modal-notes')?.value||'',reason=document.getElementById('modal-reason')?.value||'Manual edit';
   const bk=state[acct].bookies[name],oldBal=bk.bal||0;bk.status=newStatus;bk.notes=newNotes;
+  // Stamp balUpdatedAt on any change so merge logic preserves this device's changes
+  bk.balUpdatedAt=Date.now();
   if(!isNaN(newBal)&&newBal!==oldBal){const diff=newBal-oldBal;bk.bal=newBal;if(!state[acct].transactions)state[acct].transactions=[];state[acct].transactions.push({id:Date.now(),date:todayStr(),type:'Balance Amendment',target:name,oldVal:oldBal,newVal:newBal,diff,pnl:diff,notes:reason,result:'—',_acct:acct});}
   if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('bookieEdit');closeModal();showToast(`${name} updated`);render();
 }
@@ -3103,7 +3115,7 @@ async function loadApp(){
   const savedVis=localStorage.getItem('mbe_dash_hidden');
   _dashHidden=savedVis===null?true:savedVis==='1';
   // Restore theme
-  const savedTheme=localStorage.getItem('mbe_theme')||'dark';
+  const savedTheme=localStorage.getItem('mbe_theme')||'stone';
   _theme=savedTheme;
   document.documentElement.setAttribute('data-theme',savedTheme==='dark'?'':savedTheme); // restore any queued saves from last session
   // Version check — clear localStorage cache if bookie list version changed
@@ -3145,11 +3157,11 @@ function checkPin(){
     <div style="font-size:22px;font-weight:500;color:var(--text-primary);margin-bottom:8px">MBWorld</div>
     <div style="font-size:13px;color:var(--text-muted);margin-bottom:32px">Enter PIN to continue</div>
     <div id="pin-dots" style="display:flex;gap:12px;margin-bottom:32px">
-      ${[0,1,2,3].map(i=>'<div style="width:14px;height:14px;border-radius:50%;border:2px solid #9A9590;background:transparent" id="pd'+i+'"></div>').join('')}
+      ${[0,1,2,3].map(i=>'<div style="width:14px;height:14px;border-radius:50%;border:2px solid var(--text-muted);background:transparent" id="pd'+i+'"></div>').join('')}
     </div>
     <div id="pin-error" style="font-size:12px;color:#F87171;margin-bottom:16px;min-height:18px"></div>
     <div style="display:grid;grid-template-columns:repeat(3,72px);gap:12px">
-      ${[1,2,3,4,5,6,7,8,9,'',0,'⌫'].map(d=>`<button onclick="pinPress('${d}')" style="height:72px;border-radius:50%;border:0.5px solid rgba(255,255,255,0.10);background:var(--bg-card);color:var(--text-primary);font-size:${d==='⌫'?'20':'22'}px;font-weight:500;font-family:system-ui,-apple-system,sans-serif;cursor:pointer;${d===''?'visibility:hidden':''}">${d}</button>`).join('')}
+      ${[1,2,3,4,5,6,7,8,9,'',0,'⌫'].map(d=>`<button onclick="pinPress('${d}')" style="height:72px;border-radius:50%;border:0.5px solid var(--border-col);background:var(--bg-card);color:var(--text-primary);font-size:${d==='⌫'?'20':'22'}px;font-weight:500;font-family:system-ui,-apple-system,sans-serif;cursor:pointer;${d===''?'visibility:hidden':''}">${d}</button>`).join('')}
     </div>`;
   let entry='';
   window.pinPress=function(d){
