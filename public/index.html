@@ -1601,7 +1601,7 @@ function submitTx(){
   if(usedBookie){recentBookies=([usedBookie,...recentBookies.filter(b=>b!==usedBookie)]).slice(0,8);}
   if(usedExchange)lastExchange=usedExchange;
   // Store last saved tx for quick duplicate
-  const lastTx={type:selectedBetType,bookie:document.getElementById('f-bookie')?.value||(document.getElementById('f-bookie-search')?.value||''),exchange:document.getElementById('f-exchange')?.value||'',event:document.getElementById('f-event')?.value||'',bstake:document.getElementById('f-bstake')?.value||'',bodds:document.getElementById('f-bodds')?.value||'',lodds:document.getElementById('f-lodds')?.value||'',pnl:document.getElementById('f-pnl')?.value||'',_acct:formAccount};
+  const lastTx={type:selectedBetType,bookie:document.getElementById('f-bookie')?.value||(document.getElementById('f-bookie-search')?.value||''),exchange:document.getElementById('f-exchange')?.value||'',event:document.getElementById('f-event')?.value||'',bstake:document.getElementById('f-bstake')?.value||'',bodds:document.getElementById('f-bodds')?.value||'',lodds:document.getElementById('f-lodds')?.value||'',pnl:document.getElementById('f-pnl')?.value||'',underlay:isUnderlay,notes:document.getElementById('f-notes')?.value||'',_acct:formAccount};
   lastSavedTrade=lastTx;
   if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('logTrade');showToast('✓ Trade saved');msg.textContent='';
   // Stay on form — keep type, bookie, exchange; clear event/stake/odds/pnl
@@ -1624,6 +1624,7 @@ function submitTx(){
 
 function duplicateTrade(acct,id,rawTx){
   const tx=rawTx||(state[acct]?.transactions||[]).find(t=>t.id===id);if(!tx)return;
+  console.log('duplicateTrade tx:',JSON.stringify({bookie:tx.bookie,lodds:tx.lodds,bodds:tx.bodds,bstake:tx.bstake,type:tx.type,underlay:tx.underlay}));
   formAccount=acct;
   selectedBetType=tx.type||'';
   if(tx.underlay!==undefined)isUnderlay=tx.underlay;
