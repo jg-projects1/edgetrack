@@ -17,55 +17,100 @@ html{height:100%;-webkit-text-size-adjust:100%}
 
 /* ── THEMES ────────────────────────────────────── */
 :root{
-  --bg-page:#343A40;
-  --bg-card:#2C3136;
-  --bg-input:#3D4349;
-  --bg-card2:#252629;
-  --text-primary:#F0EDE8;
-  --text-secondary:#C8C5BF;
-  --text-muted:#9A9590;
+  --bg-page:var(--bg-page);
+  --bg-card:var(--bg-card);
+  --bg-input:var(--bg-input);
+  --bg-card2:var(--bg-card2);
+  --bg-input2:var(--bg-input2);
+  --bg-risk-red:#791F1F;
+  --bg-risk-amber:#5C3800;
+  --bg-risk-green:#14532D;
+  --text-primary:var(--text-primary);
+  --text-secondary:var(--text-secondary);
+  --text-muted:var(--text-muted);
   --text-accent:#22C55E;
   --text-neg:#F87171;
+  --text-warn:#F0A500;
   --border-col:rgba(255,255,255,0.09);
   --border-col2:rgba(255,255,255,0.07);
-  --tab-bg:#2C3136;
+  --border-col3:var(--border-col3);
+  --tab-bg:var(--bg-card);
   --tab-border:rgba(255,255,255,0.09);
+  --overlay:rgba(0,0,0,0.6);
+  --modal-handle:rgba(255,255,255,0.09);
+  --toast-bg:#22C55E;
+  --pill-bg:rgba(255,255,255,0.08);
 }
 [data-theme="stone"]{
   --bg-page:#F5F0E8;
   --bg-card:#EDE8DF;
   --bg-input:#E2DDD4;
   --bg-card2:#F5F0E8;
+  --bg-input2:#D8D2C8;
+  --bg-risk-red:#FECACA;
+  --bg-risk-amber:#FEF3C7;
+  --bg-risk-green:#D1FAE5;
   --text-primary:#1A1A1A;
   --text-secondary:#3D3830;
   --text-muted:#6B6560;
   --text-accent:#16803C;
   --text-neg:#B91C1C;
+  --text-warn:#92400E;
   --border-col:rgba(0,0,0,0.10);
   --border-col2:rgba(0,0,0,0.07);
+  --border-col3:rgba(0,0,0,0.04);
   --tab-bg:#EDE8DF;
   --tab-border:rgba(0,0,0,0.10);
+  --overlay:rgba(0,0,0,0.5);
+  --modal-handle:rgba(0,0,0,0.12);
+  --toast-bg:#16803C;
+  --pill-bg:rgba(0,0,0,0.06);
 }
+[data-theme="stone"] .metric-card,[data-theme="stone"] .card,[data-theme="stone"] .acct-card{border-color:rgba(0,0,0,0.08)}
+[data-theme="stone"] .data-table th{background:var(--bg-input)}
+[data-theme="stone"] select,[data-theme="stone"] input,[data-theme="stone"] textarea{background:var(--bg-input);color:var(--text-primary);border-color:rgba(0,0,0,0.12)}
+[data-theme="stone"] .filter-select{background:var(--bg-card);color:var(--text-primary);border-color:rgba(0,0,0,0.10)}
+[data-theme="stone"] .search-input{background:var(--bg-input);color:var(--text-primary)}
+[data-theme="stone"] .badge-active{background:#C8E6D4;color:#1B5E35;border-color:#B0D4BC}
+[data-theme="stone"] .badge-restricted{background:#FDE8CC;color:#7A3000;border-color:#F5C898}
+[data-theme="stone"] .badge-gubbed{background:#FAD4D4;color:#8B0000;border-color:#F0B0B0}
+[data-theme="stone"] .badge-closed{background:#E0DDD8;color:#4A4540;border-color:#C8C4BE}
+[data-theme="stone"] .toast{color:#fff}
+[data-theme="slate"] .metric-card,[data-theme="slate"] .card,[data-theme="slate"] .acct-card{border-color:rgba(255,255,255,0.06)}
+[data-theme="slate"] select,[data-theme="slate"] input,[data-theme="slate"] textarea{background:var(--bg-input);color:var(--text-primary);border-color:rgba(255,255,255,0.08)}
+[data-theme="slate"] .filter-select{background:var(--bg-card);color:var(--text-primary)}
+[data-theme="slate"] .search-input{background:var(--bg-input);color:var(--text-primary)}
+
 [data-theme="slate"]{
   --bg-page:#1F1C18;
   --bg-card:#2A2620;
   --bg-input:#35302A;
   --bg-card2:#1F1C18;
+  --bg-input2:#403A30;
+  --bg-risk-red:#7C2D2D;
+  --bg-risk-amber:#7C4D1A;
+  --bg-risk-green:#1A4D30;
   --text-primary:#F5F0E8;
   --text-secondary:#D8D0C0;
   --text-muted:#A09880;
   --text-accent:#34D399;
   --text-neg:#F87171;
+  --text-warn:#FBBF24;
   --border-col:rgba(255,255,255,0.08);
   --border-col2:rgba(255,255,255,0.05);
+  --border-col3:rgba(255,255,255,0.03);
   --tab-bg:#2A2620;
   --tab-border:rgba(255,255,255,0.08);
+  --overlay:rgba(0,0,0,0.7);
+  --modal-handle:rgba(255,255,255,0.08);
+  --toast-bg:#34D399;
+  --pill-bg:rgba(255,255,255,0.06);
 }
 body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg-page);min-height:100%;font-size:14px;color:var(--text-primary);-webkit-tap-highlight-color:transparent}
 .app{display:flex;flex-direction:column;min-height:100svh}
 
 .topbar{background:var(--bg-card);border-bottom:0.5px solid var(--border-col);padding:14px 16px;padding-top:calc(14px + env(safe-area-inset-top));display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
-.logo{font-size:17px;font-weight:500;letter-spacing:-.3px;color:#F0EDE8}
+.logo{font-size:17px;font-weight:500;letter-spacing:-.3px;color:var(--text-primary)}
 .logo span{color:#22C55E}
 .sync-badge{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-secondary);background:var(--bg-input);padding:4px 10px;border-radius:20px;border:0.5px solid rgba(255,255,255,0.08)}
 .sync-dot{width:5px;height:5px;border-radius:50%;background:#22C55E;flex-shrink:0}
@@ -76,13 +121,13 @@ body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg-page);mi
 .profile-bar{background:var(--bg-card);border-bottom:0.5px solid var(--border-col);padding:8px calc(max(16px,(100vw - 680px)/2));display:flex;align-items:center;gap:10px}
 .profile-label{font-size:11px;color:var(--text-muted);flex-shrink:0}
 .profile-toggle{display:flex;gap:4px}
-.profile-btn{padding:5px 12px;border-radius:20px;cursor:pointer;font-size:12px;font-weight:500;color:var(--text-secondary);border:0.5px solid rgba(255,255,255,0.10);background:transparent;transition:all .15s;white-space:nowrap}
+.profile-btn{padding:5px 12px;border-radius:20px;cursor:pointer;font-size:12px;font-weight:500;color:var(--text-secondary);border:0.5px solid var(--border-col);background:transparent;transition:all .15s;white-space:nowrap}
 .profile-btn.active-me{background:#14B8A6;color:#fff;border-color:#14B8A6}
 .profile-btn.active-wife{background:#A78BFA;color:#fff;border-color:#A78BFA}
 .profile-btn.active-bp{background:#60A5FA;color:#fff;border-color:#60A5FA}
 .profile-btn.active-rq{background:#F87171;color:#fff;border-color:#F87171}
 .profile-btn.active-both{background:var(--bg-input);color:var(--text-primary);border-color:var(--text-muted)}
-.profile-btn.active-both{background:var(--bg-input);color:var(--text-primary);border-color:rgba(255,255,255,0.10)}
+.profile-btn.active-both{background:var(--bg-input);color:var(--text-primary);border-color:var(--border-col)}
 
 .content{flex:1;padding:14px 16px;padding-bottom:calc(72px + env(safe-area-inset-bottom));max-width:680px;margin:0 auto;width:100%}
 
@@ -102,12 +147,12 @@ body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg-page);mi
 .metric-label i{font-size:14px}
 .metric-value{font-size:26px;font-weight:500;letter-spacing:-1px;color:var(--text-primary);line-height:1.1}
 .metric-value.pos{color:var(--text-accent)}.metric-value.neg{color:#F87171}.metric-value.warn{color:#BA7517}
-.metric-sub{font-size:11px;color:#9A9590}
+.metric-sub{font-size:11px;color:var(--text-muted)}
 
 .acct-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
 .acct-card{background:var(--bg-card);border:0.5px solid var(--border-col);border-radius:12px;padding:14px}
 .acct-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
-.acct-name{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:500;color:#F0EDE8}
+.acct-name{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:500;color:var(--text-primary)}
 .acct-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
 .dot-me{background:#14B8A6}.dot-wife{background:#A78BFA}.dot-bp{background:#60A5FA}.dot-rq{background:#F87171}
 .acct-pnl{font-size:12px;font-weight:500}
@@ -115,7 +160,7 @@ body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg-page);mi
 .acct-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-top:0.5px solid rgba(255,255,255,0.08)}
 .acct-row-label{font-size:11px;color:var(--text-muted);display:flex;align-items:center;gap:4px}
 .acct-row-label i{font-size:13px}
-.acct-row-val{font-size:12px;font-weight:500;color:#F0EDE8}
+.acct-row-val{font-size:12px;font-weight:500;color:var(--text-primary)}
 
 .list-row{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:0.5px solid rgba(255,255,255,0.05);transition:background .1s}
 .list-row:last-child{border-bottom:none}
@@ -142,13 +187,13 @@ body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg-page);mi
 .pill-arb{background:#5C3800;color:#F0A500}
 .pill-deposit,.pill-withdrawal{background:#0D4F5C;color:#5DCAA5}
 .pill-exchangedeposit,.pill-exchangewithdrawal{background:#0D4F5C;color:#5DCAA5}
-.pill-balanceamendment{background:var(--bg-input);color:#C8C5BF}
+.pill-balanceamendment{background:var(--bg-input);color:var(--text-secondary)}
 
 .badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:500}
 .badge-active{background:#14532D;color:#86EFAC}
 .badge-restricted{background:#5C3800;color:#F0A500}
 .badge-gubbed{background:#791F1F;color:#F09595}
-.badge-closed{background:var(--bg-input);color:#9A9590}
+.badge-closed{background:var(--bg-input);color:var(--text-muted)}
 
 /* ── FORM ── */
 .form-section{margin-bottom:14px}
@@ -158,19 +203,19 @@ body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg-page);mi
 .form-row.triple{grid-template-columns:1fr 1fr 1fr}
 .form-group{display:flex;flex-direction:column;gap:4px}
 .form-group.span2{grid-column:1/-1}
-input[type=text],input[type=number],select,textarea{width:100%;background:var(--bg-input);border:0.5px solid rgba(255,255,255,0.10);border-radius:8px;padding:9px 11px;font-family:system-ui,-apple-system,sans-serif;font-size:13px;color:var(--text-primary);outline:none;-webkit-appearance:none;appearance:none;transition:border-color .15s}
+input[type=text],input[type=number],select,textarea{width:100%;background:var(--bg-input);border:0.5px solid var(--border-col);border-radius:8px;padding:9px 11px;font-family:system-ui,-apple-system,sans-serif;font-size:13px;color:var(--text-primary);outline:none;-webkit-appearance:none;appearance:none;transition:border-color .15s}
 input:focus,select:focus,textarea:focus{border-color:rgba(255,255,255,0.25);background:#575A65}
 input#f-pnl{border-color:#22C55E;font-size:15px;font-weight:500;background:#2A3D35}
 input#f-pnl:focus{background:#2E4A3A}
 input#f-date{font-size:12px;padding:7px 10px}
 textarea{resize:vertical;min-height:60px}
-select option{background:var(--bg-input);color:#F0EDE8}
+select option{background:var(--bg-input);color:var(--text-primary)}
 
 /* ── TYPE GROUPS ── */
 .type-groups{display:flex;flex-direction:column;gap:8px}
 .type-group-label{font-size:10px;font-weight:500;color:var(--text-muted);letter-spacing:.3px;text-transform:uppercase;margin-bottom:5px}
 .type-pills{display:flex;flex-wrap:wrap;gap:5px}
-.type-pill{padding:5px 12px;border-radius:20px;font-size:12px;font-weight:500;cursor:pointer;border:0.5px solid rgba(255,255,255,0.10);background:var(--bg-input);color:var(--text-secondary);transition:all .15s}
+.type-pill{padding:5px 12px;border-radius:20px;font-size:12px;font-weight:500;cursor:pointer;border:0.5px solid var(--border-col);background:var(--bg-input);color:var(--text-secondary);transition:all .15s}
 .type-pill.sel{border-width:1px}
 .sel-qualifier{background:var(--bg-input);color:#FBBF24;border-color:#FBBF24}
 .sel-freebet{background:var(--bg-input);color:#34D399;border-color:#34D399}
@@ -187,7 +232,7 @@ select option{background:var(--bg-input);color:#F0EDE8}
 .sel-balanceamendment{background:var(--bg-input);color:var(--text-muted);border-color:var(--text-muted)}
 
 .acct-selector{display:flex;gap:5px;flex-wrap:wrap}
-.acct-sel-btn{flex:1;min-width:60px;padding:7px 5px;border-radius:8px;border:0.5px solid rgba(255,255,255,0.10);background:var(--bg-input);color:var(--text-secondary);font-family:system-ui,-apple-system,sans-serif;font-size:12px;font-weight:500;cursor:pointer;text-align:center;transition:all .15s}
+.acct-sel-btn{flex:1;min-width:60px;padding:7px 5px;border-radius:8px;border:0.5px solid var(--border-col);background:var(--bg-input);color:var(--text-secondary);font-family:system-ui,-apple-system,sans-serif;font-size:12px;font-weight:500;cursor:pointer;text-align:center;transition:all .15s}
 
 
 .btn{padding:11px 20px;border-radius:8px;font-family:system-ui,-apple-system,sans-serif;font-size:14px;font-weight:500;cursor:pointer;border:0.5px solid var(--border-col);background:var(--bg-input);color:var(--text-primary);transition:all .15s;display:inline-flex;align-items:center;justify-content:center;gap:6px}
@@ -197,7 +242,7 @@ select option{background:var(--bg-input);color:#F0EDE8}
 .btn-full{width:100%;padding:13px}
 .btn-danger{background:#791F1F;color:#F09595;border-color:#A32D2D}
 .btn-ghost{background:var(--bg-input);color:var(--text-secondary);border-color:rgba(255,255,255,0.09)}
-.btn-sm{padding:4px 10px;font-size:11px;border-radius:6px;font-family:system-ui,-apple-system,sans-serif;font-weight:500;cursor:pointer;border:0.5px solid rgba(255,255,255,0.10);background:var(--bg-input);color:var(--text-secondary);transition:all .15s}
+.btn-sm{padding:4px 10px;font-size:11px;border-radius:6px;font-family:system-ui,-apple-system,sans-serif;font-weight:500;cursor:pointer;border:0.5px solid var(--border-col);background:var(--bg-input);color:var(--text-secondary);transition:all .15s}
 .btn-sm-edit{background:var(--bg-input);color:var(--text-accent);border-color:var(--text-accent)}
 .btn-sm-dupe{background:var(--bg-input);color:#60A5FA;border-color:#60A5FA}
 .btn-sm-danger{background:#791F1F;color:#F09595;border-color:#A32D2D}
@@ -207,9 +252,9 @@ select option{background:var(--bg-input);color:#F0EDE8}
 .table-wrap{overflow:auto;border-radius:12px;border:0.5px solid var(--border-col);margin-bottom:12px;background:var(--bg-card);-webkit-overflow-scrolling:touch}
 .data-table{width:100%;border-collapse:collapse;min-width:460px}
 .data-table th{padding:8px 12px;text-align:left;font-size:10px;font-weight:500;letter-spacing:.3px;text-transform:uppercase;color:var(--text-muted);border-bottom:0.5px solid var(--border-col);background:var(--bg-input);white-space:nowrap;position:sticky;top:0}
-.data-table td{padding:9px 12px;font-size:12px;border-bottom:0.5px solid rgba(255,255,255,0.04);vertical-align:middle;color:var(--text-primary)}
+.data-table td{padding:9px 12px;font-size:12px;border-bottom:0.5px solid var(--border-col2);vertical-align:middle;color:var(--text-primary)}
 .data-table tr:last-child td{border-bottom:none}
-.data-table tr:hover td{background:#4A4D58}
+.data-table tr:hover td{background:var(--bg-input)}
 .pos{color:var(--text-accent);font-weight:500}.neg{color:#F87171;font-weight:500}.muted{color:var(--text-muted)}
 
 .pending-card{background:var(--bg-card);border:0.5px solid var(--border-col);border-radius:12px;padding:14px;margin-bottom:10px}
@@ -218,7 +263,7 @@ select option{background:var(--bg-input);color:#F0EDE8}
 .pending-info{background:var(--bg-input);border-radius:8px;padding:10px 12px;display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
 .pinfo-item{display:flex;flex-direction:column;gap:2px}
 .pinfo-label{font-size:10px;color:var(--text-muted);font-weight:500;text-transform:uppercase;letter-spacing:.3px}
-.pinfo-val{font-size:13px;font-weight:500;color:#F0EDE8}
+.pinfo-val{font-size:13px;font-weight:500;color:var(--text-primary)}
 .pinfo-val.pos{color:var(--text-accent)}.pinfo-val.neg{color:#F87171}
 
 .month-wrap{display:flex;align-items:flex-end;gap:4px;overflow-x:auto;padding:6px 2px 2px}
@@ -232,19 +277,19 @@ select option{background:var(--bg-input);color:#F0EDE8}
 .flow-preview{background:rgba(34,197,94,0.1);border:0.5px solid rgba(34,197,94,0.3);border-radius:8px;padding:9px 12px;font-size:12px;color:var(--text-accent);display:flex;align-items:center;gap:8px;margin-bottom:10px}
 
 .dest-selector{display:flex;gap:5px;flex-wrap:wrap}
-.dest-btn{flex:1;min-width:55px;padding:6px 5px;border-radius:8px;border:0.5px solid rgba(255,255,255,0.10);background:var(--bg-input);color:var(--text-secondary);font-family:system-ui,-apple-system,sans-serif;font-size:11px;font-weight:500;cursor:pointer;text-align:center;transition:all .15s}
+.dest-btn{flex:1;min-width:55px;padding:6px 5px;border-radius:8px;border:0.5px solid var(--border-col);background:var(--bg-input);color:var(--text-secondary);font-family:system-ui,-apple-system,sans-serif;font-size:11px;font-weight:500;cursor:pointer;text-align:center;transition:all .15s}
 .dest-btn.active{background:var(--text-accent);color:#fff;border-color:var(--text-accent)}
 
-.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;display:flex;align-items:flex-end;justify-content:center}
+.modal-bg{position:fixed;inset:0;background:var(--overlay);z-index:200;display:flex;align-items:flex-end;justify-content:center}
 @media(min-width:600px){.modal-bg{align-items:center}}
-.modal{background:var(--bg-card);border-radius:16px 16px 0 0;border:0.5px solid rgba(255,255,255,0.10);padding:20px;padding-bottom:calc(20px + env(safe-area-inset-bottom));width:100%;max-width:500px}
+.modal{background:var(--bg-card);border-radius:16px 16px 0 0;border:0.5px solid var(--border-col);padding:20px;padding-bottom:calc(20px + env(safe-area-inset-bottom));width:100%;max-width:500px}
 @media(min-width:600px){.modal{border-radius:14px;padding:24px}}
-.modal-handle{width:32px;height:3px;background:rgba(255,255,255,0.09);border-radius:2px;margin:0 auto 16px}
-.modal-title{font-size:16px;font-weight:500;margin-bottom:4px;color:#F0EDE8}
+.modal-handle{width:32px;height:3px;background:var(--border-col);border-radius:2px;margin:0 auto 16px}
+.modal-title{font-size:16px;font-weight:500;margin-bottom:4px;color:var(--text-primary)}
 .modal-sub{font-size:12px;color:var(--text-muted);margin-bottom:16px}
 .modal-actions{display:flex;gap:8px;margin-top:16px}
 
-.toast{position:fixed;top:50%;left:50%;transform:translateX(-50%) translateY(-50%) scale(0.85);background:#22C55E;border-radius:12px;padding:14px 24px;font-size:15px;font-weight:600;color:#fff;z-index:999;opacity:0;transition:all .3s cubic-bezier(.34,1.56,.64,1);pointer-events:none;white-space:nowrap;max-width:90vw;box-shadow:0 4px 24px rgba(0,0,0,0.4);display:flex;align-items:center;gap:8px}
+.toast{position:fixed;top:50%;left:50%;transform:translateX(-50%) translateY(-50%) scale(0.85);background:var(--toast-bg);border-radius:12px;padding:14px 24px;font-size:15px;font-weight:600;color:#fff;z-index:999;opacity:0;transition:all .3s cubic-bezier(.34,1.56,.64,1);pointer-events:none;white-space:nowrap;max-width:90vw;box-shadow:0 4px 24px rgba(0,0,0,0.4);display:flex;align-items:center;gap:8px}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(-50%) scale(1)}
 
 .loading{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:50vh;gap:12px;color:var(--text-muted);font-size:13px}
@@ -252,9 +297,9 @@ select option{background:var(--bg-input);color:#F0EDE8}
 @keyframes spin{to{transform:rotate(360deg)}}
 .empty{padding:30px 20px;text-align:center;color:var(--text-muted);font-size:13px}
 .search-input{width:100%;background:var(--bg-input);border:none;border-bottom:0.5px solid var(--border-col);padding:10px 16px;font-family:system-ui,-apple-system,sans-serif;font-size:14px;color:var(--text-primary);outline:none}
-.search-input::placeholder{color:#9A9590}
+.search-input::placeholder{color:var(--text-muted)}
 .filter-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
-.filter-select{background:var(--bg-card);border:0.5px solid rgba(255,255,255,0.10);border-radius:8px;padding:7px 10px;font-family:system-ui,-apple-system,sans-serif;font-size:12px;color:var(--text-primary);outline:none;-webkit-appearance:none}
+.filter-select{background:var(--bg-card);border:0.5px solid var(--border-col);border-radius:8px;padding:7px 10px;font-family:system-ui,-apple-system,sans-serif;font-size:12px;color:var(--text-primary);outline:none;-webkit-appearance:none}
 </style>
 </head>
 <body>
@@ -264,7 +309,7 @@ select option{background:var(--bg-input);color:#F0EDE8}
   <div class="topbar">
     <div class="logo">MB<span>World</span></div>
     <div style="display:flex;align-items:center;gap:8px">
-      <div style="display:flex;align-items:center;gap:2px;background:rgba(255,255,255,0.07);border-radius:16px;padding:3px">
+      <div style="display:flex;align-items:center;gap:2px;background:var(--border-col);border-radius:16px;padding:3px">
         <button id="theme-btn-dark" onclick="setTheme('dark')" title="Dark" style="border:none;cursor:pointer;padding:3px 9px;border-radius:12px;background:rgba(255,255,255,0.15);font-family:system-ui;font-size:10px;font-weight:500;color:var(--text-primary);transition:background .2s">Dark</button>
         <button id="theme-btn-stone" onclick="setTheme('stone')" title="Warm Cream" style="border:none;cursor:pointer;padding:3px 9px;border-radius:12px;background:transparent;font-family:system-ui;font-size:10px;font-weight:500;color:var(--text-primary);transition:background .2s">Cream</button>
         <button id="theme-btn-slate" onclick="setTheme('slate')" title="Charcoal Warm" style="border:none;cursor:pointer;padding:3px 9px;border-radius:12px;background:transparent;font-family:system-ui;font-size:10px;font-weight:500;color:var(--text-primary);transition:background .2s">Warm</button>
@@ -764,9 +809,10 @@ function casinoPnl(p){
 function sportsPnl(p){return(state[p].transactions||[]).filter(t=>t.type!=='Balance Amendment'&&t.result!=='Pending').reduce((a,t)=>a+(t.pnl||0),0);}
 
 
+function getCssVar(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
+
 function getTypeColor(t){
-  const style=getComputedStyle(document.documentElement);
-  return style.getPropertyValue('--bg-input').trim()||'#3D4349';
+  return getCssVar('--bg-input')||'#3D4349';
 }
 function getTypeTextColor(t){
   const map={Boost:'#60A5FA','Free Bet':'#34D399',Qualifier:'#FBBF24',Mug:'#9A9590','Extra Place':'#C084FC','2Up':'#F87171',MBAL:'#FB923C','Cash Back':'#A78BFA','Cash Out':'#94A3B8',Arb:'#F472B6'};
@@ -792,7 +838,7 @@ function statusBadge(s){
 function showToast(msg,type='success'){
   const t=document.getElementById('toast');
   t.innerHTML=`<span style="font-size:18px">${type==='success'?'✓':type==='error'?'✗':'ℹ'}</span> ${msg}`;
-  t.style.background=type==='success'?'#22C55E':type==='error'?'#F87171':'#252629';
+  t.style.background=type==='success'?'#22C55E':type==='error'?'#F87171':getCssVar('--bg-card2')||'#2C3136';
   t.classList.add('show');
   setTimeout(()=>t.classList.remove('show'),3000);
 }
@@ -947,11 +993,11 @@ function renderPerformanceCard(){
   const bestBookie=Object.entries(bookiePnl).sort((a,b)=>b[1]-a[1])[0];
   return '<div class="card" style="margin-bottom:12px">'
     +'<div class="card-header"><span class="card-title">Performance</span></div>'
-    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:rgba(255,255,255,0.06);border-radius:0 0 10px 10px;overflow:hidden">'
-    +'<div style="background:#343A40;padding:12px"><div style="font-size:10px;color:var(--text-muted);margin-bottom:3px">Win rate</div><div style="font-size:18px;font-weight:500;color:var(--text-primary)">'+winRate+'%</div><div style="font-size:10px;color:var(--text-muted)">'+won+' of '+total+' bets</div></div>'
-    +'<div style="background:#343A40;padding:12px"><div style="font-size:10px;color:var(--text-muted);margin-bottom:3px">Avg P&L / bet</div><div style="font-size:18px;font-weight:500;color:'+(avgPnl>=0?'#22C55E':'#F87171')+'">'+fmtS(avgPnl)+'</div><div style="font-size:10px;color:var(--text-muted)">all settled bets</div></div>'
-    +'<div style="background:#343A40;padding:12px"><div style="font-size:10px;color:var(--text-muted);margin-bottom:3px">This month</div><div style="font-size:18px;font-weight:500;color:'+(monthPnl>=0?'#22C55E':'#F87171')+'">'+fmtS(monthPnl)+'</div><div style="font-size:10px;color:var(--text-muted)">'+thisMonth.length+' bets</div></div>'
-    +'<div style="background:#343A40;padding:12px"><div style="font-size:10px;color:var(--text-muted);margin-bottom:3px">Best bookie</div><div style="font-size:13px;font-weight:500;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(bestBookie?bestBookie[0]:'—')+'</div><div style="font-size:10px;color:'+(bestBookie&&bestBookie[1]>=0?'#22C55E':'#F87171')+'">'+( bestBookie?fmtS(bestBookie[1]):'')+'</div></div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border-col);border-radius:0 0 10px 10px;overflow:hidden">'
+    +'<div style="background:var(--bg-input);padding:12px"><div style="font-size:10px;color:var(--text-muted);margin-bottom:3px">Win rate</div><div style="font-size:18px;font-weight:500;color:var(--text-primary)">'+winRate+'%</div><div style="font-size:10px;color:var(--text-muted)">'+won+' of '+total+' bets</div></div>'
+    +'<div style="background:var(--bg-input);padding:12px"><div style="font-size:10px;color:var(--text-muted);margin-bottom:3px">Avg P&L / bet</div><div style="font-size:18px;font-weight:500;color:'+(avgPnl>=0?'#22C55E':'#F87171')+'">'+fmtS(avgPnl)+'</div><div style="font-size:10px;color:var(--text-muted)">all settled bets</div></div>'
+    +'<div style="background:var(--bg-input);padding:12px"><div style="font-size:10px;color:var(--text-muted);margin-bottom:3px">This month</div><div style="font-size:18px;font-weight:500;color:'+(monthPnl>=0?'#22C55E':'#F87171')+'">'+fmtS(monthPnl)+'</div><div style="font-size:10px;color:var(--text-muted)">'+thisMonth.length+' bets</div></div>'
+    +'<div style="background:var(--bg-input);padding:12px"><div style="font-size:10px;color:var(--text-muted);margin-bottom:3px">Best bookie</div><div style="font-size:13px;font-weight:500;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(bestBookie?bestBookie[0]:'—')+'</div><div style="font-size:10px;color:'+(bestBookie&&bestBookie[1]>=0?'#22C55E':'#F87171')+'">'+( bestBookie?fmtS(bestBookie[1]):'')+'</div></div>'
     +'</div></div>';
 }
 
@@ -971,7 +1017,7 @@ function renderDashboard(){
     <div class="metric-card" style="grid-column:span 2">
       <div class="metric-label" style="display:flex;align-items:center;justify-content:space-between">
         <span>Combined P&L
-        ${!_serverLoaded?'<span style="font-size:9px;color:#BA7517;background:rgba(186,117,23,0.15);padding:2px 7px;border-radius:10px;margin-left:6px">Updating...</span>':''}</span>
+        ${!_serverLoaded?'<span style="font-size:9px;color:var(--text-warn);background:rgba(186,117,23,0.15);padding:2px 7px;border-radius:10px;margin-left:6px">Updating...</span>':''}</span>
         <button onclick="toggleDashVisibility()" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:2px 4px" title="${_dashHidden?'Show figures':'Hide figures'}"><i id="dash-vis-icon" class="ti ${_dashHidden?'ti-eye':'ti-eye-off'}"></i></button>
       </div>
       <div class="metric-value ${combinedPnl>=0?'pos':'neg'}" data-sensitive="${fmtS(combinedPnl)}">${_dashHidden?'••••••':fmtS(combinedPnl)}</div>
@@ -1020,7 +1066,7 @@ function renderDashboard(){
       +'<div class="verify-strip-inner" style="display:flex;gap:10px">'
       +(allVerified?'<span style="font-size:11px;color:#22C55E">✓ All '+ab.length+' verified</span>':'')
       +(recent&&!allVerified?'<span style="font-size:11px;color:#22C55E">✓ '+recent+'</span>':'')
-      +(overdue?'<span style="font-size:11px;color:#F0A500">⚠ '+overdue+' overdue</span>':'')
+      +(overdue?'<span style="font-size:11px;color:var(--text-warn)">⚠ '+overdue+' overdue</span>':'')
       +(never?'<span style="font-size:11px;color:#F87171">● '+never+' unverified</span>':'')
       +'</div></div>';
     }catch(e){return '';}
@@ -1036,18 +1082,18 @@ function renderFreeBetsPanel(){
   if(all.length===0)return '';
   return `<div class="card" data-panel="freebets" style="margin-top:12px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-      <div style="font-size:13px;font-weight:500;color:#F0F0F5">Free Bets</div>
-      ${pending.length>0?`<span style="font-size:11px;background:#0F6E56;color:#9FE1CB;padding:3px 8px;border-radius:20px">${pending.length} pending</span>`:''}
+      <div style="font-size:13px;font-weight:500;color:var(--text-primary)">Free Bets</div>
+      ${pending.length>0?`<span style="font-size:11px;background:rgba(34,197,94,0.15);color:var(--text-accent);padding:3px 8px;border-radius:20px">${pending.length} pending</span>`:''}
     </div>
     ${pending.length>0?`
     <div style="margin-bottom:8px">
       ${pending.map(fb=>`
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:0.5px solid rgba(255,255,255,0.08)">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:0.5px solid var(--border-col)">
         <div>
-          <div style="font-size:13px;color:#F0F0F5">${fb.bookie}</div>
+          <div style="font-size:13px;color:var(--text-primary)">${fb.bookie}</div>
           <div style="font-size:11px;color:var(--text-muted)">${profileLabel(fb._pr)} · ${fb.date}</div>
         </div>
-        <button onclick="markFreeBetUsed('${fb._pr}','${fb.id}')" style="font-size:11px;padding:4px 10px;border-radius:6px;border:0.5px solid rgba(255,255,255,0.2);background:var(--bg-input);color:#F0F0F5;cursor:pointer">Mark used</button>
+        <button onclick="markFreeBetUsed('${fb._pr}','${fb.id}')" style="font-size:11px;padding:4px 10px;border-radius:6px;border:0.5px solid rgba(255,255,255,0.2);background:var(--bg-input);color:var(--text-primary);cursor:pointer">Mark used</button>
       </div>`).join('')}
     </div>`:''}
     ${used.length>0?`
@@ -1055,12 +1101,12 @@ function renderFreeBetsPanel(){
       <summary style="font-size:11px;color:var(--text-muted);cursor:pointer;list-style:none">▸ ${used.length} used</summary>
       <div style="margin-top:6px">
         ${used.map(fb=>`
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:0.5px solid rgba(255,255,255,0.06)">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:0.5px solid var(--border-col2)">
           <div>
-            <div style="font-size:12px;color:#888780;text-decoration:line-through">${fb.bookie}</div>
-            <div style="font-size:11px;color:#888780">${profileLabel(fb._pr)} · ${fb.date}</div>
+            <div style="font-size:12px;color:var(--text-muted);text-decoration:line-through">${fb.bookie}</div>
+            <div style="font-size:11px;color:var(--text-muted)">${profileLabel(fb._pr)} · ${fb.date}</div>
           </div>
-          <span style="font-size:10px;color:#888780">Used</span>
+          <span style="font-size:10px;color:var(--text-muted)">Used</span>
         </div>`).join('')}
       </div>
     </details>`:''}
@@ -1095,9 +1141,9 @@ function renderPending(){
         <span class="${pillClass(t.type)}">${t.type}</span>${acctPill(t._acct)}
         <span style="font-size:11px;color:var(--text-secondary)">${t.date}</span>
         <span style="font-size:11px;color:var(--text-secondary)">${t.bookie||'—'}</span>
-        ${t.exchange?`<span style="font-size:11px;color:var(--text-muted);background:rgba(255,255,255,0.06);padding:2px 6px;border-radius:4px">${t.exchange}</span>`:''}
-        ${isFB?'<span class="badge" style="background:#EAF3DE;color:#3B6D11">SNR</span>':''}
-        ${t.underlay?'<span class="badge" style="background:#0D4F5C;color:#5DCAA5;border:0.5px solid rgba(93,202,165,0.3)">U</span>':''}
+        ${t.exchange?`<span style="font-size:11px;color:var(--text-muted);background:var(--border-col2);padding:2px 6px;border-radius:4px">${t.exchange}</span>`:''}
+        ${isFB?'<span class="badge" style="background:rgba(34,197,94,0.1);color:var(--text-accent)">SNR</span>':''}
+        ${t.underlay?'<span class="badge" style="background:rgba(34,197,94,0.1);color:var(--text-accent);border:0.5px solid rgba(93,202,165,0.3)">U</span>':''}
       </div>
       <div class="pending-info">
         ${t.bstake?`<div class="pinfo-item"><span class="pinfo-label">Back</span><span class="pinfo-val">£${t.bstake} @ ${t.bodds}</span></div>`:''}
@@ -1259,7 +1305,7 @@ function editPnl(acct,id){
       </div>
       <div style="margin-bottom:4px">
         <div class="form-label">New P&L (£)</div>
-        <input type="number" id="modal-pnl" step="0.01" value="${(tx.pnl||0).toFixed(2)}" inputmode="decimal" style="font-size:20px;font-weight:500;border-color:#22C55E;background:#f0faf5"/>
+        <input type="number" id="modal-pnl" step="0.01" value="${(tx.pnl||0).toFixed(2)}" inputmode="decimal" style="font-size:20px;font-weight:500;border-color:var(--text-accent);background:var(--bg-input)"/>
       </div>
       <div class="modal-actions">
         <button class="btn btn-primary" style="flex:1" onclick="confirmPnlEdit('${acct}',${id})">Save</button>
@@ -1318,11 +1364,11 @@ function renderAdd(prefill){
       <div class="form-section">
         <div class="form-label">Type</div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">
-          ${topTypes.map(t=>`<button data-toptype="${t}" onclick="selectBetType('${t}')" style="flex:1;padding:10px 6px;border-radius:8px;border:0.5px solid ${selectedBetType===t?'transparent':'rgba(255,255,255,0.10)'};background:${selectedBetType===t?getTypeColor(t):'#252629'};color:${selectedBetType===t?getTypeTextColor(t):'#C8C5BF'};font-family:system-ui,-apple-system,sans-serif;font-size:13px;font-weight:500;cursor:pointer;transition:all .15s">${t}</button>`).join('')}
+          ${topTypes.map(t=>`<button data-toptype="${t}" onclick="selectBetType('${t}')" style="flex:1;padding:10px 6px;border-radius:8px;border:0.5px solid ${selectedBetType===t?'transparent':'rgba(255,255,255,0.10)'};background:${selectedBetType===t?getTypeColor(t):getCssVar('--bg-card2')};color:${selectedBetType===t?getTypeTextColor(t):'#C8C5BF'};font-family:system-ui,-apple-system,sans-serif;font-size:13px;font-weight:500;cursor:pointer;transition:all .15s">${t}</button>`).join('')}
         </div>
         <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center">
           ${(showMoreTypes||isMoreSel||['Deposit','Withdrawal','Exchange Deposit','Exchange Withdrawal','Balance Amendment'].includes(selectedBetType))?[...moreTypes,'Deposit','Withdrawal','Exchange Deposit','Exchange Withdrawal','Balance Amendment'].map(t=>`<div class="type-pill${selectedBetType===t?' sel sel-'+t.toLowerCase().replace(/\s/g,''):''}" data-type="${t}" onclick="selectBetType('${t}')">${t}</div>`).join(''):''}
-          <div class="type-pill${showMoreTypes?' sel':''}" onclick="toggleMoreTypes()" style="${showMoreTypes?'background:#575A65;color:#B4B2A9;border-color:var(--text-muted)':''}">${showMoreTypes?'Less ▲':'More ▼'}</div>
+          <div class="type-pill${showMoreTypes?' sel':''}" onclick="toggleMoreTypes()" style="${showMoreTypes?'background:var(--bg-input);color:var(--text-secondary);border-color:var(--text-muted)':''}">${showMoreTypes?'Less ▲':'More ▼'}</div>
         </div>
       </div>
 
@@ -1333,7 +1379,7 @@ function renderAdd(prefill){
             <div style="position:relative">
               <input type="text" id="f-bookie-search" placeholder="Search…" autocomplete="off" oninput="filterBookieDropdown(this.value)" onfocus="showBookieDropdown()" value="${pf.bookie||''}" style="padding-right:10px"/>
               <input type="hidden" id="f-bookie" value="${pf.bookie||''}"/>
-              <div id="bookie-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:50;background:var(--bg-input);border:0.5px solid rgba(255,255,255,0.10);border-radius:8px;margin-top:3px;max-height:200px;overflow-y:auto;-webkit-overflow-scrolling:touch"></div>
+              <div id="bookie-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:50;background:var(--bg-input);border:0.5px solid var(--border-col);border-radius:8px;margin-top:3px;max-height:200px;overflow-y:auto;-webkit-overflow-scrolling:touch"></div>
             </div>
           </div>
           <div class="form-group" id="fg-exchange"><div class="form-label">Exchange</div><select id="f-exchange"><option value="">—</option>${exchOpts}</select></div>
@@ -1341,10 +1387,10 @@ function renderAdd(prefill){
 
         ${recentBookies.length?`<div id="fg-recent-bookies" style="margin-bottom:8px">
           <div class="form-label">Recent</div>
-          <div style="display:flex;gap:5px;flex-wrap:wrap">${recentBookies.map(b=>`<button onclick="selectBookie('${b.replace(/'/g,"\\'")}');document.getElementById('f-bookie-search').value='${b.replace(/'/g,"\\'")}'" style="padding:4px 10px;border-radius:20px;border:0.5px solid var(--border-col);background:var(--bg-input);color:#B4B2A9;font-family:system-ui,-apple-system,sans-serif;font-size:11px;cursor:pointer;white-space:nowrap">${b}</button>`).join('')}</div>
+          <div style="display:flex;gap:5px;flex-wrap:wrap">${recentBookies.map(b=>`<button onclick="selectBookie('${b.replace(/'/g,"\\'")}');document.getElementById('f-bookie-search').value='${b.replace(/'/g,"\\'")}'" style="padding:4px 10px;border-radius:20px;border:0.5px solid var(--border-col);background:var(--bg-input);color:var(--text-secondary);font-family:system-ui,-apple-system,sans-serif;font-size:11px;cursor:pointer;white-space:nowrap">${b}</button>`).join('')}</div>
         </div>`:''}
 
-        <div class="form-row single" id="fg-event"><div class="form-group"><div class="form-label" style="color:var(--text-muted)">Event <span style="font-size:9px;text-transform:none;letter-spacing:0">(optional)</span></div><input type="text" id="f-event" placeholder="e.g. Arsenal vs Chelsea" value="${pf.event||''}" style="font-size:12px;padding:7px 10px;background:#4A4D58;border-color:rgba(255,255,255,0.09)"/></div></div>
+        <div class="form-row single" id="fg-event"><div class="form-group"><div class="form-label" style="color:var(--text-muted)">Event <span style="font-size:9px;text-transform:none;letter-spacing:0">(optional)</span></div><input type="text" id="f-event" placeholder="e.g. Arsenal vs Chelsea" value="${pf.event||''}" style="font-size:12px;padding:7px 10px;background:var(--bg-input);border-color:rgba(255,255,255,0.09)"/></div></div>
 
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px" id="fg-stake-odds">
           <div class="form-group" id="fg-bstake"><div class="form-label">Stake</div><input type="number" id="f-bstake" placeholder="0.00" step="0.01" inputmode="decimal" value="${pf.bstake||''}" oninput="autoCalcUnderlay()" style="padding:7px 8px"/></div>
@@ -1405,14 +1451,14 @@ function renderAdd(prefill){
           <div class="form-group" id="fg-amend-new" style="display:none"><div class="form-label">New balance (£)</div><input type="number" id="f-amend-new" placeholder="0.00" step="0.01" inputmode="decimal"/></div>
         </div>
         <div class="form-row single" id="fg-amend-reason" style="display:none"><div class="form-group"><div class="form-label">Reason</div><input type="text" id="f-amend-reason" placeholder="e.g. Casino offer, correction…"/></div></div>
-        <div class="form-row single" id="fg-notes"><div class="form-group"><div class="form-label" style="color:var(--text-muted)">Notes <span style="font-size:9px;text-transform:none;letter-spacing:0">(optional)</span></div><input type="text" id="f-notes" placeholder="Any extra details…" value="${pf.notes||''}" style="font-size:12px;padding:7px 10px;background:#4A4D58;border-color:rgba(255,255,255,0.09)"/></div></div>
+        <div class="form-row single" id="fg-notes"><div class="form-group"><div class="form-label" style="color:var(--text-muted)">Notes <span style="font-size:9px;text-transform:none;letter-spacing:0">(optional)</span></div><input type="text" id="f-notes" placeholder="Any extra details…" value="${pf.notes||''}" style="font-size:12px;padding:7px 10px;background:var(--bg-input);border-color:rgba(255,255,255,0.09)"/></div></div>
       </div>
 
       <div id="flow-preview" style="display:none" class="flow-preview"><i class="ti ti-arrows-exchange" aria-hidden="true"></i><span id="flow-text"></span></div>
       <div id="form-msg" style="margin-bottom:6px;font-size:12px;text-align:center;color:#F87171"></div>
     </div>
   </div>
-  <div style="position:fixed;bottom:calc(58px + env(safe-area-inset-bottom));left:0;right:0;padding:10px 16px;background:#343A40;border-top:0.5px solid rgba(255,255,255,0.08);display:flex;gap:8px;z-index:90;max-width:680px;margin:0 auto">
+  <div style="position:fixed;bottom:calc(58px + env(safe-area-inset-bottom));left:0;right:0;padding:10px 16px;background:var(--bg-card2);border-top:0.5px solid var(--border-col);display:flex;gap:8px;z-index:90;max-width:680px;margin:0 auto">
     <button class="btn btn-ghost" onclick="resetForm()" style="width:72px;flex-shrink:0">Clear</button>
     <button class="btn btn-primary btn-full" onclick="submitTx()"><i class="ti ti-check" aria-hidden="true"></i> Save trade</button>
   </div>`;
@@ -1521,7 +1567,7 @@ function setStrategy(s){
   if(pnl){
     if(isUnderlay){
       pnl.setAttribute('readonly','readonly');
-      pnl.style.background='#252830';
+      pnl.style.background=getCssVar('--bg-card2')||'#252630';
       pnl.style.color='#22C55E';
     } else {
       pnl.removeAttribute('readonly');
@@ -1555,7 +1601,7 @@ function selectBetType(t){
   // Update top type buttons
   document.querySelectorAll('[data-toptype]').forEach(el=>{
     const isSelected=el.dataset.toptype===t;
-    el.style.background=isSelected?getTypeColor(t):'#252629';
+    el.style.background=isSelected?getTypeColor(t):getCssVar('--bg-card2')||'#252629';
     el.style.color=isSelected?getTypeTextColor(t):'#C8C5BF';
     el.style.borderColor=isSelected?'transparent':'rgba(255,255,255,0.10)';
   });
@@ -2036,7 +2082,7 @@ function updateDashboardStrip(){
   if(inner){
     inner.innerHTML=(allVerified?'<span style="font-size:11px;color:#22C55E">✓ All '+ab.length+' verified</span>':'')
       +(recent&&!allVerified?'<span style="font-size:11px;color:#22C55E">✓ '+recent+'</span>':'')
-      +(overdue?'<span style="font-size:11px;color:#F0A500;margin-left:10px">⚠ '+overdue+' overdue</span>':'')
+      +(overdue?'<span style="font-size:11px;color:var(--text-warn);margin-left:10px">⚠ '+overdue+' overdue</span>':'')
       +(never?'<span style="font-size:11px;color:#F87171;margin-left:10px">● '+never+' unverified</span>':'');
   }
 }
@@ -2068,7 +2114,7 @@ function renderBookieList(acct,search,statusFilter){
           ${bk.notes?`<div style="font-size:11px;color:var(--text-secondary);margin-top:2px">${bk.notes}</div>`:''}
         </div>
         <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
-          <div style="font-size:13px;font-weight:500;color:${(bk.bal||0)>0?'#22C55E':(bk.bal||0)<0?'#F87171':'#C8C5BF'}">${fmt(bk.bal||0)}</div>
+          <div style="font-size:13px;font-weight:500;color:${(bk.bal||0)>0?'#22C55E':(bk.bal||0)<0?'#F87171':getComputedStyle(document.documentElement).getPropertyValue('--text-secondary').trim()||'#C8C5BF'}">${fmt(bk.bal||0)}</div>
           ${bk.status==='Active'?`<button class="btn-sm" onclick="toggleVerifyRow('${acct}','${b}')">Verify</button>`:''}
           <button class="btn-sm" onclick="showBookieModal('${acct}','${b}')">Edit</button>
         </div>
@@ -2158,7 +2204,7 @@ function getBookieList(){
 function renderBookieDropdownItems(items){
   const dd=document.getElementById('bookie-dropdown');if(!dd)return;
   if(!items.length){dd.innerHTML='<div style="padding:10px 12px;font-size:12px;color:var(--text-muted)">No results</div>';return;}
-  dd.innerHTML=items.slice(0,20).map(b=>`<div onclick="selectBookie('${b.replace(/'/g,"\\'")}') " style="padding:10px 12px;font-size:13px;color:var(--text-primary);cursor:pointer;border-bottom:0.5px solid rgba(255,255,255,0.05)" onmouseenter="this.style.background='#2e2f33'" onmouseleave="this.style.background=''">${b}</div>`).join('');
+  dd.innerHTML=items.slice(0,20).map(b=>`<div onclick="selectBookie('${b.replace(/'/g,"\\'")}') " style="padding:10px 12px;font-size:13px;color:var(--text-primary);cursor:pointer;border-bottom:0.5px solid var(--border-col2)" onmouseenter="this.style.background=getCssVar('--bg-card2')" onmouseleave="this.style.background=''">${b}</div>`).join('');
 }
 
 function showBookieDropdown(){
@@ -2297,39 +2343,39 @@ function renderRisk(){
 
   return`
   <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px">
-    <div class="metric-card" style="background:#791F1F">
-      <div class="metric-label" style="color:#F09595"><i class="ti ti-shield-x" aria-hidden="true"></i>High risk</div>
-      <div class="metric-value" style="color:#F09595">${red.length}</div>
-      <div class="metric-sub" style="color:#F09595">bookies</div>
+    <div class="metric-card" style="background:var(--bg-risk-red)">
+      <div class="metric-label" style="color:var(--text-neg)"><i class="ti ti-shield-x" aria-hidden="true"></i>High risk</div>
+      <div class="metric-value" style="color:#F87171">${red.length}</div>
+      <div class="metric-sub" style="color:#F87171">bookies</div>
     </div>
-    <div class="metric-card" style="background:#5C3800">
-      <div class="metric-label" style="color:#F0A500"><i class="ti ti-shield-half" aria-hidden="true"></i>Medium</div>
-      <div class="metric-value" style="color:#F0A500">${amber.length}</div>
-      <div class="metric-sub" style="color:#F0A500">bookies</div>
+    <div class="metric-card" style="background:var(--bg-risk-amber)">
+      <div class="metric-label" style="color:#FBBF24"><i class="ti ti-shield-half" aria-hidden="true"></i>Medium</div>
+      <div class="metric-value" style="color:#FBBF24">${amber.length}</div>
+      <div class="metric-sub" style="color:#FBBF24">bookies</div>
     </div>
-    <div class="metric-card" style="background:#14532D">
-      <div class="metric-label" style="color:#86EFAC"><i class="ti ti-shield-check" aria-hidden="true"></i>Low risk</div>
-      <div class="metric-value" style="color:#86EFAC">${green.length}</div>
-      <div class="metric-sub" style="color:#86EFAC">bookies</div>
+    <div class="metric-card" style="background:var(--bg-risk-green)">
+      <div class="metric-label" style="color:var(--text-accent)"><i class="ti ti-shield-check" aria-hidden="true"></i>Low risk</div>
+      <div class="metric-value" style="color:var(--text-accent)">${green.length}</div>
+      <div class="metric-sub" style="color:var(--text-accent)">bookies</div>
     </div>
   </div>
 
-  ${red.length?`<div style="font-size:11px;font-weight:500;color:#F09595;letter-spacing:.3px;text-transform:uppercase;margin-bottom:8px"><i class="ti ti-alert-triangle" aria-hidden="true"></i> Action needed</div>
+  ${red.length?`<div style="font-size:11px;font-weight:500;color:var(--text-neg);letter-spacing:.3px;text-transform:uppercase;margin-bottom:8px"><i class="ti ti-alert-triangle" aria-hidden="true"></i> Action needed</div>
   ${red.map(r=>renderRiskCard(r)).join('')}`:''}
 
-  ${amber.length?`<div style="font-size:11px;font-weight:500;color:#F0A500;letter-spacing:.3px;text-transform:uppercase;margin:12px 0 8px"><i class="ti ti-alert-circle" aria-hidden="true"></i> Monitor closely</div>
+  ${amber.length?`<div style="font-size:11px;font-weight:500;color:var(--text-warn);letter-spacing:.3px;text-transform:uppercase;margin:12px 0 8px"><i class="ti ti-alert-circle" aria-hidden="true"></i> Monitor closely</div>
   ${amber.map(r=>renderRiskCard(r)).join('')}`:''}
 
-  ${green.length?`<div style="font-size:11px;font-weight:500;color:#86EFAC;letter-spacing:.3px;text-transform:uppercase;margin:12px 0 8px"><i class="ti ti-circle-check" aria-hidden="true"></i> Looking good</div>
+  ${green.length?`<div style="font-size:11px;font-weight:500;color:var(--text-accent);letter-spacing:.3px;text-transform:uppercase;margin:12px 0 8px"><i class="ti ti-circle-check" aria-hidden="true"></i> Looking good</div>
   ${green.map(r=>renderRiskCard(r)).join('')}`:''}`;
 }
 
 function renderRiskCard(r){
   const {acct,bookie,risk}=r;
   const levelColors={
-    red:{bg:'#791F1F',border:'#A32D2D',text:'#F09595',badge:'#A32D2D'},
-    amber:{bg:'#5C3800',border:'#854F0B',text:'#F0A500',badge:'#854F0B'},
-    green:{bg:'#14532D',border:'#3B6D11',text:'#86EFAC',badge:'#3B6D11'},
+    red:{bg:'var(--bg-risk-red)',border:'rgba(248,113,113,0.4)',text:'#F87171',badge:'rgba(248,113,113,0.3)'},
+    amber:{bg:'var(--bg-risk-amber)',border:'rgba(251,191,36,0.4)',text:'var(--text-warn)',badge:'rgba(251,191,36,0.3)'},
+    green:{bg:'var(--bg-risk-green)',border:'rgba(34,197,94,0.4)',text:'var(--text-accent)',badge:'rgba(34,197,94,0.3)'},
   }[risk.level];
   const levelLabel={red:'High risk',amber:'Medium risk',green:'Low risk'}[risk.level];
   const barWidth=Math.round(risk.score);
@@ -2359,9 +2405,9 @@ function renderRiskCard(r){
       ${risk.flags.map(f=>`<div style="font-size:11px;color:${levelColors.text};display:flex;align-items:center;gap:5px"><i class="ti ti-point-filled" style="font-size:8px" aria-hidden="true"></i>${f}</div>`).join('')}
     </div>`:''}
 
-    ${risk.level!=='green'?`<div style="margin-top:10px;padding-top:10px;border-top:0.5px solid rgba(255,255,255,0.08)">
+    ${risk.level!=='green'?`<div style="margin-top:10px;padding-top:10px;border-top:0.5px solid var(--border-col)">
       <div style="font-size:11px;color:var(--text-muted);margin-bottom:5px;font-weight:500;text-transform:uppercase;letter-spacing:.3px">Suggested action</div>
-      <div style="font-size:12px;color:#B4B2A9">${getRiskAdvice(risk)}</div>
+      <div style="font-size:12px;color:var(--text-secondary)">${getRiskAdvice(risk)}</div>
     </div>`:''}
   </div>`;
 }
@@ -2413,7 +2459,7 @@ function renderCasino(){
     +'<div class="metric-label"><i class="ti ti-cards" aria-hidden="true"></i>Casino P&L</div>'
     +'<div class="metric-value '+(totalCasino>=0?'pos':'neg')+'">'+fmtS(totalCasino)+'</div>'
     +'<div class="metric-sub" style="display:flex;gap:10px;flex-wrap:wrap">'+profilePnlHtml+'</div>'
-    +'<div style="margin-top:6px;padding-top:6px;border-top:0.5px solid rgba(255,255,255,0.08);display:flex;gap:10px">'
+    +'<div style="margin-top:6px;padding-top:6px;border-top:0.5px solid var(--border-col);display:flex;gap:10px">'
     +'<span style="font-size:11px">JG: <span style="color:'+(jgPnl>=0?'#22C55E':'#F87171')+';font-weight:500">'+fmtS(jgPnl)+'</span></span>'
     +'<span style="font-size:11px">JP: <span style="color:'+(jpPnl>=0?'#22C55E':'#F87171')+';font-weight:500">'+fmtS(jpPnl)+'</span></span>'
     +'</div></div></div>'
@@ -2492,13 +2538,13 @@ function renderCasinoSummaryView(){
     +'<div class="metric-label"><i class="ti ti-cards" aria-hidden="true"></i>Combined Casino Summary</div>'
     +'<div class="metric-value '+(totalPnl>=0?'pos':'neg')+'">'+fmtS(totalPnl)+'</div>'
     +'<div class="metric-sub">'+totalSessions+' total sessions</div>'
-    +'<div style="margin-top:8px;padding-top:8px;border-top:0.5px solid rgba(255,255,255,0.08);display:grid;grid-template-columns:1fr 1fr;gap:8px">'
-    +'<div style="background:rgba(255,255,255,0.05);border-radius:8px;padding:10px">'
+    +'<div style="margin-top:8px;padding-top:8px;border-top:0.5px solid var(--border-col);display:grid;grid-template-columns:1fr 1fr;gap:8px">'
+    +'<div style="background:var(--border-col2);border-radius:8px;padding:10px">'
     +'<div style="font-size:10px;color:var(--text-muted);margin-bottom:4px">JG</div>'
     +'<div style="font-size:16px;font-weight:500;color:'+(jgPnl>=0?'#22C55E':'#F87171')+'">'+fmtS(jgPnl)+'</div>'
     +'<div style="font-size:11px;color:var(--text-muted);margin-top:2px">'+jgSessions.length+' sessions</div>'
     +'</div>'
-    +'<div style="background:rgba(255,255,255,0.05);border-radius:8px;padding:10px">'
+    +'<div style="background:var(--border-col2);border-radius:8px;padding:10px">'
     +'<div style="font-size:10px;color:var(--text-muted);margin-bottom:4px">JP</div>'
     +'<div style="font-size:16px;font-weight:500;color:'+(jpPnl>=0?'#22C55E':'#F87171')+'">'+fmtS(jpPnl)+'</div>'
     +'<div style="font-size:11px;color:var(--text-muted);margin-top:2px">'+jpSessions.length+' sessions</div>'
@@ -2549,8 +2595,7 @@ function renderQuickCalc(){
   const isFB=calcBetType==='Free Bet';
   const isUL=calcStrategy==='underlay';
   const types=['Boost','Free Bet','Qualifier','Mug'];
-  const style=getComputedStyle(document.documentElement);
-  const inputBg=style.getPropertyValue('--bg-input').trim()||'#3D4349';
+  const inputBg=getCssVar('--bg-input')||'#3D4349';
   const typeBg={Boost:inputBg,'Free Bet':inputBg,Qualifier:inputBg,Mug:inputBg};
   const typeCol={Boost:'#60A5FA','Free Bet':'#34D399',Qualifier:'#FBBF24',Mug:'#9A9590'};
   const typeBtns=types.map(function(t){
@@ -2579,7 +2624,7 @@ function renderQuickCalc(){
     +'<div class="form-group"><div class="form-label">Lay odds</div>'
     +'<input type="number" id="qc-lodds" placeholder="2.00" step="0.01" inputmode="decimal" oninput="calcQuick()" style="padding:8px;font-size:14px;font-weight:500"/></div>'
     +'</div>'
-    +'<div id="qc-results" style="display:none;background:#252830;border-radius:10px;padding:12px 14px;margin-bottom:12px">'
+    +'<div id="qc-results" style="display:none;background:var(--bg-card2);border-radius:10px;padding:12px 14px;margin-bottom:12px">'
     +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">'
     +'<div><div style="font-size:10px;color:var(--text-muted);margin-bottom:3px">Lay stake</div>'
     +'<div style="display:flex;align-items:center;gap:6px">'
@@ -2705,7 +2750,7 @@ function logFromCalc(){
     // Update type buttons
     document.querySelectorAll('[data-toptype]').forEach(function(el){
       const isSelected=el.dataset.toptype===calcBetType;
-      el.style.background=isSelected?getTypeColor(calcBetType):'#252629';
+      el.style.background=isSelected?getTypeColor(calcBetType):getCssVar('--bg-card2')||'#252629';
       el.style.color=isSelected?getTypeTextColor(calcBetType):'#C8C5BF';
       el.style.borderColor=isSelected?'transparent':'rgba(255,255,255,0.10)';
     });
@@ -2908,10 +2953,13 @@ function renderCasinoForm(){
   const acctBtns=PROFILES.map(function(pr){
     return '<button class="acct-sel-btn '+(casinoFormAcct===pr?'active-'+pr:'')+'" onclick="casinoFormAcct=\''+pr+'\';setCasinoView(0)">'+profileLabel(pr)+'</button>';
   }).join('');
-  const jgBg=casinoOperator==='JG'?'#7A4F00':'#3D4349';
-  const jgCol=casinoOperator==='JG'?'#F5C842':'#C8C5BF';
-  const jpBg=casinoOperator==='JP'?'#14532D':'#3D4349';
-  const jpCol=casinoOperator==='JP'?'#86EFAC':'#C8C5BF';
+  const style2=getComputedStyle(document.documentElement);
+  const inputBg2=style2.getPropertyValue('--bg-input').trim();
+  const accentCol=style2.getPropertyValue('--text-accent').trim();
+  const jgBg=casinoOperator==='JG'?inputBg2:inputBg2;
+  const jgCol=casinoOperator==='JG'?accentCol:'var(--text-muted)';
+  const jpBg=casinoOperator==='JP'?inputBg2:inputBg2;
+  const jpCol=casinoOperator==='JP'?accentCol:'var(--text-muted)';
   return '<div class="card"><div class="card-header"><span class="card-title">Log casino session</span></div>'
     +'<div class="card-body" style="padding-bottom:80px">'
     +'<div class="form-section"><div class="form-label">Account</div><div class="acct-selector">'+acctBtns+'</div></div>'
@@ -2938,7 +2986,7 @@ function renderCasinoForm(){
     +'<div class="form-group"><div class="form-label">Notes</div><input type="text" id="c-notes" placeholder="optional"/></div>'
     +'<div id="c-msg" style="font-size:12px;color:#F87171;margin-top:6px"></div>'
     +'</div>'
-    +'<div style="position:fixed;bottom:calc(58px + env(safe-area-inset-bottom));left:0;right:0;padding:10px 16px;background:var(--bg-card);border-top:0.5px solid rgba(255,255,255,0.08);display:flex;gap:8px;z-index:90;max-width:680px;margin:0 auto">'
+    +'<div style="position:fixed;bottom:calc(58px + env(safe-area-inset-bottom));left:0;right:0;padding:10px 16px;background:var(--bg-card);border-top:0.5px solid var(--border-col);display:flex;gap:8px;z-index:90;max-width:680px;margin:0 auto">'
     +'<button class="btn btn-ghost" onclick="resetCasinoForm()" style="width:72px">Clear</button>'
     +'<button class="btn btn-primary btn-full" onclick="saveCasinoSession()"><i class="ti ti-check"></i> Save session</button>'
     +'</div></div>';
@@ -2957,7 +3005,7 @@ function filterCasinoBookies(q){
   if(!filtered.length){dd.style.display='none';return;}
   dd.innerHTML=filtered.map(function(b){
     const safe=b.replace(/'/g,"&#39;");
-    return '<div onclick="selectCasinoBook(\''+safe+'\')" style="padding:8px 12px;cursor:pointer;font-size:13px;color:var(--text-primary);border-bottom:0.5px solid rgba(255,255,255,0.06)">'+b+'</div>';
+    return '<div onclick="selectCasinoBook(\''+safe+'\')" style="padding:8px 12px;cursor:pointer;font-size:13px;color:var(--text-primary);border-bottom:0.5px solid var(--border-col2)">'+b+'</div>';
   }).join('');
   dd.style.display='block';
 }
@@ -3088,7 +3136,7 @@ function checkPin(){
   }
   const pinKey='0069';
   const ps=document.getElementById('pin-screen');
-  ps.style.cssText='display:flex;position:fixed;inset:0;background:#343A40;z-index:9999;flex-direction:column;align-items:center;justify-content:center;padding:40px 20px';
+  ps.style.cssText='display:flex;position:fixed;inset:0;background:var(--bg-card2);z-index:9999;flex-direction:column;align-items:center;justify-content:center;padding:40px 20px';
   ps.innerHTML=`
     <div style="font-size:22px;font-weight:500;color:var(--text-primary);margin-bottom:8px">MBWorld</div>
     <div style="font-size:13px;color:var(--text-muted);margin-bottom:32px">Enter PIN to continue</div>
@@ -3105,7 +3153,7 @@ function checkPin(){
     else if(d!==''){entry+=d;}
     for(let i=0;i<4;i++){
       const dot=document.getElementById('pd'+i);
-      if(dot)dot.style.background=i<entry.length?'#F0EDE8':'transparent';
+      if(dot)dot.style.background=i<entry.length?'var(--text-primary)':'transparent';
     }
     if(entry.length===4){
       if(entry===pinKey){
