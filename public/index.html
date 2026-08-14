@@ -845,17 +845,20 @@ function renderDashboardMonthly(){
   });
   const allKeys=[...new Set([...Object.keys(sportsByMonth),...Object.keys(casinoByMonth)])].sort().reverse();
   if(!allKeys.length)return'';
+  const nowKey=(new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0'));
   const rows=allKeys.map(k=>{
     const yr=k.slice(0,4),mo=k.slice(5);
     const label=new Date(+yr,+mo-1).toLocaleString('default',{month:'short'})+' '+yr;
     const s=sportsByMonth[k]||0;
     const c=casinoByMonth[k]||0;
     const t=s+c;
-    return '<tr>'
-      +'<td style="font-size:11px;font-weight:500">'+label+'</td>'
-      +'<td style="text-align:right;font-size:11px;color:'+(s>=0?'#22C55E':'#F87171')+'">'+fmtS(s)+'</td>'
-      +'<td style="text-align:right;font-size:11px;color:'+(c>=0?'#22C55E':'#F87171')+'">'+fmtS(c)+'</td>'
-      +'<td style="text-align:right;font-size:11px;font-weight:500;color:'+(t>=0?'#22C55E':'#F87171')+'">'+fmtS(t)+'</td>'
+    const isCurrent=k===nowKey;
+    const mask=_dashHidden&&!isCurrent;
+    return '<tr'+(isCurrent?' style="background:rgba(255,255,255,0.03)"':'')+'>'
+      +'<td style="font-size:11px;font-weight:500">'+label+(isCurrent?' <span style="font-size:9px;color:#9A9590">(current)</span>':'')+'</td>'
+      +'<td style="text-align:right;font-size:11px;color:'+(s>=0?'#22C55E':'#F87171')+'">'+  (mask?'••••':fmtS(s))+'</td>'
+      +'<td style="text-align:right;font-size:11px;color:'+(c>=0?'#22C55E':'#F87171')+'">'+  (mask?'••••':fmtS(c))+'</td>'
+      +'<td style="text-align:right;font-size:11px;font-weight:500;color:'+(t>=0?'#22C55E':'#F87171')+'">'+  (mask?'••••':fmtS(t))+'</td>'
       +'</tr>';
   }).join('');
   return '<div class="card" style="margin-bottom:12px">'
