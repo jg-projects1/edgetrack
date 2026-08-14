@@ -1,3 +1,4 @@
+// v
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1624,20 +1625,41 @@ function submitTx(){
 
 function duplicateTrade(acct,id,rawTx){
   const tx=rawTx||(state[acct]?.transactions||[]).find(t=>t.id===id);if(!tx)return;
-  formAccount=acct;selectedBetType=tx.type||'';
-  currentTab='trade';tradeSubTab='log';document.querySelectorAll('.tab').forEach(el=>el.classList.remove('active'));
+  formAccount=acct;
+  selectedBetType=tx.type||'';
+  if(tx.underlay!==undefined)isUnderlay=tx.underlay;
+  currentTab='trade';tradeSubTab='log';
+  document.querySelectorAll('.tab').forEach(el=>el.classList.remove('active'));
   document.getElementById('tab-trade')?.classList.add('active');
   document.getElementById('profile-bar').style.display='none';
+  // Render form with full prefill
   document.getElementById('main-content').innerHTML=renderAdd(tx);
   updateBadge();bindFormEvents();updateFormFields();
-  document.querySelectorAll('.type-pill').forEach(el=>{el.className='type-pill';if(el.dataset.type===tx.type)el.classList.add('sel','sel-'+tx.type.toLowerCase().replace(/\s/g,''));});
-  const fb=document.getElementById('f-bookie');if(fb&&tx.bookie)fb.value=tx.bookie;
-  const fbs=document.getElementById('f-bookie-search');if(fbs&&tx.bookie)fbs.value=tx.bookie;
-  const fe=document.getElementById('f-exchange');if(fe&&tx.exchange)fe.value=tx.exchange;
-  // Set strategy and trigger calculator
-  if(tx.underlay!==undefined)isUnderlay=tx.underlay;
-  setStrategy(isUnderlay?'underlay':'lockin');
-  autoCalcUnderlay();
+  // Set type pills
+  document.querySelectorAll('.type-pill').forEach(el=>{
+    el.className='type-pill';
+    if(el.dataset.type===tx.type)el.classList.add('sel','sel-'+tx.type.toLowerCase().replace(/\s/g,''));
+  });
+  // Force all values after render — use timeout to ensure DOM is settled
+  setTimeout(function(){
+    // Bookie
+    const fb=document.getElementById('f-bookie');if(fb&&tx.bookie)fb.value=tx.bookie;
+    const fbs=document.getElementById('f-bookie-search');if(fbs&&tx.bookie)fbs.value=tx.bookie;
+    // Exchange
+    const fe=document.getElementById('f-exchange');if(fe&&tx.exchange){
+      fe.value=tx.exchange;
+      // Set selected option
+      Array.from(fe.options).forEach(o=>o.selected=o.value===tx.exchange);
+    }
+    // Odds and stake
+    const bs=document.getElementById('f-bstake');if(bs&&tx.bstake)bs.value=tx.bstake;
+    const bo=document.getElementById('f-bodds');if(bo&&tx.bodds)bo.value=tx.bodds;
+    const lo=document.getElementById('f-lodds');if(lo&&tx.lodds)lo.value=tx.lodds;
+    // Strategy
+    setStrategy(isUnderlay?'underlay':'lockin');
+    // Trigger calculator
+    autoCalcUnderlay();
+  },50);
   showToast('Duplicated — edit and save');window.scrollTo(0,0);
 }
 
