@@ -676,6 +676,7 @@ function migrateLegacy(){
 let currentProfile='me',currentTab='dashboard',tradeSubTab='log',formAccount='me',selectedBetType='',exchTransferBank='me',isUnderlay=false;
 let recentBookies=[]; // tracks last 8 used bookies
 let lastSavedTrade=null; // for quick duplicate after save
+let _duplicateMode=false; // true when form was opened via duplicate
 let lastExchange='Smarkets'; // tracks last used exchange
 let showMoreTypes=false; // toggle for extra bet types
 let showComm=false; // toggle for commission field
@@ -1362,10 +1363,12 @@ function setFormAccount(a){
   formAccount=a;
   PROFILES.forEach(pr=>{const b=document.getElementById('facc-'+pr);if(b)b.className='acct-sel-btn'+(a===pr?' active-'+pr:'');});
   const dot=document.getElementById('form-dot');if(dot)dot.style.background=profileColor(a);
-  // Clear bookie search when account changes
-  const bsearch=document.getElementById('f-bookie-search');
-  if(bsearch){bsearch.value='';const bh=document.getElementById('f-bookie');if(bh)bh.value='';}
+  // Clear bookie search when account changes — but not during duplicate
   const dd=document.getElementById('bookie-dropdown');if(dd)dd.style.display='none';
+  if(!_duplicateMode){
+    const bsearch=document.getElementById('f-bookie-search');
+    if(bsearch){bsearch.value='';const bh=document.getElementById('f-bookie');if(bh)bh.value='';}
+  }
 }
 function setExchBank(b){exchTransferBank=b;PROFILES.forEach(pr=>{const el=document.getElementById('ebank-'+pr);if(el)el.className='dest-btn'+(b===pr?' active':'');});updateFlowPreview();}
 function autoCalcUnderlay(){
@@ -1624,7 +1627,7 @@ function submitTx(){
 
 function duplicateTrade(acct,id,rawTx){
   const tx=rawTx||(state[acct]?.transactions||[]).find(t=>t.id===id);if(!tx)return;
-  console.log('duplicateTrade tx:',JSON.stringify({bookie:tx.bookie,lodds:tx.lodds,bodds:tx.bodds,bstake:tx.bstake,type:tx.type,underlay:tx.underlay}));
+  _duplicateMode=true;
   formAccount=acct;
   selectedBetType=tx.type||'';
   if(tx.underlay!==undefined)isUnderlay=tx.underlay;
@@ -1660,6 +1663,8 @@ function duplicateTrade(acct,id,rawTx){
     autoCalcUnderlay();
   },50);
   showToast('Duplicated — edit and save');window.scrollTo(0,0);
+  // Clear duplicate mode after a moment
+  setTimeout(function(){_duplicateMode=false;},2000);
 }
 
 // ── HISTORY ──────────────────────────────────────────────────────────────────
