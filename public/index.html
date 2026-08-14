@@ -318,7 +318,7 @@ select option{background:var(--bg-input);color:var(--text-primary)}
 .filter-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
 .filter-select{background:var(--bg-card);border:0.5px solid var(--border-col);border-radius:8px;padding:7px 10px;font-family:system-ui,-apple-system,sans-serif;font-size:12px;color:var(--text-primary);outline:none;-webkit-appearance:none}
 </style>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 </head>
 <body>
 <div id="pin-screen" style="display:none"></div>
@@ -358,7 +358,2985 @@ select option{background:var(--bg-input);color:var(--text-primary)}
 <div class="toast" id="toast"></div>
 <div id="modal-root"></div>
 
-<script></script>
+<script>
+const SUPABASE_URL_UNUSED='';
+let syncTimeout=null;
+let _serverLoaded=false;
+let _saveQueue=[];        // queue of failed saves to retry
+let _retryTimeout=null;  // retry timer handle
+let _retrying=false;     // prevents concurrent retries
+
+function setSyncStatus(s){
+  const dot=document.getElementById('sync-dot'),label=document.getElementById('sync-label');
+  if(!dot||!label)return;
+  dot.className='sync-dot'+(s==='syncing'?' syncing':s==='error'?' error':'');
+  const qLen=_saveQueue.length;
+  if(s==='syncing')label.textContent='Saving'+(qLen?` (${qLen} queued)`:'');
+  else if(s==='error')label.textContent=qLen?`Offline · ${qLen} pending`:'Offline';
+  else label.textContent=qLen?`Saved · ${qLen} queued`:'Saved';
+}
+
+async function loadData(){
+  try{
+    // Try sessionStorage first — most recent confirmed state from this session
+    const cached=localStorage.getItem('mbe_state');
+    if(cached){
+      const parsed=JSON.parse(cached);
+      // Sanity check: if cache has mostly Not Signed Up bookies, it's stale — discard
+      const meBookies=parsed['me']?.bookies||{};
+      const activeCount=Object.values(meBookies).filter(b=>b&&b.status&&b.status!=='Not Signed Up').length;
+      const totalCount=Object.keys(meBookies).length;
+      const cacheIsValid=totalCount===0||(activeCount/totalCount)>0.05; // at least 5% non-default
+      if(cacheIsValid){
+        PROFILES.forEach(pr=>{
+          if(parsed[pr]){
+            state[pr]=JSON.parse(JSON.stringify(parsed[pr]));
+            if(!state[pr].casino)state[pr].casino=[];
+            if(!state[pr].freeBets)state[pr].freeBets=[];
+          }
+        });
+        if(parsed.exchanges)state.exchanges=JSON.parse(JSON.stringify(parsed.exchanges));
+        if(parsed._deletedTxIds){
+          PROFILES.forEach(pr=>{if(parsed._deletedTxIds[pr])deletedTxIds[pr]=parsed._deletedTxIds[pr];});
+        }
+        lastServerState=JSON.parse(JSON.stringify(parsed));
+        setSyncStatus('synced');
+
+      // Still fetch from server in background to pick up changes from other devices
+      fetchFromServer();
+      return;
+      } // end cacheIsValid
+    }
+    // No cache — load from server directly
+    await fetchFromServer();
+  }catch(e){
+    console.error('Load error:',e);
+    setSyncStatus('error');
+  }
+}
+
+async function fetchFromServer(){
+  try{
+    const sportsRes = await fetch('/api/load?t='+Date.now());
+    const casinoRes = null;
+    if(!sportsRes.ok)throw new Error('HTTP '+sportsRes.status);
+    const sportsJson=await sportsRes.json();
+    if(sportsJson.ok&&sportsJson.data){
+      const saved=sportsJson.data;
+      const hasData=PROFILES.some(p=>saved[p]&&((saved[p].transactions||[]).length>0||saved[p].bank!==0));
+      if(hasData){
+        // Only update if server has more data than current state
+        const serverCount=PROFILES.reduce((a,p)=>a+(saved[p]?.transactions||[]).length,0);
+        const localCount=PROFILES.reduce((a,p)=>a+(state[p]?.transactions||[]).length,0);
+        // Always merge — never let server overwrite local-only transactions
+        PROFILES.forEach(pr=>{
+          if(!saved[pr])return;
+          const serverTxs=saved[pr].transactions||[];
+          const localTxs=state[pr].transactions||[];
+          const serverMap=new Map(serverTxs.map(t=>[String(t.id),t]));
+          const localMap=new Map(localTxs.map(t=>[String(t.id),t]));
+          // Union: all IDs from both
+          const allIds=new Set([...serverMap.keys(),...localMap.keys()]);
+          const merged=[];
+          const deletedIds=new Set((deletedTxIds[pr]||[]).map(String));
+          allIds.forEach(id=>{
+            // Skip deleted transactions
+            if(deletedIds.has(String(id)))return;
+            const server=serverMap.get(id);
+            const local=localMap.get(id);
+            if(local&&server){
+              // Prefer local settled over server pending
+              if(local.result!=='Pending'&&server.result==='Pending')merged.push(local);
+              else merged.push(server);
+            } else if(local){
+              merged.push(local); // local-only — keep it (new log not yet on server)
+            } else {
+              // Server-only — only add if not in deleted list
+              if(!deletedIds.has(String(id)))merged.push(server);
+            }
+          });
+          // Sort by date desc
+          merged.sort((a,b)=>{const da=parseDate(a.date),db=parseDate(b.date);return db!==da?db-da:b.id-a.id;});
+          // Only use server bank if local is 0 (fresh load) — preserve local amendments
+          if((state[pr].bank||0)===0)state[pr].bank=saved[pr].bank;
+          // Merge bookies — keep local balance if it differs from server
+          // (local is more recent, server may be stale replica)
+          const serverBk=saved[pr].bookies||{};
+          const localBk=state[pr].bookies||{};
+          // Timestamp-based merge — most recently updated balance wins
+          const mergedBk={...serverBk};
+          Object.keys(localBk).forEach(function(k){
+            if(!mergedBk[k]){
+              mergedBk[k]=localBk[k];
+            } else {
+              const localTs=localBk[k].balUpdatedAt||0;
+              const serverTs=mergedBk[k].balUpdatedAt||0;
+              const localWins=localTs>0&&localTs>serverTs;
+              mergedBk[k]=Object.assign({},mergedBk[k],{
+                bal:localWins?localBk[k].bal:mergedBk[k].bal,
+                status:localWins?(localBk[k].status||mergedBk[k].status):mergedBk[k].status,
+                notes:localWins?(localBk[k].notes!==undefined?localBk[k].notes:mergedBk[k].notes):mergedBk[k].notes,
+                verifiedAt:localBk[k].verifiedAt||mergedBk[k].verifiedAt||null,
+                balUpdatedAt:Math.max(localTs,serverTs)
+              });
+            }
+          });
+          // Preserve local verifiedAt — server doesn't track this
+          Object.keys(mergedBk).forEach(function(bk){
+            const loc=localBk[bk];
+            if(loc&&loc.verifiedAt)mergedBk[bk].verifiedAt=loc.verifiedAt;
+          });
+          state[pr].bookies=mergedBk;
+          state[pr].transactions=merged;
+          state[pr].freeBets=saved[pr].freeBets||state[pr].freeBets||[];
+          // Casino data now comes from split key via /api/load
+          if(saved[pr].casino)state[pr].casino=JSON.parse(JSON.stringify(saved[pr].casino));
+          else if(!state[pr].casino)state[pr].casino=[];
+        });
+        if(saved.exchanges)state.exchanges=JSON.parse(JSON.stringify(saved.exchanges));
+        lastServerState=JSON.parse(JSON.stringify(saved));
+      }
+    }
+// Casino loaded from /api/load (split key)
+    setSyncStatus('synced');
+    migrateLegacy();
+    _serverLoaded=true;
+    render();
+  }catch(e){
+    console.error('Server fetch error:',e);
+  }
+}
+
+// ── SAVE QUEUE ───────────────────────────────────────────────────────────────
+function persistQueue(){
+  try{localStorage.setItem('mbe_save_queue',JSON.stringify(_saveQueue));}catch(e){}
+}
+
+function restoreQueue(){
+  try{
+    const q=localStorage.getItem('mbe_save_queue');
+    if(q){
+      _saveQueue=JSON.parse(q)||[];
+      // Don't retry immediately — wait until app is fully loaded
+      // drainQueue is called after loadApp completes
+    }
+  }catch(e){_saveQueue=[];}
+}
+
+function queueSave(source){
+  // Merge with existing queue — don't stack duplicates, just update source
+  const existing=_saveQueue.findIndex(s=>s.source===source);
+  const entry={source,timestamp:Date.now(),state:buildSavePayload()};
+  if(existing>=0)_saveQueue[existing]=entry;
+  else _saveQueue.push(entry);
+  persistQueue();
+  setSyncStatus('error');
+  scheduleRetry();
+}
+
+function scheduleRetry(){
+  if(_retryTimeout)clearTimeout(_retryTimeout);
+  _retryTimeout=setTimeout(drainQueue,15000); // retry in 15 seconds
+}
+
+async function drainQueue(){
+  if(_retrying||_saveQueue.length===0)return;
+  _retrying=true;
+  setSyncStatus('syncing');
+  const entry=_saveQueue[0]; // try oldest first
+  try{
+    const sportsRes=await fetch('/api/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(entry.state.sports)});
+    if(!sportsRes.ok)throw new Error('Retry save failed: '+sportsRes.status);
+    _saveQueue.shift(); // remove successfully sent item
+    persistQueue();
+    if(_saveQueue.length>0){
+      setSyncStatus('syncing');
+      setTimeout(drainQueue,2000); // drain next item
+    }else{
+      setSyncStatus('synced');
+    }
+  }catch(e){
+    setSyncStatus('error');
+    scheduleRetry(); // try again in 15s
+  }finally{
+    _retrying=false;
+  }
+}
+
+function buildSavePayload(){
+  const sports={exchanges:state.exchanges,_source:'queue',_serverState:lastServerState};
+  PROFILES.forEach(pr=>{
+    sports[pr]={bank:state[pr]?.bank||0,bookies:state[pr]?.bookies||{},
+      transactions:state[pr]?.transactions||[],freeBets:state[pr]?.freeBets||[],
+      casino:state[pr]?.casino||[],
+      deletedIds:deletedTxIds[pr]||[],
+      deletedCasinoIds:casinoDeletedIds[pr]||[]};
+  });
+  const casino={};
+  PROFILES.forEach(pr=>{casino[pr]={casino:state[pr]?.casino||[],deletedIds:casinoDeletedIds[pr]||[]};});
+  return{sports,casino};
+}
+
+async function saveData(source='unknown'){
+  if(window._appLoading){console.log('Save blocked during load');return;}
+  // If a save is already in progress, queue this one and return
+  if(saveInProgress){
+    pendingSave=source;
+    return;
+  }
+  saveInProgress=true;
+  setSyncStatus('syncing');
+  window._lastSaveSource=source;
+  try{
+    // Build sports-only state (no casino sessions)
+    const sportsState={exchanges:state.exchanges,_source:source,_serverState:lastServerState};
+    PROFILES.forEach(pr=>{
+      sportsState[pr]={
+        bank:state[pr]?.bank||0,
+        bookies:state[pr]?.bookies||{},
+        transactions:state[pr]?.transactions||[],
+        freeBets:state[pr]?.freeBets||[],
+        casino:state[pr]?.casino||[],
+        deletedIds:deletedTxIds[pr]||[]
+      };
+    });
+    // Casino included in sportsState payload
+    // Single save — casino now included in sports payload
+    const sportsRes=await fetch('/api/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(sportsState)});
+    if(!sportsRes.ok){
+      let errBody='';
+      try{const j=await sportsRes.json();errBody=j.error||'';}catch(_){}
+      throw new Error('Save '+sportsRes.status+(errBody?' — '+errBody:''));
+    }
+    // Update state from server's merged response — avoids stale load on next refresh
+    const sportsJson=await sportsRes.json();
+    if(sportsJson.ok&&sportsJson.data){
+      PROFILES.forEach(pr=>{
+        if(sportsJson.data[pr]){
+          state[pr].bank=sportsJson.data[pr].bank;
+          // Timestamp-based merge on save response
+          const serverBk=sportsJson.data[pr].bookies||{};
+          const localBk=state[pr].bookies||{};
+          const mergedBk=Object.assign({},serverBk);
+          Object.keys(localBk).forEach(function(bk){
+            if(!mergedBk[bk]){
+              mergedBk[bk]=localBk[bk];
+            } else {
+              const localTs=localBk[bk].balUpdatedAt||0;
+              const serverTs=mergedBk[bk].balUpdatedAt||0;
+              const localWins=localTs>0&&localTs>serverTs;
+              mergedBk[bk]=Object.assign({},mergedBk[bk],{
+                bal:localWins?localBk[bk].bal:mergedBk[bk].bal,
+                status:localWins?(localBk[bk].status||mergedBk[bk].status):mergedBk[bk].status,
+                notes:localWins?(localBk[bk].notes!==undefined?localBk[bk].notes:mergedBk[bk].notes):mergedBk[bk].notes,
+                verifiedAt:localBk[bk].verifiedAt||mergedBk[bk].verifiedAt||null,
+                balUpdatedAt:Math.max(localTs,serverTs)
+              });
+            }
+          });
+          state[pr].bookies=mergedBk;
+          // Merge transactions — union of server + local, prefer settled over pending
+          const serverTxs=sportsJson.data[pr].transactions||[];
+          const localTxs=state[pr].transactions||[];
+          const serverMap=new Map(serverTxs.map(t=>[String(t.id),t]));
+          const localMap=new Map(localTxs.map(t=>[String(t.id),t]));
+          const allIds=new Set([...serverMap.keys(),...localMap.keys()]);
+          const mergedTxs=[];
+          allIds.forEach(id=>{
+            const srv=serverMap.get(id);
+            const loc=localMap.get(id);
+            if(loc&&srv){
+              if(loc.result!=='Pending'&&srv.result==='Pending')mergedTxs.push(loc);
+              else mergedTxs.push(srv);
+            } else { mergedTxs.push(loc||srv); }
+          });
+          mergedTxs.sort((a,b)=>{const da=parseDate(a.date),db=parseDate(b.date);return db!==da?db-da:b.id-a.id;});
+          state[pr].transactions=mergedTxs;
+          // Casino data from save response
+          if(sportsJson.data[pr].casino)state[pr].casino=JSON.parse(JSON.stringify(sportsJson.data[pr].casino));
+          else if(!state[pr].casino)state[pr].casino=[];
+          if(!state[pr].freeBets)state[pr].freeBets=[];
+        }
+      });
+      if(sportsJson.data.exchanges)state.exchanges=sportsJson.data.exchanges;
+      // Track confirmed server state so next save can skip stale KV read
+      lastServerState=JSON.parse(JSON.stringify(sportsJson.data));
+      // Cache in sessionStorage so pull-to-refresh gets fresh data
+      try{
+        const _sd=JSON.parse(JSON.stringify(sportsJson.data));
+        _sd._deletedTxIds=deletedTxIds;
+        // Ensure casino is included in localStorage snapshot
+        PROFILES.forEach(pr=>{
+          if(_sd[pr]&&!_sd[pr].casino)_sd[pr].casino=state[pr].casino||[];
+        });
+        localStorage.setItem('mbe_state',JSON.stringify(_sd));
+      }catch(e){}
+    }
+    PROFILES.forEach(pr=>{casinoDeletedIds[pr]=[];deletedTxIds[pr]=[];});
+    // Clear save queue on successful save
+    _saveQueue=[];
+    persistQueue();
+    setSyncStatus('synced');
+  }catch(e){
+    console.error('Save error:',e);
+    // Try to get server error message
+    let errMsg=e.message||'unknown';
+    try{
+      if(e.response){const j=await e.response.json();errMsg=j.error||errMsg;}
+    }catch(_){}
+    queueSave(source);
+    showToast('⚠ Save failed: '+errMsg,'error');
+  }finally{
+    saveInProgress=false;
+    if(pendingSave){const nextSource=pendingSave;pendingSave=null;saveData(nextSource);}
+  }
+}
+function debouncedSave(source='unknown'){if(syncTimeout)clearTimeout(syncTimeout);setSyncStatus('syncing');syncTimeout=setTimeout(()=>saveData(source),1500);}
+function save(source='unknown'){debouncedSave(source);}
+
+const PROFILES=['me','wife','bp','rq'];
+const PROFILE_LABELS={me:'JG',wife:'HG',bp:'BP',rq:'RQ'};
+const PROFILE_COLORS={me:'#F0A500',wife:'#7F77DD',bp:'#BA7517',rq:'#639922'};
+const BET_TYPES=['Qualifier','Free Bet','Boost','Mug','Extra Place','2Up','MBAL','Cash Back','Cash Out','Arb','Deposit','Withdrawal','Exchange Deposit','Exchange Withdrawal','Balance Amendment'];
+const BOOKIE_TRANSFER=['Deposit','Withdrawal'];
+const EXCHANGE_TRANSFER=['Exchange Deposit','Exchange Withdrawal'];
+const BET_ONLY=['Qualifier','Free Bet','Boost','Mug','Extra Place','2Up','MBAL','Cash Back','Cash Out','Arb'];
+const FREE_BET_TYPES=['Free Bet'];
+const EXCHANGES=['Betfair','Smarkets','Matchbook','Betdaq'];
+const BOOKIE_STATUSES=['Not Signed Up','Active','Restricted','Gubbed','Closed'];
+const DEFAULT_BOOKIES=[
+  '10bet','247bet','32Red','36 Vegas','7bet','888 Sport','Admiral Casino','Arrowbet',
+  'Bally Casino','Bella Casino','Bestodds','Bet UK','Bet442','Bet600','BetAhoy','Betano',
+  'BetCrown','Betfair','Betfred','Betgoodwin','BetMGM','BetStGeorge','BetTom','Betvickers',
+  'Betvictor','Betway','Betwright','Betzone','Bingostars','Boyle','Bresbet','Buzz Casino',
+  'Bwin','Casumo','Casushi','Copybet','Coral','Dabble','Dazn','Double Bubble',
+  'Dragonbet','Dream Vegas','Fabulous Bingo','Fabulous Vegas','Fairplay','Fanteam','Fitzbet','Fitzdares',
+  'Foxy','Fruit Kings','Gala Casino','Geoff Banks','Grand Ivy','Grosvenor','GRP','Heart Bingo',
+  'Highbet','Hollywoodbets','Hot Streak','Jackpot Joy','Jackpot Mobile','Ken Howells','Kitty Bingo','Kwiff',
+  'Ladbrokes','Leovegas','Livescorebet','LottoGo','Lottoland','Lottomart','Lucky Pants','Luckymate',
+  'Magical Vegas','Mecca Bingo','Mega Riches','Meta Betting','Midnite','Monopoly','MrBen','MrQ',
+  'MrVegas','Netbet','Octobet','Paddy Power','Parimatch','Party Casino','Peachy Games','Pink Casino',
+  'Planet Sport Bet','Planet Sports','Play Bingo','PlayOjo','Priced Up','Puntit','Quick Bet','Quinnbet',
+  'Rainbow Riches','Regal Wins','Rialto','RightBet','Royale Lounge','Skybet','Slot Boss','Slot Planet',
+  'Slot Temple','Smooth Spins','Spin & Win','Sporting Bet','Spreadex','Stakemate','Star Sports','Sun Vegas',
+  'Swifty Sports','Talksportbet','Tigerbet','Tombola Arcade','Tote','Unibet','Vbet','Video Slots',
+  'Virgin Bet','Virgin Games','William Hill'
+];
+
+function makeProfile(){const b={};DEFAULT_BOOKIES.forEach(x=>b[x]={bal:0,status:'Not Signed Up',notes:''});return{bookies:b,bank:0,transactions:[],freeBets:[]};}
+function freshState(){const ex={};EXCHANGES.forEach(x=>ex[x]=0);const st={exchanges:ex};PROFILES.forEach(pr=>st[pr]=makeProfile());return st;}
+const state=freshState();
+let casinoDeletedIds={me:[],wife:[],bp:[],rq:[]};
+let deletedTxIds={me:[],wife:[],bp:[],rq:[]};
+let lastServerState=null; // tracks last confirmed server state to avoid stale reads
+let saveInProgress=false;
+let pendingSave=null; // queues a save if one is already in progress
+function migrateLegacy(){
+  PROFILES.forEach(pr=>{
+    if(!state[pr])state[pr]=makeProfile();
+    if(!state[pr].transactions)state[pr].transactions=[];if(!state[pr].freeBets)state[pr].freeBets=[];
+    const bk=state[pr].bookies||{};
+    // Case-insensitive dedup — for each DEFAULT_BOOKIES entry, find any case variant and merge
+    DEFAULT_BOOKIES.forEach(canonical=>{
+      Object.keys(bk).forEach(existing=>{
+        if(existing!==canonical&&existing.toLowerCase()===canonical.toLowerCase()){
+          // Found a case variant — merge into canonical
+          if(!bk[canonical])bk[canonical]={bal:0,status:'Not Signed Up',notes:''};
+          bk[canonical].bal=(bk[canonical].bal||0)+(bk[existing].bal||0);
+          if(bk[existing].status&&bk[existing].status!=='Not Signed Up')bk[canonical].status=bk[existing].status;
+          if(bk[existing].notes)bk[canonical].notes=bk[existing].notes;
+          delete bk[existing];
+        }
+      });
+    });
+    // Explicit renames for non-case-variant changes
+    const renames={
+      'Hot Streak Casino':'Hot Streak',
+      'hot streak casino':'Hot Streak',
+      'Gala':'Gala Casino',
+    };
+    Object.entries(renames).forEach(([oldName,newName])=>{
+      if(bk[oldName]){
+        if(!bk[newName])bk[newName]={bal:0,status:'Not Signed Up',notes:''};
+        bk[newName].bal=(bk[newName].bal||0)+(bk[oldName].bal||0);
+        if(bk[oldName].status&&bk[oldName].status!=='Not Signed Up')bk[newName].status=bk[oldName].status;
+        if(bk[oldName].notes)bk[newName].notes=bk[oldName].notes;
+        delete bk[oldName];
+      }
+    });
+    // Add any new bookies with Not Signed Up default
+    DEFAULT_BOOKIES.forEach(b=>{if(!bk[b])bk[b]={bal:0,status:'Not Signed Up',notes:'',verifiedAt:null};});
+    Object.keys(bk).forEach(k=>{
+      if(typeof bk[k]==='number')bk[k]={bal:bk[k],status:'Not Signed Up',notes:''};
+      if(!bk[k].status)bk[k].status='Not Signed Up';
+      if(bk[k].notes===undefined)bk[k].notes='';
+    });
+    // Re-sort bookies alphabetically — preserve ALL existing balances
+    const sorted={};
+    DEFAULT_BOOKIES.forEach(b=>{
+      if(bk[b]){sorted[b]=bk[b];} // keep existing entry with balance intact
+      else{sorted[b]={bal:0,status:'Not Signed Up',notes:''};} // only new bookies get 0
+    });
+    // Also keep any bookies with non-zero balance not in DEFAULT_BOOKIES
+    Object.keys(bk).forEach(b=>{if(!sorted[b]&&(bk[b].bal||0)!==0)sorted[b]=bk[b];});
+    state[pr].bookies=sorted;
+  });
+  if(!state.exchanges){state.exchanges={};EXCHANGES.forEach(e=>state.exchanges[e]=0);}
+  EXCHANGES.forEach(e=>{if(state.exchanges[e]===undefined)state.exchanges[e]=0;});
+  PROFILES.forEach(pr=>{if(!state[pr].casino)state[pr].casino=[];});
+  // Bookie migration save disabled — was overwriting correct balances
+}
+
+let currentProfile='me',currentTab='dashboard',tradeSubTab='log',formAccount='me',selectedBetType='',exchTransferBank='me',isUnderlay=false;
+let recentBookies=[]; // tracks last 8 used bookies
+let lastSavedTrade=null; // for quick duplicate after save
+let _duplicateMode=false; // true when form was opened via duplicate
+let _dashHidden=true; // hidden by default
+let _chartMonth=null; // null=current month
+let _theme='stone'; // stone | slate
+let lastExchange='Smarkets'; // tracks last used exchange
+let showMoreTypes=false; // toggle for extra bet types
+let showComm=false; // toggle for commission field
+let calcBetType='Boost';
+let calcStrategy='underlay';
+
+function fmt(v){const n=parseFloat(v)||0;return(n<0?'-':'')+'£'+Math.abs(n).toFixed(2);}
+function fmtS(v){const n=parseFloat(v)||0;return(n>=0?'+':'-')+'£'+Math.abs(n).toFixed(2);}
+function totalBookie(p){return Object.values(state[p].bookies||{}).reduce((a,b)=>a+(b.bal||0),0);}
+function totalPnl(p){return(state[p].transactions||[]).filter(t=>t.type!=='Balance Amendment').reduce((a,t)=>a+(t.pnl||0),0);}
+function pendingAll(){return PROFILES.flatMap(p=>(state[p].transactions||[]).filter(t=>t.result==='Pending').map(t=>({...t,_acct:p})));}
+function parseDate(d){if(!d)return 0;const p=d.split('/');if(p.length===3)return new Date(+p[2],+p[1]-1,+p[0]).getTime();return 0;}
+function allTxs(){return PROFILES.flatMap(p=>(state[p].transactions||[]).map(t=>({...t,_acct:p}))).sort((a,b)=>{const dd=parseDate(b.date)-parseDate(a.date);return dd!==0?dd:b.id-a.id;});}
+function profileTxs(p){return p==='both'?allTxs():(state[p].transactions||[]).map(t=>({...t,_acct:p})).sort((a,b)=>{const dd=parseDate(b.date)-parseDate(a.date);return dd!==0?dd:b.id-a.id;});}
+function pillClass(t){return'pill pill-'+(t||'').toLowerCase().replace(/\s/g,'');}
+function acctPill(a){return`<span class="pill pill-${a}">${PROFILE_LABELS[a]||a}</span>`;}
+function todayStr(){const d=new Date();return[String(d.getDate()).padStart(2,'0'),String(d.getMonth()+1).padStart(2,'0'),d.getFullYear()].join('/');}
+function profileColor(p){return PROFILE_COLORS[p]||'#C8C5BF';}
+function profileLabel(p){return PROFILE_LABELS[p]||p;}
+function isFreeBet(type){return FREE_BET_TYPES.includes(type);}
+function casinoPnl(p){
+  return(state[p].casino||[]).reduce((a,s)=>{
+    // New format: has non-zero startBal or endBal
+    if(s.startBal!==undefined&&s.endBal!==undefined&&(s.startBal!==0||s.endBal!==0)){
+      return a+(s.endBal-s.startBal);
+    }
+    // Old format or zero-balance session: use netProfit
+    return a+(s.netProfit||0);
+  },0);
+}
+function sportsPnl(p){return(state[p].transactions||[]).filter(t=>t.type!=='Balance Amendment'&&t.result!=='Pending').reduce((a,t)=>a+(t.pnl||0),0);}
+
+
+function getCssVar(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
+
+function getTypeColor(t){
+  return getCssVar('--bg-input')||'#3D4349';
+}
+function getTypeTextColor(t){
+  const map={Boost:'#60A5FA','Free Bet':'#34D399',Qualifier:'#FBBF24',Mug:'#9A9590','Extra Place':'#C084FC','2Up':'#F87171',MBAL:'#FB923C','Cash Back':'#A78BFA','Cash Out':'#94A3B8',Arb:'#F472B6'};
+  return map[t]||'#9A9590';
+}
+function toggleMoreTypes(){
+  showMoreTypes=!showMoreTypes;
+  const el=document.getElementById('main-content');
+  if(el)el.innerHTML=renderTrade();
+  setTimeout(bindFormEvents,50);
+}
+function toggleComm(){
+  showComm=!showComm;
+  const commEl=document.getElementById('fg-comm-toggle');
+  if(commEl){const el=document.getElementById('main-content');if(el)el.innerHTML=renderTrade();setTimeout(bindFormEvents,50);}
+}
+
+function statusBadge(s){
+  const cls={Active:'badge-active',Restricted:'badge-restricted',Gubbed:'badge-gubbed',Closed:'badge-closed','Not Signed Up':'badge-unsigned'}[s]||'badge-unsigned';
+  return`<span class="badge ${cls}">${s}</span>`;
+}
+
+function showToast(msg,type='success'){
+  const t=document.getElementById('toast');
+  t.innerHTML=`<span style="font-size:18px">${type==='success'?'✓':type==='error'?'✗':'ℹ'}</span> ${msg}`;
+  t.style.background=type==='success'?'#22C55E':type==='error'?'#F87171':getCssVar('--bg-card2')||'#2C3136';
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),3000);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// ── DASHBOARD ────────────────────────────────────────────────────────────────
+
+
+
+
+
+
+
+
+
+
+// ── PENDING ──────────────────────────────────────────────────────────────────
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// ── ADD FORM ─────────────────────────────────────────────────────────────────
+
+
+
+
+function switchProfile(p){
+  currentProfile=p;
+  PROFILES.forEach(x=>{const b=document.getElementById('pbtn-'+x);if(b){b.className='profile-btn';if(x===p)b.classList.add('active-'+x);}});
+  const bb=document.getElementById('pbtn-both');if(bb){bb.className='profile-btn';if(p==='both')bb.classList.add('active-both');}
+  render();
+}
+
+function updateBadge(){
+  const n=pendingAll().length;
+  const b=document.getElementById('pending-badge');
+  if(b){b.textContent=n;b.style.display=n?'inline':'none';}
+}
+
+
+
+function monthlyPnl(txs){
+  const map={};
+  txs.forEach(t=>{if(!t.date||t.pnl===undefined||t.pnl===null||t.type==='Balance Amendment'||t.result==='Pending')return;const pts=t.date.split('/');if(pts.length<3)return;const k=`${pts[2]}-${pts[1]}`;map[k]=(map[k]||0)+(t.pnl||0);});
+  return map;
+}
+
+function renderMonthBars(map,height=90){
+  const keys=Object.keys(map).sort();if(!keys.length)return`<div class="empty">No data yet</div>`;
+  const vals=keys.map(k=>map[k]);const maxAbs=Math.max(...vals.map(Math.abs),0.01);
+  const barH=height-40;
+  return`<div class="month-wrap" style="height:${height}px;align-items:flex-end;gap:4px">
+    ${keys.map(k=>{const v=map[k];const pct=Math.max(Math.abs(v)/maxAbs*barH,2);const col=v>=0?'pos':'neg';const[yr,mo]=k.split('-');const lbl=new Date(+yr,+mo-1).toLocaleString('default',{month:'short'});
+      return`<div class="month-col" style="min-width:40px"><div class="month-val ${col}" style="font-size:10px;font-weight:600">${fmtS(v)}</div><div class="month-bar ${col}" style="height:${pct}px;width:34px"></div><div class="month-lbl" style="font-size:10px;margin-top:2px">${lbl}</div></div>`;
+    }).join('')}
+  </div>`;
+}
+
+// ── DASHBOARD ────────────────────────────────────────────────────────────────
+function renderDashboardMonthly(){
+  const sportsByMonth={};
+  allTxs().forEach(t=>{
+    if(!t.date||t.type==='Balance Amendment')return;
+    const parts=t.date.split('/');
+    if(parts.length<3)return;
+    const key=parts[2]+'-'+parts[1].padStart(2,'0');
+    if(!sportsByMonth[key])sportsByMonth[key]=0;
+    sportsByMonth[key]+=(t.pnl||0);
+  });
+  const casinoByMonth={};
+  PROFILES.flatMap(p=>(state[p].casino||[]).map(s=>({...s,_acct:p}))).forEach(s=>{
+    const pnl=s.startBal!==undefined?s.endBal-s.startBal:s.netProfit||0;
+    const d=s.date||'';
+    const parts=d.split('/');
+    if(parts.length<3)return;
+    const key=parts[2]+'-'+parts[1].padStart(2,'0');
+    if(!casinoByMonth[key])casinoByMonth[key]=0;
+    casinoByMonth[key]+=pnl;
+  });
+  const allKeys=[...new Set([...Object.keys(sportsByMonth),...Object.keys(casinoByMonth)])].sort().reverse();
+  if(!allKeys.length)return'';
+  const nowKey=(new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0'));
+  const rows=allKeys.map(k=>{
+    const yr=k.slice(0,4),mo=k.slice(5);
+    const label=new Date(+yr,+mo-1).toLocaleString('default',{month:'short'})+' '+yr;
+    const s=sportsByMonth[k]||0;
+    const c=casinoByMonth[k]||0;
+    const t=s+c;
+    const isCurrent=k===nowKey;
+    const mask=_dashHidden&&!isCurrent;
+    return '<tr'+(isCurrent?' style="background:rgba(255,255,255,0.03)"':'')+'>'
+      +'<td style="font-size:11px;font-weight:500">'+label+'</td>'
+      +'<td style="text-align:right;font-size:11px;color:'+(s>=0?'#22C55E':'#F87171')+'">'+  (mask?'••••':fmtS(s))+'</td>'
+      +'<td style="text-align:right;font-size:11px;color:'+(c>=0?'#22C55E':'#F87171')+'">'+  (mask?'••••':fmtS(c))+'</td>'
+      +'<td style="text-align:right;font-size:11px;font-weight:500;color:'+(t>=0?'#22C55E':'#F87171')+'">'+  (mask?'••••':fmtS(t))+'</td>'
+      +'</tr>';
+  }).join('');
+  return '<div class="card" style="margin-bottom:12px">'
+    +'<div class="card-header"><span class="card-title">Monthly P&L</span></div>'
+    +'<div style="overflow-x:auto;padding:8px 14px">'
+    +'<table class="data-table" style="width:100%">'
+    +'<thead><tr>'
+    +'<th>Month</th>'
+    +'<th style="text-align:right">Sports (£)</th>'
+    +'<th style="text-align:right">Casino (£)</th>'
+    +'<th style="text-align:right">Total (£)</th>'
+    +'</tr></thead>'
+    +'<tbody>'+rows+'</tbody>'
+    +'</table></div></div>';
+}
+
+
+
+function renderPerformanceCard(){
+  const txs=allTxs().filter(t=>t.type!=='Balance Amendment'&&t.result!=='Pending'&&t.result!=='—');
+  if(!txs.length)return'';
+  const won=txs.filter(t=>t.result==='Won').length;
+  const total=txs.length;
+  const winRate=Math.round(won/total*100);
+  const totalPnlVal=txs.reduce((a,t)=>a+(t.pnl||0),0);
+  const avgPnl=totalPnlVal/total;
+  // This month
+  const now=new Date();
+  const thisMonth=txs.filter(t=>{const p=t.date?.split('/');return p&&p.length===3&&+p[1]===now.getMonth()+1&&+p[2]===now.getFullYear();});
+  const monthPnl=thisMonth.reduce((a,t)=>a+(t.pnl||0),0);
+  // Best bookie
+  const bookiePnl={};txs.forEach(t=>{if(!t.bookie)return;bookiePnl[t.bookie]=(bookiePnl[t.bookie]||0)+(t.pnl||0);});
+  const bestBookie=Object.entries(bookiePnl).sort((a,b)=>b[1]-a[1])[0];
+  return '<div class="card" style="margin-bottom:12px">'
+    +'<div class="card-header"><span class="card-title">Performance</span></div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border-col);border-radius:0 0 10px 10px;overflow:hidden">'
+    +'<div style="background:var(--bg-input);padding:12px"><div style="font-size:10px;color:var(--text-muted);margin-bottom:3px">Win rate</div><div style="font-size:18px;font-weight:500;color:var(--text-primary)">'+winRate+'%</div><div style="font-size:10px;color:var(--text-muted)">'+won+' of '+total+' bets</div></div>'
+    +'<div style="background:var(--bg-input);padding:12px"><div style="font-size:10px;color:var(--text-muted);margin-bottom:3px">Avg P&L / bet</div><div style="font-size:18px;font-weight:500;color:'+(avgPnl>=0?'#22C55E':'#F87171')+'">'+fmtS(avgPnl)+'</div><div style="font-size:10px;color:var(--text-muted)">all settled bets</div></div>'
+    +'<div style="background:var(--bg-input);padding:12px"><div style="font-size:10px;color:var(--text-muted);margin-bottom:3px">This month</div><div style="font-size:18px;font-weight:500;color:'+(monthPnl>=0?'#22C55E':'#F87171')+'">'+fmtS(monthPnl)+'</div><div style="font-size:10px;color:var(--text-muted)">'+thisMonth.length+' bets</div></div>'
+    +'<div style="background:var(--bg-input);padding:12px"><div style="font-size:10px;color:var(--text-muted);margin-bottom:3px">Best bookie</div><div style="font-size:13px;font-weight:500;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(bestBookie?bestBookie[0]:'—')+'</div><div style="font-size:10px;color:'+(bestBookie&&bestBookie[1]>=0?'#22C55E':'#F87171')+'">'+( bestBookie?fmtS(bestBookie[1]):'')+'</div></div>'
+    +'</div></div>';
+}
+
+function getChartMonthKey(){
+  if(!_chartMonth){const n=new Date();return{year:n.getFullYear(),month:n.getMonth()+1};}
+  return _chartMonth;
+}
+function navChartMonth(dir){
+  const cur=getChartMonthKey();
+  let m=cur.month+dir,y=cur.year;
+  if(m>12){m=1;y++;}if(m<1){m=12;y--;}
+  const now=new Date();
+  if(y>now.getFullYear()||(y===now.getFullYear()&&m>now.getMonth()+1)||
+    (y===now.getFullYear()&&m===now.getMonth()+1))_chartMonth=null;
+  else _chartMonth={year:y,month:m};
+  const mc=document.getElementById('main-content');
+  if(mc)mc.innerHTML=renderDashboard();
+  setTimeout(initMonthlyChart,50);
+}
+function buildChartData(){
+  const{year,month}=getChartMonthKey();
+  const now=new Date();
+  const isCurrent=!_chartMonth;
+  const daysInMonth=new Date(year,month,0).getDate();
+  const lastDay=isCurrent?now.getDate():daysInMonth;
+  const sportsByDay={},casinoByDay={};
+  PROFILES.forEach(pr=>{
+    (state[pr].transactions||[]).forEach(t=>{
+      if(t.result==='Pending'||t.type==='Balance Amendment'||!t.date)return;
+      const p=t.date.split('/');if(p.length<3)return;
+      const d=parseInt(p[0]),mo=parseInt(p[1]),y=parseInt(p[2]);
+      if(y!==year||mo!==month)return;
+      sportsByDay[d]=(sportsByDay[d]||0)+(t.pnl||0);
+    });
+    (state[pr].casino||[]).forEach(s=>{
+      if(!s.date)return;
+      const p=s.date.split('/');if(p.length<3)return;
+      const d=parseInt(p[0]),mo=parseInt(p[1]),y=parseInt(p[2]);
+      if(y!==year||mo!==month)return;
+      const pnl=(s.startBal!==undefined&&s.endBal!==undefined&&(s.startBal!==0||s.endBal!==0))?s.endBal-s.startBal:(s.netProfit||0);
+      casinoByDay[d]=(casinoByDay[d]||0)+pnl;
+    });
+  });
+  const labels=[],sD=[],cD=[],comD=[];
+  let sc=0,cc=0;
+  for(let d=1;d<=lastDay;d++){
+    sc+=sportsByDay[d]||0;cc+=casinoByDay[d]||0;
+    labels.push(String(d));
+    sD.push(Math.round(sc*100)/100);
+    cD.push(Math.round(cc*100)/100);
+    comD.push(Math.round((sc+cc)*100)/100);
+  }
+  // Last month same-day
+  let lm=month-1,ly=year;
+  if(lm<1){lm=12;ly--;}
+  let lmS=0,lmC=0;
+  PROFILES.forEach(pr=>{
+    (state[pr].transactions||[]).forEach(t=>{
+      if(t.result==='Pending'||t.type==='Balance Amendment'||!t.date)return;
+      const p=t.date.split('/');if(p.length<3)return;
+      const d=parseInt(p[0]),mo=parseInt(p[1]),y=parseInt(p[2]);
+      if(y!==ly||mo!==lm||d>lastDay)return;
+      lmS+=(t.pnl||0);
+    });
+    (state[pr].casino||[]).forEach(s=>{
+      if(!s.date)return;
+      const p=s.date.split('/');if(p.length<3)return;
+      const d=parseInt(p[0]),mo=parseInt(p[1]),y=parseInt(p[2]);
+      if(y!==ly||mo!==lm||d>lastDay)return;
+      const pnl=(s.startBal!==undefined&&s.endBal!==undefined&&(s.startBal!==0||s.endBal!==0))?s.endBal-s.startBal:(s.netProfit||0);
+      lmC+=pnl;
+    });
+  });
+  return{labels,sD,cD,comD,
+    sT:Math.round(sc*100)/100,cT:Math.round(cc*100)/100,comT:Math.round((sc+cc)*100)/100,
+    lmS:Math.round(lmS*100)/100,lmC:Math.round(lmC*100)/100,lmCom:Math.round((lmS+lmC)*100)/100};
+}
+function renderMonthlyChart(){
+  const{year,month}=getChartMonthKey();
+  const isCurrent=!_chartMonth;
+  const monthName=new Date(year,month-1).toLocaleString('default',{month:'long'});
+  const d=buildChartData();
+  const mask=_dashHidden;
+  const mv=v=>mask?'••••':fmtS(v);
+  const delta=(cur,prev)=>{
+    if(mask)return'';
+    const diff=Math.round((cur-prev)*100)/100;
+    const col=diff>=0?'var(--text-accent)':'#F87171';
+    return '<div style="font-size:10px;margin-top:2px;color:'+col+'">'+(diff>=0?'↑ +':'↓ ')+fmtS(diff)+' vs prev</div>';
+  };
+  return '<div class="card" style="margin-bottom:12px">'    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">'    +'<div style="font-size:11px;font-weight:500;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px">Monthly P&L</div>'    +'<div style="display:flex;align-items:center;gap:8px">'    +'<button onclick="navChartMonth(-1)" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:18px;padding:0 4px;line-height:1">‹</button>'    +'<div style="font-size:12px;font-weight:500;color:var(--text-primary);min-width:100px;text-align:center">'+monthName+' '+year+'</div>'    +'<button onclick="navChartMonth(1)" style="background:none;border:none;cursor:pointer;font-size:18px;padding:0 4px;line-height:1;color:'+(isCurrent?'var(--border-col)':'var(--text-muted)')+'">›</button>'    +'</div></div>'    +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px">'    +'<div style="background:var(--bg-card2);border-radius:8px;padding:10px">'    +'<div style="font-size:10px;color:var(--text-muted);margin-bottom:3px;display:flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:var(--text-accent);display:inline-block"></span>Sports</div>'    +'<div style="font-size:17px;font-weight:500;color:var(--text-accent)">'+mv(d.sT)+'</div>'    +delta(d.sT,d.lmS)    +'</div>'    +'<div style="background:var(--bg-card2);border-radius:8px;padding:10px">'    +'<div style="font-size:10px;color:var(--text-muted);margin-bottom:3px;display:flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:#A78BFA;display:inline-block"></span>Casino</div>'    +'<div style="font-size:17px;font-weight:500;color:#A78BFA">'+mv(d.cT)+'</div>'    +delta(d.cT,d.lmC)    +'</div>'    +'<div style="background:var(--bg-card2);border-radius:8px;padding:10px">'    +'<div style="font-size:10px;color:var(--text-muted);margin-bottom:3px;display:flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:#60A5FA;display:inline-block"></span>Combined</div>'    +'<div style="font-size:17px;font-weight:500;color:#60A5FA">'+mv(d.comT)+'</div>'    +delta(d.comT,d.lmCom)    +'</div></div>'    +'<div style="position:relative;width:100%;height:130px"><canvas id="monthlyChart" role="img" aria-label="Monthly P&L trend chart">Sports '+d.sT+' Casino '+d.cT+'</canvas></div>'    +'<div style="display:flex;gap:12px;margin-top:8px">'    +'<div style="display:flex;align-items:center;gap:4px;font-size:10px;color:var(--text-muted)"><div style="width:16px;height:2px;background:var(--text-accent);border-radius:1px"></div>Sports</div>'    +'<div style="display:flex;align-items:center;gap:4px;font-size:10px;color:var(--text-muted)"><div style="width:16px;height:2px;background:#A78BFA;border-radius:1px"></div>Casino</div>'    +'<div style="display:flex;align-items:center;gap:4px;font-size:10px;color:var(--text-muted)"><div style="width:16px;height:2px;border-top:2px dashed #60A5FA"></div>Combined</div>'    +'</div></div>';
+}
+function initMonthlyChart(){
+  if(typeof Chart==='undefined')return;
+  const canvas=document.getElementById('monthlyChart');
+  if(!canvas)return;
+  const existing=Chart.getChart(canvas);
+  if(existing)existing.destroy();
+  const d=buildChartData();
+  new Chart(canvas,{
+    type:'line',
+    data:{labels:d.labels,datasets:[
+      {label:'Sports',data:d.sD,borderColor:'#22C55E',borderWidth:2,pointRadius:0,tension:0.3,fill:false},
+      {label:'Casino',data:d.cD,borderColor:'#A78BFA',borderWidth:2,pointRadius:0,tension:0.3,fill:false},
+      {label:'Combined',data:d.comD,borderColor:'#60A5FA',borderWidth:2,borderDash:[4,3],pointRadius:0,tension:0.3,fill:false}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false,callbacks:{label:function(ctx){return' £'+ctx.parsed.y.toFixed(0);}}}},
+      scales:{
+        x:{grid:{display:false},ticks:{color:'#9A9590',font:{size:9},maxTicksLimit:8}},
+        y:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#9A9590',font:{size:9},callback:function(v){return'£'+v;}}}
+      }
+    }
+  });
+}
+function renderDashboard(){
+  const allMap=monthlyPnl(allTxs());
+  const totalTrades=PROFILES.reduce((a,p)=>a+(state[p].transactions||[]).length,0);
+  const combinedSports=PROFILES.reduce((a,p)=>a+sportsPnl(p),0);
+  const combinedCasino=PROFILES.reduce((a,p)=>a+casinoPnl(p),0);
+  const combinedPnl=combinedSports+combinedCasino;
+  const totalBank=PROFILES.reduce((a,p)=>a+(state[p].bank||0),0);
+  const totalBookies=PROFILES.reduce((a,p)=>a+totalBookie(p),0);
+  const totalExchanges=Object.values(state.exchanges||{}).reduce((a,v)=>a+(v||0),0);
+  const totalFunds=totalBank+totalBookies+totalExchanges;
+  return`
+  <div id="qc-container">${renderQuickCalc()}</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+    <div class="metric-card" style="grid-column:span 2">
+      <div class="metric-label" style="display:flex;align-items:center;justify-content:space-between">
+        <span>Combined P&L
+        ${!_serverLoaded?'<span style="font-size:9px;color:var(--text-warn);background:rgba(186,117,23,0.15);padding:2px 7px;border-radius:10px;margin-left:6px">Updating...</span>':''}</span>
+        <button onclick="toggleDashVisibility()" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:2px 4px" title="${_dashHidden?'Show figures':'Hide figures'}"><i id="dash-vis-icon" class="ti ${_dashHidden?'ti-eye':'ti-eye-off'}"></i></button>
+      </div>
+      <div class="metric-value ${combinedPnl>=0?'pos':'neg'}" data-sensitive="${fmtS(combinedPnl)}">${_dashHidden?'••••••':fmtS(combinedPnl)}</div>
+      <div class="metric-sub" style="display:flex;gap:10px;flex-wrap:wrap">
+        <span>All accounts · ${totalTrades} trades</span>
+        <span>Sports: <span style="color:${combinedSports>=0?'#22C55E':'#F87171'}" data-sensitive="${fmtS(combinedSports)}">${_dashHidden?'••••':fmtS(combinedSports)}</span></span>
+        <span>Casino: <span style="color:${combinedCasino>=0?'#22C55E':'#F87171'}" data-sensitive="${fmtS(combinedCasino)}">${_dashHidden?'••••':fmtS(combinedCasino)}</span></span>
+      </div>
+    </div>
+    <div class="metric-card" style="grid-column:span 2">
+      <div class="metric-label">Total funds</div>
+      <div class="metric-value" data-sensitive="${fmt(totalFunds)}">${_dashHidden?'••••••':fmt(totalFunds)}</div>
+      <div class="metric-sub" style="display:flex;gap:10px;flex-wrap:wrap">
+        <span>Bank: <span data-sensitive="${fmt(totalBank)}">${_dashHidden?'••••':fmt(totalBank)}</span></span>
+        <span>Bookies: <span data-sensitive="${fmt(totalBookies)}">${_dashHidden?'••••':fmt(totalBookies)}</span></span>
+        <span>Exchanges: <span data-sensitive="${fmt(totalExchanges)}">${_dashHidden?'••••':fmt(totalExchanges)}</span></span>
+      </div>
+    </div>
+  </div>
+  <div class="acct-grid">
+    ${PROFILES.map(p=>{
+      const pnl=totalPnl(p);
+      return`<div class="acct-card">
+        <div class="acct-top">
+          <div class="acct-name"><div class="acct-dot dot-${p}"></div>${profileLabel(p)}</div>
+          <div class="acct-pnl ${pnl>=0?'pos':'neg'}">${_dashHidden?'••••':fmtS(pnl)}</div>
+        </div>
+        <div class="acct-row">
+          <span class="acct-row-label"><i class="ti ti-building-bank" aria-hidden="true"></i>Bank</span>
+          <span class="acct-row-val">${_dashHidden?'••••':fmt(state[p].bank)}</span>
+        </div>
+        <div class="acct-row">
+          <span class="acct-row-label"><i class="ti ti-wallet" aria-hidden="true"></i>Bookies</span>
+          <span class="acct-row-val">${_dashHidden?'••••':fmt(totalBookie(p))}</span>
+        </div>
+      </div>`;
+    }).join('')}
+  </div>
+  ${(()=>{
+    try{
+    const {ab,never,overdue,recent,allVerified}=getVerifyStats();
+    if(!ab.length)return'';
+    const borderCol=allVerified?'rgba(34,197,94,0.3)':never?'rgba(248,113,113,0.3)':'rgba(240,165,0,0.3)';
+    return'<div id="verify-strip" onclick="switchTab(\'accounts\')" style="background:var(--bg-card);border:0.5px solid '+borderCol+';border-radius:10px;padding:10px 14px;margin-bottom:12px;cursor:pointer;display:flex;align-items:center;justify-content:space-between">'
+      +'<div style="font-size:11px;color:var(--text-muted);font-weight:500;text-transform:uppercase;letter-spacing:.3px">Balance Verification</div>'
+      +'<div class="verify-strip-inner" style="display:flex;gap:10px">'
+      +(allVerified?'<span style="font-size:11px;color:#22C55E">✓ All '+ab.length+' verified</span>':'')
+      +(recent&&!allVerified?'<span style="font-size:11px;color:#22C55E">✓ '+recent+'</span>':'')
+      +(overdue?'<span style="font-size:11px;color:var(--text-warn)">⚠ '+overdue+' overdue</span>':'')
+      +(never?'<span style="font-size:11px;color:#F87171">● '+never+' unverified</span>':'')
+      +'</div></div>';
+    }catch(e){return '';}
+  })()}
+  ${renderMonthlyChart()}
+  ${renderPerformanceCard()}${renderFreeBetsPanel()}
+`;}
+
+function renderFreeBetsPanel(){
+  const all=PROFILES.flatMap(pr=>(state[pr].freeBets||[]).map(fb=>({...fb,_pr:pr})));
+  const pending=all.filter(fb=>fb.status==='Pending');
+  const used=all.filter(fb=>fb.status==='Used');
+  if(all.length===0)return '';
+  return `<div class="card" data-panel="freebets" style="margin-top:12px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div style="font-size:13px;font-weight:500;color:var(--text-primary)">Free Bets</div>
+      ${pending.length>0?`<span style="font-size:11px;background:rgba(34,197,94,0.15);color:var(--text-accent);padding:3px 8px;border-radius:20px">${pending.length} pending</span>`:''}
+    </div>
+    ${pending.length>0?`
+    <div style="margin-bottom:8px">
+      ${pending.map(fb=>`
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:0.5px solid var(--border-col)">
+        <div>
+          <div style="font-size:13px;color:var(--text-primary)">${fb.bookie}</div>
+          <div style="font-size:11px;color:var(--text-muted)">${profileLabel(fb._pr)} · ${fb.date}</div>
+        </div>
+        <button onclick="markFreeBetUsed('${fb._pr}','${fb.id}')" style="font-size:11px;padding:4px 10px;border-radius:6px;border:0.5px solid rgba(255,255,255,0.2);background:var(--bg-input);color:var(--text-primary);cursor:pointer">Mark used</button>
+      </div>`).join('')}
+    </div>`:''}
+    ${used.length>0?`
+    <details style="margin-top:4px">
+      <summary style="font-size:11px;color:var(--text-muted);cursor:pointer;list-style:none">▸ ${used.length} used</summary>
+      <div style="margin-top:6px">
+        ${used.map(fb=>`
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:0.5px solid var(--border-col2)">
+          <div>
+            <div style="font-size:12px;color:var(--text-muted);text-decoration:line-through">${fb.bookie}</div>
+            <div style="font-size:11px;color:var(--text-muted)">${profileLabel(fb._pr)} · ${fb.date}</div>
+          </div>
+          <span style="font-size:10px;color:var(--text-muted)">Used</span>
+        </div>`).join('')}
+      </div>
+    </details>`:''}
+  </div>`;
+}
+
+function markFreeBetUsed(pr,id){
+  const fb=(state[pr].freeBets||[]).find(f=>String(f.id)===String(id));
+  if(fb){
+    fb.status='Used';save('freeBetUsed');
+    // Smart update: just re-render the free bets panel
+    const fbPanel=document.querySelector('.card[data-panel="freebets"]');
+    if(fbPanel){fbPanel.outerHTML=renderFreeBetsPanel();}
+    else{render();}
+  }
+}
+
+// ── PENDING ──────────────────────────────────────────────────────────────────
+function renderPending(){
+  const pending=pendingAll();
+  if(!pending.length)return`<div style="text-align:center;padding:60px 20px"><i class="ti ti-circle-check" style="font-size:48px;color:#22C55E" aria-hidden="true"></i><div style="font-size:15px;font-weight:500;margin-top:12px;color:var(--text-primary)">All settled</div></div>`;
+  return`
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+    <div class="metric-card"><div class="metric-label">Pending</div><div class="metric-value warn">${pending.length}</div></div>
+    <div class="metric-card"><div class="metric-label">Expected P&L</div><div class="metric-value pos" style="font-size:20px">${fmtS(pending.reduce((a,t)=>a+(t.expectedPnl||0),0))}</div></div>
+  </div>
+  ${pending.map(t=>{
+    const isFB=isFreeBet(t.type);
+    return`<div class="pending-card" id="pcard-${t.id}">
+      <div class="pending-event">${t.event||'Unnamed event'}</div>
+      <div class="pending-meta">
+        <span class="${pillClass(t.type)}">${t.type}</span>${acctPill(t._acct)}
+        <span style="font-size:11px;color:var(--text-secondary)">${t.date}</span>
+        <span style="font-size:11px;color:var(--text-secondary)">${t.bookie||'—'}</span>
+        ${t.exchange?`<span style="font-size:11px;color:var(--text-muted);background:var(--border-col2);padding:2px 6px;border-radius:4px">${t.exchange}</span>`:''}
+        ${isFB?'<span class="badge" style="background:rgba(34,197,94,0.1);color:var(--text-accent)">SNR</span>':''}
+        ${t.underlay?'<span class="badge" style="background:rgba(34,197,94,0.1);color:var(--text-accent);border:0.5px solid rgba(93,202,165,0.3)">U</span>':''}
+      </div>
+      <div class="pending-info">
+        ${t.bstake?`<div class="pinfo-item"><span class="pinfo-label">Back</span><span class="pinfo-val">£${t.bstake} @ ${t.bodds}</span></div>`:''}
+        <div class="pinfo-item">
+          <span class="pinfo-label">If wins</span>
+          <span class="pinfo-val pos">${fmtS(t.expectedPnl||0)}</span>
+        </div>
+        ${(()=>{
+          const isFB=isFreeBet(t.type);
+          const bs=t.bstake||0,bo=t.bodds||0,lo=t.lodds||0;
+          if(t.underlay&&isFB&&lo>1&&bo>2){
+            const ul_ls=bs*(bo-2)/(lo-1);
+            return '<div class="pinfo-item"><span class="pinfo-label">If loses</span><span class="pinfo-val pos">'+fmtS(ul_ls)+'</span></div>';
+          }
+          if(!t.underlay&&lo>0){
+            const li_ls=isFB?bs*(bo-1)/lo:bs*bo/lo;
+            const lose_pnl=isFB?li_ls:li_ls-bs;
+            return '<div class="pinfo-item"><span class="pinfo-label">If loses</span><span class="pinfo-val '+(lose_pnl>=0?'pos':'neg')+'">'+fmtS(lose_pnl)+'</span></div>';
+          }
+          return '';
+        })()}
+        <div style="margin-left:auto"><button class="btn-sm btn-sm-edit" onclick="editPnl('${t._acct}',${t.id})">Edit P&L</button></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px">
+        <button class="btn-won" onclick="settleBet('${t._acct}',${t.id},'Won')" style="padding:14px;font-size:15px;border-radius:10px"><i class="ti ti-check" aria-hidden="true"></i> Won</button>
+        <button class="btn-lost" onclick="settleBet('${t._acct}',${t.id},'Lost')" style="padding:14px;font-size:15px;border-radius:10px"><i class="ti ti-x" aria-hidden="true"></i> Lost</button>
+      </div>
+    </div>`;
+  }).join('')}`;
+}
+
+function applyBalanceOnSettle(tx,p,result){
+  const isFB=isFreeBet(tx.type);
+  const bs=tx.bstake||0,bo=tx.bodds||0,lo=tx.lodds||0,exchange=tx.exchange;
+  const bk=tx.bookie&&p.bookies[tx.bookie]?p.bookies[tx.bookie]:null;
+
+  if(tx.underlay){
+    if(!isFB){
+      // NORMAL UNDERLAY
+      // Won: back wins net of lay liability = bs*(bo-lo)
+      // Lost: £0 — back stake lost, lay profit cancels exactly
+      if(result==='Won'){
+        // Bookie receives full return (bo*bs) — stake was already deducted at log
+        // Net profit = bo*bs - bs = bs*(bo-1), but lay costs bs*(lo-1)
+        // So net P&L = bs*(bo-1) - bs*(lo-1) = bs*(bo-lo)
+        const winProfit=lo>0?Math.round(bs*(bo-lo)*100)/100:(tx.pnl||0);
+        tx.pnl=winProfit;
+        if(bk){bk.bal=Math.round(((bk.bal||0)+(bo*bs))*100)/100;bk.balUpdatedAt=Date.now();}
+      }else{
+        tx.pnl=0;
+        // bookie stays deducted (back stake lost), lay profit cancels on exchange — net zero
+      }
+    }else{
+      // FREE BET SNR UNDERLAY
+      // Lay stake = bs*(bo-2)/(lo-1)
+      // Won: profit = bs (effectively get stake back)
+      // Lost: profit = lay stake (lay wins on the exchange)
+      const ul_ls=lo>1&&bo>2?bs*(bo-2)/(lo-1):0;
+      if(result==='Won'){
+        const winProfit=bs; // SNR: back wins (bo-1)*bs, lay loses ul_ls*(lo-1) = bs*(bo-2) → net = bs
+        tx.pnl=winProfit;
+        // Free bet bookie: winnings land in bookie account
+        if(bk){bk.bal=(bk.bal||0)+(bo-1)*bs;bk.balUpdatedAt=Date.now();}
+        // Pay lay liability from exchange
+        if(exchange&&state.exchanges[exchange]!==undefined)
+          state.exchanges[exchange]=(state.exchanges[exchange]||0)-ul_ls*(lo-1);
+      }else{
+        // Lost: lay wins → profit = lay stake
+        tx.pnl=ul_ls;
+        if(exchange&&state.exchanges[exchange]!==undefined)
+          state.exchanges[exchange]=(state.exchanges[exchange]||0)+ul_ls;
+      }
+    }
+  }else{
+    // LOCK-IN (standard matched bet)
+    if(result==='Won'){
+      if(isFB){
+        // SNR free bet won: back winnings to bookie, pay lay liability from exchange
+        const li_ls=lo>0?bs*(bo-1)/lo:0;
+        const lockinProfit=li_ls; // same both ways for lock-in
+        tx.pnl=lockinProfit;
+        if(bk)bk.bal=(bk.bal||0)+(bo-1)*bs; // back winnings to bookie
+        if(exchange&&state.exchanges[exchange]!==undefined)
+          state.exchanges[exchange]=(state.exchanges[exchange]||0)-li_ls*(lo-1);
+      }else{
+        // Normal won: full return to bookie, pay lay liability from exchange
+        const li_ls=lo>0?bs*bo/lo:0;
+        const lockinProfit=li_ls-bs;
+        tx.pnl=lockinProfit;
+        if(bk){bk.bal=(bk.bal||0)+(bo*bs);bk.balUpdatedAt=Date.now();}
+        if(exchange&&state.exchanges[exchange]!==undefined)
+          state.exchanges[exchange]=(state.exchanges[exchange]||0)-li_ls*(lo-1);
+      }
+    }else{
+      // Lost: lay profit/loss goes to exchange
+      // For normal bets: lay stake = bs*bo/lo, profit = lay_stake - bs (can be negative for qualifiers)
+      // For free bets: lay stake = bs*(bo-1)/lo, profit = lay_stake (always positive)
+      const li_ls=lo>0?(isFB?bs*(bo-1)/lo:bs*bo/lo):0;
+      const lockinProfit=lo>0?(isFB?li_ls:li_ls-bs):(tx.expectedPnl||0);
+      tx.pnl=Math.round(lockinProfit*100)/100;
+      if(exchange&&state.exchanges[exchange]!==undefined)
+        state.exchanges[exchange]=(state.exchanges[exchange]||0)+tx.pnl;
+    }
+  }
+}
+
+function applyBalanceAtLog(tx,p){
+  if(tx.result==='Pending'){
+    // Only deduct stake for normal bets — free bets don't use your money
+    if(!isFreeBet(tx.type)&&tx.bookie&&p.bookies[tx.bookie]){
+      p.bookies[tx.bookie].bal=(p.bookies[tx.bookie].bal||0)-(tx.bstake||0);
+      p.bookies[tx.bookie].balUpdatedAt=Date.now();
+    }
+  }else{
+    // Logged as already settled — for normal bets deduct stake first, then apply result
+    if(!isFreeBet(tx.type)&&tx.result==='Lost'&&tx.bookie&&p.bookies[tx.bookie])
+      p.bookies[tx.bookie].bal=(p.bookies[tx.bookie].bal||0)-(tx.bstake||0);
+    applyBalanceOnSettle(tx,p,tx.result);
+  }
+}
+
+function settleBet(acct,id,result){
+  const p=state[acct];const tx=(p.transactions||[]).find(t=>t.id===id);if(!tx||tx.result!=='Pending')return;
+  tx.result=result;applyBalanceOnSettle(tx,p,result);
+  // Immediately write to localStorage so refresh picks up settled state
+  try{
+    const snap={exchanges:state.exchanges,_deletedTxIds:deletedTxIds};
+    PROFILES.forEach(pr=>{snap[pr]={bank:state[pr].bank,bookies:state[pr].bookies,transactions:state[pr].transactions,freeBets:state[pr].freeBets||[],casino:state[pr].casino||[]};});
+    localStorage.setItem('mbe_state',JSON.stringify(snap));
+  }catch(e){}
+  if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('settle');
+  const card=document.getElementById('pcard-'+id);
+  if(card){card.style.transition='opacity .25s,transform .25s';card.style.opacity='0';card.style.transform='translateY(-6px)';setTimeout(()=>{card.remove();updateBadge();},260);}
+  showToast(`${result==='Won'?'Won':'Lost'} — ${fmtS(tx.pnl||0)}`,result==='Won'?'success':'error');
+  // Smart update: only rebuild what changed
+  setTimeout(function(){
+    updateBadge();
+    // If on dashboard, refresh just the P&L figures
+    if(currentTab==='dashboard')render();
+    // If on pending tab, check if any pending remain
+    else if(currentTab==='pending'&&pendingAll().length===0){
+      const mc=document.getElementById('main-content');
+      if(mc)mc.innerHTML='<div style="text-align:center;padding:60px 20px"><i class="ti ti-circle-check" style="font-size:48px;color:#22C55E"></i><div style="font-size:15px;font-weight:500;margin-top:12px;color:var(--text-primary)">All settled</div></div>';
+    }
+  },300);
+}
+
+function editPnl(acct,id){
+  const tx=state[acct].transactions.find(t=>t.id===id);if(!tx)return;
+  document.getElementById('modal-root').innerHTML=`
+  <div class="modal-bg" onclick="if(event.target===this)closeModal()">
+    <div class="modal">
+      <div class="modal-handle"></div>
+      <div class="modal-title">Edit P&L</div>
+      <div class="modal-sub">${tx.event||tx.bookie||'Transaction'} · ${tx.date}</div>
+      <div style="margin-bottom:12px">
+        <div class="form-label">Current P&L</div>
+        <div style="font-size:24px;font-weight:500;color:${(tx.pnl||0)>=0?'#22C55E':'#F87171'}">${fmtS(tx.pnl||0)}</div>
+      </div>
+      <div style="margin-bottom:4px">
+        <div class="form-label">New P&L (£)</div>
+        <input type="number" id="modal-pnl" step="0.01" value="${(tx.pnl||0).toFixed(2)}" inputmode="decimal" style="font-size:20px;font-weight:500;border-color:var(--text-accent);background:var(--bg-input)"/>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-primary" style="flex:1" onclick="confirmPnlEdit('${acct}',${id})">Save</button>
+        <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      </div>
+    </div>
+  </div>`;
+  setTimeout(()=>document.getElementById('modal-pnl')?.focus(),50);
+}
+
+function confirmPnlEdit(acct,id){
+  const newPnl=parseFloat(document.getElementById('modal-pnl')?.value);if(isNaN(newPnl))return;
+  const p=state[acct];const tx=p.transactions.find(t=>t.id===id);if(!tx)return;
+  const diff=newPnl-(tx.pnl||0);tx.pnl=newPnl;
+  // P&L edit only affects exchange (lay profit) not bookie balance
+  // Bookie balance is set from odds×stake on settlement, not from P&L
+  if(tx.result==='Lost'&&tx.exchange&&state.exchanges[tx.exchange]!==undefined)
+    state.exchanges[tx.exchange]=(state.exchanges[tx.exchange]||0)+diff;
+  if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('editPnl');closeModal();showToast(`P&L updated to ${fmtS(newPnl)}`);render();
+}
+
+function closeModal(){document.getElementById('modal-root').innerHTML='';}
+
+// ── ADD FORM ─────────────────────────────────────────────────────────────────
+
+
+function renderAdd(prefill){
+  const p=state[formAccount];const pf=prefill||{};
+  const exchOpts=EXCHANGES.map(e=>`<option${(pf.exchange||lastExchange)===e?' selected':''}>${e}</option>`).join('');
+  const topTypes=['Boost','Qualifier','Free Bet'];
+  const moreTypes=['Mug','Extra Place','2Up','MBAL','Cash Back','Cash Out','Arb'];
+  const isMoreSel=moreTypes.includes(selectedBetType);
+  return`
+  ${lastSavedTrade&&!prefill?`<div style="background:var(--bg-card);border:0.5px solid var(--border-col);border-radius:12px;padding:12px 16px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:10px">
+    <div style="min-width:0">
+      <div style="font-size:10px;color:var(--text-muted);font-weight:500;text-transform:uppercase;letter-spacing:.3px;margin-bottom:3px">Last saved</div>
+      <div style="font-size:13px;font-weight:500;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${lastSavedTrade.bookie}${lastSavedTrade.event?' · '+lastSavedTrade.event:''}</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:2px">${lastSavedTrade.type} · ${PROFILE_LABELS[lastSavedTrade._acct]||lastSavedTrade._acct}</div>
+    </div>
+    <button onclick="duplicateTrade(lastSavedTrade._acct,null,lastSavedTrade)" style="flex-shrink:0;padding:8px 14px;border-radius:8px;border:0.5px solid #60A5FA;background:var(--bg-input);color:#60A5FA;font-family:system-ui,-apple-system,sans-serif;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap"><i class="ti ti-copy"></i> Duplicate</button>
+  </div>`:''}
+  <div class="card">
+    <div class="card-header">
+      <div style="display:flex;align-items:center;gap:8px">
+        <div id="form-dot" style="width:8px;height:8px;border-radius:50%;background:${profileColor(formAccount)}"></div>
+        <span class="card-title">Log trade${prefill?' · duplicated':''}</span>
+      </div>
+    </div>
+    <div class="card-body" style="padding-bottom:80px">
+
+      <div class="form-section">
+        <div class="form-label">Account</div>
+        <div class="acct-selector">${PROFILES.map(pr=>`<button class="acct-sel-btn ${formAccount===pr?'active-'+pr:''}" id="facc-${pr}" onclick="setFormAccount('${pr}')">${profileLabel(pr)}</button>`).join('')}</div>
+      </div>
+
+      <div class="form-section">
+        <div class="form-label">Type</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">
+          ${topTypes.map(t=>`<button data-toptype="${t}" onclick="selectBetType('${t}')" style="flex:1;padding:10px 6px;border-radius:8px;border:0.5px solid ${selectedBetType===t?'transparent':'rgba(255,255,255,0.10)'};background:${selectedBetType===t?getTypeColor(t):getCssVar('--bg-card2')};color:${selectedBetType===t?getTypeTextColor(t):'#C8C5BF'};font-family:system-ui,-apple-system,sans-serif;font-size:13px;font-weight:500;cursor:pointer;transition:all .15s">${t}</button>`).join('')}
+        </div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center">
+          ${(showMoreTypes||isMoreSel||['Deposit','Withdrawal','Exchange Deposit','Exchange Withdrawal','Balance Amendment'].includes(selectedBetType))?[...moreTypes,'Deposit','Withdrawal','Exchange Deposit','Exchange Withdrawal','Balance Amendment'].map(t=>`<div class="type-pill${selectedBetType===t?' sel sel-'+t.toLowerCase().replace(/\s/g,''):''}" data-type="${t}" onclick="selectBetType('${t}')">${t}</div>`).join(''):''}
+          <div class="type-pill${showMoreTypes?' sel':''}" onclick="toggleMoreTypes()" style="${showMoreTypes?'background:var(--bg-input);color:var(--text-secondary);border-color:var(--text-muted)':''}">${showMoreTypes?'Less ▲':'More ▼'}</div>
+        </div>
+      </div>
+
+      <div id="form-fields">
+        <div style="display:grid;grid-template-columns:100px 1fr 1fr;gap:8px;margin-bottom:8px">
+          <div class="form-group"><div class="form-label">Date</div><input type="text" id="f-date" placeholder="DD/MM/YYYY" value="${todayStr()}" style="font-size:12px;padding:7px 9px"/></div>
+          <div class="form-group" id="fg-bookie"><div class="form-label">Bookmaker</div>
+            <div style="position:relative">
+              <input type="text" id="f-bookie-search" placeholder="Search…" autocomplete="off" oninput="filterBookieDropdown(this.value)" onfocus="showBookieDropdown()" value="${pf.bookie||''}" style="padding-right:10px"/>
+              <input type="hidden" id="f-bookie" value="${pf.bookie||''}"/>
+              <div id="bookie-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:50;background:var(--bg-input);border:0.5px solid var(--border-col);border-radius:8px;margin-top:3px;max-height:200px;overflow-y:auto;-webkit-overflow-scrolling:touch"></div>
+            </div>
+          </div>
+          <div class="form-group" id="fg-exchange"><div class="form-label">Exchange</div><select id="f-exchange"><option value="">—</option>${exchOpts}</select></div>
+        </div>
+
+        ${recentBookies.length?`<div id="fg-recent-bookies" style="margin-bottom:8px">
+          <div class="form-label">Recent</div>
+          <div style="display:flex;gap:5px;flex-wrap:wrap">${recentBookies.map(b=>`<button onclick="selectBookie('${b.replace(/'/g,"\\'")}');document.getElementById('f-bookie-search').value='${b.replace(/'/g,"\\'")}'" style="padding:4px 10px;border-radius:20px;border:0.5px solid var(--border-col);background:var(--bg-input);color:var(--text-secondary);font-family:system-ui,-apple-system,sans-serif;font-size:11px;cursor:pointer;white-space:nowrap">${b}</button>`).join('')}</div>
+        </div>`:''}
+
+        <div class="form-row single" id="fg-event"><div class="form-group"><div class="form-label" style="color:var(--text-muted)">Event <span style="font-size:9px;text-transform:none;letter-spacing:0">(optional)</span></div><input type="text" id="f-event" placeholder="e.g. Arsenal vs Chelsea" value="${pf.event||''}" style="font-size:12px;padding:7px 10px;background:var(--bg-input);border-color:rgba(255,255,255,0.09)"/></div></div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px" id="fg-stake-odds">
+          <div class="form-group" id="fg-bstake"><div class="form-label">Stake</div><input type="number" id="f-bstake" placeholder="0.00" step="0.01" inputmode="decimal" value="${pf.bstake||''}" oninput="autoCalcUnderlay()" style="padding:7px 8px"/></div>
+          <div class="form-group" id="fg-bodds"><div class="form-label">Back odds</div><input type="number" id="f-bodds" placeholder="2.00" step="0.01" inputmode="decimal" value="${pf.bodds||''}" oninput="autoCalcUnderlay()" style="padding:7px 8px"/></div>
+          <div class="form-group" id="fg-layodds"><div class="form-label">Lay odds</div><input type="number" id="f-lodds" placeholder="2.00" step="0.01" inputmode="decimal" oninput="autoCalcUnderlay()" value="${pf.lodds||''}" style="padding:7px 8px"/></div>
+        </div>
+        <div id="fg-partial-wrap" style="display:none;margin-bottom:8px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:11px;color:var(--text-muted)">Partial %</span>
+            <input type="number" id="f-partial" placeholder="100" min="1" max="100" step="1" inputmode="numeric" value="100" oninput="autoCalcUnderlay()" style="width:70px;padding:5px 8px;font-size:12px"/>
+            <button onclick="document.getElementById('fg-partial-wrap').style.display='none'" style="font-size:10px;color:var(--text-muted);background:none;border:none;cursor:pointer">✕</button>
+          </div>
+          <div id="underlay-calc" style="background:var(--bg-card);border-radius:8px;padding:7px 10px;margin-top:4px;display:none">
+            <div style="display:flex;justify-content:space-between;gap:8px">
+              <div style="display:flex;flex-direction:column;gap:2px;flex:1">
+                <span id="ul-win-label" style="font-size:10px;color:var(--text-muted)">If wins</span>
+                <span id="ul-win-display" style="font-size:14px;font-weight:500;color:#22C55E">—</span>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:2px;flex:1;text-align:center">
+                <span id="ul-lose-label" style="font-size:10px;color:var(--text-muted)">If loses</span>
+                <span id="ul-lose-display" style="font-size:14px;font-weight:500;color:var(--text-muted)">£0.00</span>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:2px;flex:1;text-align:right">
+                <span style="font-size:10px;color:var(--text-muted)">Lay stake</span>
+                <span id="ul-liab-display" style="font-size:14px;font-weight:500;color:var(--text-secondary)">—</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-bottom:8px" id="fg-comm-toggle">
+          ${showComm?`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:end">
+            <div class="form-group"><div class="form-label">Commission (%)</div><input type="number" id="f-comm" placeholder="0" step="0.1" inputmode="decimal" value="${pf.comm||0}"/></div>
+            <button onclick="toggleComm()" style="padding:9px 12px;border-radius:8px;border:0.5px solid rgba(255,255,255,0.10);background:var(--bg-input);color:var(--text-muted);font-family:system-ui,-apple-system,sans-serif;font-size:11px;cursor:pointer;margin-bottom:1px">Remove</button>
+          </div>`
+          :`<button onclick="toggleComm()" style="padding:6px 12px;border-radius:20px;border:0.5px solid rgba(255,255,255,0.10);background:transparent;color:var(--text-muted);font-family:system-ui,-apple-system,sans-serif;font-size:11px;cursor:pointer"><input type="hidden" id="f-comm" value="0"/>+ Add commission</button>`}
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px" id="fg-result-pnl">
+          <div class="form-group" id="fg-result"><div class="form-label">Result</div><select id="f-result"><option value="Pending">Pending</option><option value="Won">Won</option><option value="Lost">Lost</option></select></div>
+          <div class="form-group" id="fg-pnl"><div class="form-label">P&L <span id="pnl-label-hint" style="font-size:10px;color:#22C55E">${isUnderlay?'auto':'your figure'}</span></div><input type="number" id="f-pnl" placeholder="0.00" step="0.01" inputmode="decimal" value="${pf.pnl||''}" style="padding:7px 8px"/></div>
+          <div id="fg-underlay" style="margin-bottom:6px;display:none">
+            <div style="display:flex;align-items:center;gap:6px">
+              <span class="form-label" style="margin-bottom:0;flex-shrink:0">Strategy</span>
+              <button id="btn-underlay" onclick="setStrategy('underlay')" class="btn btn-primary" style="flex:1;padding:6px;font-size:12px">Underlay</button>
+              <button id="btn-lockin" onclick="setStrategy('lockin')" class="btn btn-ghost" style="flex:1;padding:6px;font-size:12px">Lock-in</button>
+              <button onclick="document.getElementById('fg-partial-wrap').style.display=document.getElementById('fg-partial-wrap').style.display==='none'?'block':'none'" style="font-size:10px;color:var(--text-muted);background:none;border:0.5px solid var(--border-col);border-radius:6px;padding:4px 8px;cursor:pointer">Partial</button>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="form-row single" id="fg-amount" style="display:none"><div class="form-group"><div class="form-label">Amount (£)</div><input type="number" id="f-amount" placeholder="0.00" step="0.01" inputmode="decimal" oninput="updateFlowPreview()"/></div></div>
+        <div class="form-row single" id="fg-exchbank" style="display:none"><div class="form-group"><div class="form-label">Linked bank</div><div class="dest-selector">${PROFILES.map(pr=>`<button class="dest-btn ${exchTransferBank===pr?'active':''}" id="ebank-${pr}" onclick="setExchBank('${pr}')">${profileLabel(pr)}</button>`).join('')}</div></div></div>
+        <div class="form-row single" id="fg-amend-target" style="display:none"><div class="form-group"><div class="form-label">Amend</div><select id="f-amend-target" onchange="updateAmendCurrent()"><option value="">— select —</option><option value="bank">Bank account</option><optgroup label="Bookmakers">${Object.keys(p.bookies||{}).map(b=>`<option value="bookie:${b}">${b}</option>`).join('')}</optgroup></select></div></div>
+        <div class="form-row" id="fg-amend-bal">
+          <div class="form-group" id="fg-amend-current" style="display:none"><div class="form-label">Current balance</div><input type="text" id="f-amend-current" readonly style="color:var(--text-muted)"/></div>
+          <div class="form-group" id="fg-amend-new" style="display:none"><div class="form-label">New balance (£)</div><input type="number" id="f-amend-new" placeholder="0.00" step="0.01" inputmode="decimal"/></div>
+        </div>
+        <div class="form-row single" id="fg-amend-reason" style="display:none"><div class="form-group"><div class="form-label">Reason</div><input type="text" id="f-amend-reason" placeholder="e.g. Casino offer, correction…"/></div></div>
+        <div class="form-row single" id="fg-notes"><div class="form-group"><div class="form-label" style="color:var(--text-muted)">Notes <span style="font-size:9px;text-transform:none;letter-spacing:0">(optional)</span></div><input type="text" id="f-notes" placeholder="Any extra details…" value="${pf.notes||''}" style="font-size:12px;padding:7px 10px;background:var(--bg-input);border-color:rgba(255,255,255,0.09)"/></div></div>
+      </div>
+
+      <div id="flow-preview" style="display:none" class="flow-preview"><i class="ti ti-arrows-exchange" aria-hidden="true"></i><span id="flow-text"></span></div>
+      <div id="form-msg" style="margin-bottom:6px;font-size:12px;text-align:center;color:#F87171"></div>
+    </div>
+  </div>
+  <div style="position:fixed;bottom:calc(58px + env(safe-area-inset-bottom));left:0;right:0;padding:10px 16px;background:var(--bg-card2);border-top:0.5px solid var(--border-col);display:flex;gap:8px;z-index:90;max-width:680px;margin:0 auto">
+    <button class="btn btn-ghost" onclick="resetForm()" style="width:72px;flex-shrink:0">Clear</button>
+    <button class="btn btn-primary btn-full" onclick="submitTx()"><i class="ti ti-check" aria-hidden="true"></i> Save trade</button>
+  </div>`;
+}
+
+function setFormAccount(a){
+  formAccount=a;
+  PROFILES.forEach(pr=>{const b=document.getElementById('facc-'+pr);if(b)b.className='acct-sel-btn'+(a===pr?' active-'+pr:'');});
+  const dot=document.getElementById('form-dot');if(dot)dot.style.background=profileColor(a);
+  // Clear bookie search when account changes — but not during duplicate
+  const dd=document.getElementById('bookie-dropdown');if(dd)dd.style.display='none';
+  if(!_duplicateMode){
+    const bsearch=document.getElementById('f-bookie-search');
+    if(bsearch){bsearch.value='';const bh=document.getElementById('f-bookie');if(bh)bh.value='';}
+  }
+}
+function setExchBank(b){exchTransferBank=b;PROFILES.forEach(pr=>{const el=document.getElementById('ebank-'+pr);if(el)el.className='dest-btn'+(b===pr?' active':'');});updateFlowPreview();}
+function autoCalcUnderlay(){
+  const bs=parseFloat(document.getElementById('f-bstake')?.value)||0;
+  const bo=parseFloat(document.getElementById('f-bodds')?.value)||0;
+  const lo=parseFloat(document.getElementById('f-lodds')?.value)||0;
+  const partial=Math.min(100,Math.max(1,parseFloat(document.getElementById('f-partial')?.value)||100))/100;
+  const isFB=isFreeBet(selectedBetType);
+
+  const calc=document.getElementById('underlay-calc');
+  const pnlEl=document.getElementById('f-pnl');
+  const winEl=document.getElementById('ul-win-display');
+  const loseEl=document.getElementById('ul-lose-display');
+  const stakeEl=document.getElementById('ul-liab-display');
+
+  if(!bs||!bo||!lo){
+    if(calc){
+      calc.style.display=lo?'none':'block';
+      if(!lo){
+        if(winEl)winEl.textContent='—';
+        if(loseEl)loseEl.textContent='—';
+        if(stakeEl)stakeEl.textContent='Enter lay odds';
+      }
+    }
+    return;
+  }
+
+  let total_win, total_lose, total_lay_stake;
+
+  if(!isUnderlay){
+    // Lock-in: standard lay stake calculation
+    if(!isFB){
+      total_lay_stake=bs*bo/lo;
+      total_win=total_lay_stake-bs;
+      total_lose=total_lay_stake-bs;
+    } else {
+      // SNR free bet lock-in
+      total_lay_stake=bs*(bo-1)/lo;
+      total_win=total_lay_stake;
+      total_lose=total_lay_stake;
+    }
+  } else {
+    // Underlay portion
+    const ul_bs=bs*partial;
+    const li_bs=bs*(1-partial);
+
+    let ul_win,ul_lose,ul_ls;
+    if(!isFB){
+      ul_ls=ul_bs; // lay stake = back stake for underlay
+      ul_win=ul_bs*(bo-lo);
+      ul_lose=0;
+    } else {
+      ul_ls=bo>2&&lo>1?ul_bs*(bo-2)/(lo-1):0;
+      ul_win=ul_bs;
+      ul_lose=ul_ls;
+    }
+
+    // Lock-in portion
+    const li_ls=li_bs>0?(!isFB?li_bs*bo/lo:li_bs*(bo-1)/lo):0;
+    const li_profit=li_ls-li_bs;
+
+    total_win=ul_win+li_profit;
+    total_lose=ul_lose+li_profit;
+    total_lay_stake=ul_ls+li_ls;
+  }
+
+  if(winEl)winEl.textContent='£'+total_win.toFixed(2);
+  if(loseEl){
+    loseEl.textContent='£'+total_lose.toFixed(2);
+    loseEl.style.color=total_lose>0?'#22C55E':'#9A9590';
+  }
+  if(stakeEl)stakeEl.textContent='£'+total_lay_stake.toFixed(2);
+  if(calc)calc.style.display='block';
+  // Update win/lose labels
+  const winLbl=document.getElementById('ul-win-label');
+  const loseLbl=document.getElementById('ul-lose-label');
+  if(winLbl)winLbl.textContent=isUnderlay?'Underlay P&L if wins':'Lock-in profit';
+  if(loseLbl)loseLbl.textContent=isUnderlay?'Underlay P&L if loses':'Lock-in profit';
+  // Auto-fill P&L for both modes — field stays editable for manual override
+  if(pnlEl&&!pnlEl.hasAttribute('data-manual'))pnlEl.value=total_win.toFixed(2);
+}
+
+function setStrategy(s){
+  isUnderlay=(s==='underlay');
+  const bu=document.getElementById('btn-underlay');
+  const bl=document.getElementById('btn-lockin');
+  if(bu){bu.className='btn '+(isUnderlay?'btn-primary':'btn-ghost');}
+  if(bl){bl.className='btn '+(isUnderlay?'btn-ghost':'btn-primary');}
+  // P&L field — readonly for underlay (formula is exact), editable for lock-in (allow override)
+  const pnl=document.getElementById('f-pnl');
+  if(pnl){
+    if(isUnderlay){
+      pnl.setAttribute('readonly','readonly');
+      pnl.style.background=getCssVar('--bg-card2')||'#252630';
+      pnl.style.color='#22C55E';
+    } else {
+      pnl.removeAttribute('readonly');
+      pnl.style.background='';
+      pnl.style.color='#22C55E';
+    }
+  }
+  const hint=document.getElementById('pnl-label-hint');
+  if(hint)hint.textContent='auto-calculated';
+  autoCalcUnderlay();
+}
+
+function toggleUnderlay(){
+  isUnderlay=!isUnderlay;
+  updateUnderlayToggle();
+}
+
+function updateUnderlayToggle(){
+  const fg=document.getElementById('fg-underlay');
+  if(!fg)return;
+  const btn=fg.querySelector('div[onclick]');
+  if(btn){
+    btn.style.background=isUnderlay?'#22C55E':'#4E5260';
+    const dot=btn.querySelector('div');
+    if(dot)dot.style.left=isUnderlay?'23px':'3px';
+  }
+}
+
+function selectBetType(t){
+  selectedBetType=t;
+  // Update top type buttons
+  document.querySelectorAll('[data-toptype]').forEach(el=>{
+    const isSelected=el.dataset.toptype===t;
+    el.style.background=isSelected?getTypeColor(t):getCssVar('--bg-card2')||'#252629';
+    el.style.color=isSelected?getTypeTextColor(t):'#C8C5BF';
+    el.style.borderColor=isSelected?'transparent':'rgba(255,255,255,0.10)';
+  });
+  // Update type pills (more types)
+  document.querySelectorAll('.type-pill').forEach(el=>{
+    el.className='type-pill';
+    if(el.dataset.type===t)el.classList.add('sel','sel-'+t.toLowerCase().split(' ').join(''));
+  });
+  // Qualifier defaults to Lock-in, all others default to Underlay
+  setStrategy(t==='Qualifier'?'lockin':'underlay');
+  updateFormFields();
+}
+function updateFormFields(){
+  const isBookieT=BOOKIE_TRANSFER.includes(selectedBetType),isExchT=EXCHANGE_TRANSFER.includes(selectedBetType),isBet=BET_ONLY.includes(selectedBetType),isAmend=selectedBetType==='Balance Amendment';
+  sh('fg-bookie',isBet||isBookieT);sh('fg-exchange',isBet||isExchT);
+  sh('fg-exchbank',isExchT);sh('fg-event',isBet);
+  sh('fg-stake-odds',isBet);sh('fg-underlay',isBet);
+  sh('fg-comm-toggle',isBet);sh('fg-result-pnl',isBet);sh('fg-result',isBet);sh('fg-pnl',isBet);
+  sh('fg-amount',isBookieT||isExchT);
+  sh('fg-amend-target',isAmend);sh('fg-amend-bal',isAmend);
+  sh('fg-amend-current',isAmend);sh('fg-amend-new',isAmend);sh('fg-amend-reason',isAmend);
+  sh('fg-notes',!isAmend);
+  const fp=document.getElementById('flow-preview');if(fp)fp.style.display=isExchT?'flex':'none';
+  if(isExchT)updateFlowPreview();
+}
+function sh(id,v){const el=document.getElementById(id);if(el)el.style.display=v?(el.classList.contains('form-row')||el.classList.contains('form-group')?'flex':'flex'):'none';}
+function updateAmendCurrent(){
+  const target=document.getElementById('f-amend-target')?.value,ac=document.getElementById('f-amend-current');if(!ac)return;
+  const p=state[formAccount];
+  if(target==='bank')ac.value=p.bank.toFixed(2);
+  else if(target?.startsWith('bookie:'))ac.value=((p.bookies||{})[target.slice(7)]?.bal||0).toFixed(2);
+  else ac.value='';
+}
+function updateFlowPreview(){
+  const ft=document.getElementById('flow-text'),fp=document.getElementById('flow-preview');if(!ft||!fp)return;
+  const isExchDep=selectedBetType==='Exchange Deposit',amt=parseFloat(document.getElementById('f-amount')?.value)||0,exch=document.getElementById('f-exchange')?.value||'exchange',bankLabel=`${profileLabel(exchTransferBank)}'s bank`;
+  ft.textContent=isExchDep?(amt?`${bankLabel} −£${amt.toFixed(2)} → ${exch} +£${amt.toFixed(2)}`:`${bankLabel} → ${exch}`):(amt?`${exch} −£${amt.toFixed(2)} → ${bankLabel} +£${amt.toFixed(2)}`:`${exch} → ${bankLabel}`);
+}
+function bindFormEvents(){const exchSel=document.getElementById('f-exchange');if(exchSel)exchSel.addEventListener('change',updateFlowPreview);}
+function resetForm(){
+  selectedBetType='';exchTransferBank='me';showMoreTypes=false;showComm=false;
+  // Re-render the form completely for a clean slate
+  const mc=document.getElementById('main-content');
+  if(mc&&(currentTab==='add'||currentTab==='trade'))mc.innerHTML=renderTrade();
+  updateFormFields();bindFormEvents();
+}
+
+function submitTx(){
+  const msg=document.getElementById('form-msg');
+  if(!selectedBetType){msg.textContent='Please select a transaction type.';return;}
+  const isBookieT=BOOKIE_TRANSFER.includes(selectedBetType),isExchT=EXCHANGE_TRANSFER.includes(selectedBetType),isBet=BET_ONLY.includes(selectedBetType),isAmend=selectedBetType==='Balance Amendment';
+  const date=document.getElementById('f-date').value||todayStr(),notes=document.getElementById('f-notes')?.value||'';
+  if(isAmend){
+    const target=document.getElementById('f-amend-target')?.value,newValStr=document.getElementById('f-amend-new')?.value,reason=document.getElementById('f-amend-reason')?.value||'Balance Amendment';
+    if(!target){msg.textContent='Select what to amend.';return;}
+    if(!newValStr){msg.textContent='Enter a new balance.';return;}
+    const newVal=parseFloat(newValStr);if(isNaN(newVal))return;
+    const p=state[formAccount];let oldVal,targetLabel;
+    if(target==='bank'){oldVal=p.bank;p.bank=newVal;targetLabel='Bank';}
+    else{const name=target.slice(7);oldVal=(p.bookies||{})[name]?.bal||0;p.bookies[name].bal=newVal;targetLabel=name;}
+    const diff=newVal-oldVal;if(!p.transactions)p.transactions=[];
+    p.transactions.push({id:Date.now(),date,type:'Balance Amendment',target:targetLabel,oldVal,newVal,diff,pnl:diff,notes:reason,result:'—',_acct:formAccount});
+    if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('balanceAmend');showToast(`${targetLabel} → ${fmt(newVal)}`);msg.textContent='';resetForm();setTimeout(render,100);return;
+  }
+  const bookie=document.getElementById('f-bookie')?.value||(document.getElementById('f-bookie-search')?.value||''),exchange=document.getElementById('f-exchange')?.value,event=document.getElementById('f-event')?.value||'';
+  const bstake=parseFloat(document.getElementById('f-bstake')?.value)||0,bodds=parseFloat(document.getElementById('f-bodds')?.value)||0,comm=parseFloat(document.getElementById('f-comm')?.value)||0;
+  const result=document.getElementById('f-result')?.value||'Pending',pnl=parseFloat(document.getElementById('f-pnl')?.value)||0,amount=parseFloat(document.getElementById('f-amount')?.value)||0;
+  if(isBookieT){
+    if(!bookie){msg.textContent='Select a bookmaker.';return;}
+    if(!amount){msg.textContent='Enter an amount.';return;}
+    const p=state[formAccount];
+    if(!p.bookies[bookie])p.bookies[bookie]={bal:0,status:'Active',notes:''};
+    if(selectedBetType==='Deposit'){p.bookies[bookie].bal=(p.bookies[bookie].bal||0)+amount;p.bookies[bookie].balUpdatedAt=Date.now();p.bank-=amount;}
+    else{p.bookies[bookie].bal=(p.bookies[bookie].bal||0)-amount;p.bookies[bookie].balUpdatedAt=Date.now();p.bank+=amount;}
+    if(!p.transactions)p.transactions=[];
+    p.transactions.push({id:Date.now(),date,type:selectedBetType,bookie,amount,pnl:0,notes,result:'—',_acct:formAccount});
+  }else if(isExchT){
+    if(!exchange){msg.textContent='Select an exchange.';return;}
+    if(!amount){msg.textContent='Enter an amount.';return;}
+    const ba=state[exchTransferBank];
+    if(selectedBetType==='Exchange Deposit'){state.exchanges[exchange]=(state.exchanges[exchange]||0)+amount;ba.bank-=amount;}
+    else{state.exchanges[exchange]=(state.exchanges[exchange]||0)-amount;ba.bank+=amount;}
+    if(!ba.transactions)ba.transactions=[];
+    ba.transactions.push({id:Date.now(),date,type:selectedBetType,exchange,amount,pnl:0,notes,result:'—',_acct:exchTransferBank});
+  }else if(isBet){
+    if(!bookie){msg.textContent='Select a bookmaker.';return;}
+    if(!bstake||!bodds){msg.textContent='Enter back stake and odds.';return;}
+    const p=state[formAccount];
+    if(!p.bookies[bookie])p.bookies[bookie]={bal:0,status:'Active',notes:''};
+    if(!p.transactions)p.transactions=[];
+    // For pending bets, pnl=0 until settled. Store expected P&L separately for reference.
+    const storedPnl=result==='Pending'?0:pnl;
+    const lodds=parseFloat(document.getElementById('f-lodds')?.value)||0;
+    const tx={id:Date.now(),date,type:selectedBetType,bookie,exchange,event,bstake,bodds,lodds,comm,result,pnl:storedPnl,expectedPnl:pnl,notes,underlay:isUnderlay,_acct:formAccount};
+    p.transactions.push(tx);applyBalanceAtLog(tx,p);
+    if(selectedBetType==='Qualifier'){
+      if(!p.freeBets)p.freeBets=[];
+      p.freeBets.push({id:Date.now()+Math.random(),date,bookie,acct:formAccount,status:'Pending'});
+      showToast('Free bet added for '+bookie+' — check Dashboard','success');
+    }
+  }
+  // Track recent bookies and last exchange
+  const usedBookie=document.getElementById('f-bookie')?.value||(document.getElementById('f-bookie-search')?.value||'');
+  const usedExchange=document.getElementById('f-exchange')?.value||'';
+  if(usedBookie){recentBookies=([usedBookie,...recentBookies.filter(b=>b!==usedBookie)]).slice(0,8);}
+  if(usedExchange)lastExchange=usedExchange;
+  // Store last saved tx for quick duplicate
+  const lastTx={type:selectedBetType,bookie:document.getElementById('f-bookie')?.value||(document.getElementById('f-bookie-search')?.value||''),exchange:document.getElementById('f-exchange')?.value||'',event:document.getElementById('f-event')?.value||'',bstake:document.getElementById('f-bstake')?.value||'',bodds:document.getElementById('f-bodds')?.value||'',lodds:document.getElementById('f-lodds')?.value||'',pnl:document.getElementById('f-pnl')?.value||'',underlay:isUnderlay,notes:document.getElementById('f-notes')?.value||'',_acct:formAccount};
+  lastSavedTrade=lastTx;
+  if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('logTrade');showToast('✓ Trade saved');msg.textContent='';
+  // Stay on form — keep type, bookie, exchange; clear event/stake/odds/pnl
+  const keepBookie=document.getElementById('f-bookie-search')?.value||'';
+  const keepBookieVal=document.getElementById('f-bookie')?.value||'';
+  const keepExchange=document.getElementById('f-exchange')?.value||'';
+  // Re-render keeping context
+  currentTab='trade';tradeSubTab='log';
+  const mc=document.getElementById('main-content');
+  if(mc){
+    mc.innerHTML=renderTrade();
+    setTimeout(()=>{
+      if(keepBookie){const bs=document.getElementById('f-bookie-search');if(bs)bs.value=keepBookie;}
+      const bh=document.getElementById('f-bookie');if(bh)bh.value=keepBookieVal;
+      const fe=document.getElementById('f-exchange');if(fe&&keepExchange)fe.value=keepExchange;
+      updateFormFields();bindFormEvents();updateUnderlayToggle();autoCalcUnderlay();
+    },10);
+  }
+}
+
+function duplicateTrade(acct,id,rawTx){
+  const tx=rawTx||(state[acct]?.transactions||[]).find(t=>t.id===id);if(!tx)return;
+  _duplicateMode=true;
+  formAccount=acct;
+  selectedBetType=tx.type||'';
+  if(tx.underlay!==undefined)isUnderlay=tx.underlay;
+  currentTab='trade';tradeSubTab='log';
+  document.querySelectorAll('.tab').forEach(el=>el.classList.remove('active'));
+  document.getElementById('tab-trade')?.classList.add('active');
+  document.getElementById('profile-bar').style.display='none';
+  // Render form with full prefill
+  document.getElementById('main-content').innerHTML=renderAdd(tx);
+  updateBadge();bindFormEvents();updateFormFields();
+  // Set type pills
+  document.querySelectorAll('.type-pill').forEach(el=>{
+    el.className='type-pill';
+    if(el.dataset.type===tx.type)el.classList.add('sel','sel-'+tx.type.toLowerCase().replace(/\s/g,''));
+  });
+  // Force all values after render — use timeout to ensure DOM is settled
+  setTimeout(function(){
+    // Bookie
+    const fb=document.getElementById('f-bookie');if(fb&&tx.bookie)fb.value=tx.bookie;
+    const fbs=document.getElementById('f-bookie-search');if(fbs&&tx.bookie)fbs.value=tx.bookie;
+    // Exchange
+    const fe=document.getElementById('f-exchange');if(fe&&tx.exchange){
+      fe.value=tx.exchange;
+      Array.from(fe.options).forEach(o=>o.selected=o.value===tx.exchange);
+    }
+    // Odds and stake — only set if value exists, don't overwrite render
+    const bs=document.getElementById('f-bstake');if(bs&&tx.bstake)bs.value=tx.bstake;
+    const bo=document.getElementById('f-bodds');if(bo&&tx.bodds)bo.value=tx.bodds;
+    // Lay odds — only set if tx has it, otherwise keep rendered value
+    if(tx.lodds){const lo=document.getElementById('f-lodds');if(lo)lo.value=tx.lodds;}
+    // Strategy
+    setStrategy(isUnderlay?'underlay':'lockin');
+    autoCalcUnderlay();
+  },50);
+  showToast('Duplicated — edit and save');window.scrollTo(0,0);
+  // Clear duplicate mode after a moment
+  setTimeout(function(){_duplicateMode=false;},2000);
+}
+
+// ── HISTORY ──────────────────────────────────────────────────────────────────
+function renderHistory(){
+  const txs=profileTxs(currentProfile),showAll=currentProfile==='both';
+  const profBar='<div style="display:flex;gap:5px;margin-bottom:10px;flex-wrap:wrap">'
+    +PROFILES.map(pr=>'<button onclick="switchProfile(\''+pr+'\');switchTradeTab(1)" class="profile-btn '+(currentProfile===pr?'active-'+pr:'')+'" style="font-size:11px;padding:4px 10px">'+profileLabel(pr)+'</button>').join('')
+    +'<button onclick="switchProfile(\'both\');switchTradeTab(1)" class="profile-btn '+(currentProfile==='both'?'active-both':'')+'" style="font-size:11px;padding:4px 10px">All</button>'
+    +'</div>';
+  return`
+  ${profBar}
+  <div class="filter-row">
+    <select class="filter-select" id="hist-type-filter" onchange="filterHistoryInPlace()"><option value="">All types</option>${BET_TYPES.map(t=>`<option>${t}</option>`).join('')}</select>
+    <select class="filter-select" id="hist-result-filter" onchange="filterHistoryInPlace()"><option value="">All results</option><option>Won</option><option>Lost</option><option>Pending</option></select>
+    <button class="btn-sm" onclick="exportCSV()" style="margin-left:auto"><i class="ti ti-download" aria-hidden="true"></i> CSV</button>
+  </div>
+  <div style="font-size:11px;color:var(--text-secondary);margin-bottom:10px" data-txcount>${txs.length} transactions</div>
+  ${renderTxTable(txs,showAll)}`;
+}
+
+function renderTxTable(txs,showAcct){
+  if(!txs.length)return`<div class="empty">No transactions yet</div>`;
+  return`<div class="table-wrap"><table class="data-table"><thead><tr>
+    <th>Date</th>${showAcct?'<th>Acct</th>':''}<th>Type</th><th>Bookie</th><th>Event</th><th>Result</th><th>P&L</th><th></th>
+  </tr></thead><tbody>
+  ${txs.map(t=>{
+    const isBookieT=BOOKIE_TRANSFER.includes(t.type),isExchT=EXCHANGE_TRANSFER.includes(t.type),isAmend=t.type==='Balance Amendment',isBet=BET_ONLY.includes(t.type);
+    const pnlStr=t.result==='Pending'?`<span class="warn">pending</span>`:`<span class="${(t.pnl||0)>=0?'pos':'neg'}">${fmtS(t.pnl||0)}</span>`;
+    const resStr=t.result==='Won'?'<span class="pos">Won</span>':t.result==='Lost'?'<span class="neg">Lost</span>':t.result==='—'?'<span class="muted">—</span>':'<span class="warn">pending</span>';
+    return`<tr data-txid="${t.id}">
+      <td style="white-space:nowrap;font-size:11px;color:var(--text-secondary)">${t.date}</td>
+      ${showAcct?`<td>${acctPill(t._acct)}</td>`:''}
+      <td><span class="${pillClass(t.type)}">${t.type}</span></td>
+      <td style="font-weight:500">${isAmend?t.target:(isExchT?t.exchange:t.bookie)||'—'}</td>
+      <td style="max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-secondary);font-size:11px">${(isBookieT||isExchT)&&t.amount?fmt(t.amount):t.event||t.notes||'—'}</td>
+      <td>${resStr}</td>
+      <td><div style="display:flex;align-items:center;gap:4px">${pnlStr}<button class="btn-sm btn-sm-edit" onclick="editPnl('${t._acct}',${t.id})" style="padding:3px 7px;font-size:10px"><i class="ti ti-edit" aria-hidden="true"></i></button></div></td>
+      <td style="white-space:nowrap">
+        ${isBet?`<button class="btn-sm btn-sm-dupe" onclick="duplicateTrade('${t._acct}',${t.id})" style="padding:3px 7px;font-size:10px"><i class="ti ti-copy" aria-hidden="true"></i></button> `:''}
+        <button class="btn-sm btn-sm-danger" onclick="deleteTx('${t._acct}',${t.id})" style="padding:3px 7px;font-size:10px"><i class="ti ti-trash" aria-hidden="true"></i></button>
+      </td>
+    </tr>`;
+  }).join('')}</tbody></table></div>`;
+}
+
+function deleteTx(acct,id){
+  if(!confirm('Delete this transaction? Balances will be reversed.'))return;
+  const tx=(state[acct].transactions||[]).find(t=>t.id===id);
+  if(!tx){state[acct].transactions=state[acct].transactions.filter(t=>t.id!==id);if(!deletedTxIds[acct])deletedTxIds[acct]=[];deletedTxIds[acct].push(id);if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('quickDeleteTx');render();return;}
+  const p=state[acct];
+  const isFB=isFreeBet(tx.type);
+  const bstake=tx.bstake||0,bodds=tx.bodds||0,pnl=tx.pnl||0;
+  // Reverse the balance changes that were applied when this tx was logged/settled
+  if(BET_ONLY.includes(tx.type)){
+    if(tx.result==='Pending'){
+      // Was deducted at log time — restore stake to bookie
+      if(!isFB&&tx.bookie&&p.bookies[tx.bookie])
+        p.bookies[tx.bookie].bal=(p.bookies[tx.bookie].bal||0)+bstake;
+    }else if(tx.result==='Won'){
+      // Return was added — reverse it
+      if(isFB){
+        if(tx.bookie&&p.bookies[tx.bookie])
+          p.bookies[tx.bookie].bal=(p.bookies[tx.bookie].bal||0)-((bodds-1)*bstake);
+      }else{
+        if(tx.bookie&&p.bookies[tx.bookie])
+          p.bookies[tx.bookie].bal=(p.bookies[tx.bookie].bal||0)-(bodds*bstake);
+      }
+    }else if(tx.result==='Lost'){
+      // Stake was deducted, lay profit went to exchange — reverse exchange
+      if(!isFB&&tx.bookie&&p.bookies[tx.bookie])
+        p.bookies[tx.bookie].bal=(p.bookies[tx.bookie].bal||0)+bstake;
+      if(tx.exchange&&state.exchanges[tx.exchange]!==undefined)
+        state.exchanges[tx.exchange]=(state.exchanges[tx.exchange]||0)-pnl;
+    }
+  }else if(tx.type==='Deposit'){
+    // Reverse: bookie −deposit, bank +deposit
+    if(tx.bookie&&p.bookies[tx.bookie])p.bookies[tx.bookie].bal=(p.bookies[tx.bookie].bal||0)-(tx.amount||0);
+    p.bank+=(tx.amount||0);
+  }else if(tx.type==='Withdrawal'){
+    if(tx.bookie&&p.bookies[tx.bookie])p.bookies[tx.bookie].bal=(p.bookies[tx.bookie].bal||0)+(tx.amount||0);
+    p.bank-=(tx.amount||0);
+  }else if(tx.type==='Exchange Deposit'){
+    if(tx.exchange&&state.exchanges[tx.exchange]!==undefined)state.exchanges[tx.exchange]=(state.exchanges[tx.exchange]||0)-(tx.amount||0);
+    p.bank+=(tx.amount||0);
+  }else if(tx.type==='Exchange Withdrawal'){
+    if(tx.exchange&&state.exchanges[tx.exchange]!==undefined)state.exchanges[tx.exchange]=(state.exchanges[tx.exchange]||0)+(tx.amount||0);
+    p.bank-=(tx.amount||0);
+  }
+  // Balance Amendment — reverse the diff
+  else if(tx.type==='Balance Amendment'){
+    const target=tx.target;
+    if(target==='Bank'){p.bank-=(tx.diff||0);}
+    else if(target&&p.bookies[target]){p.bookies[target].bal=(p.bookies[target].bal||0)-(tx.diff||0);}
+  }
+  state[acct].transactions=state[acct].transactions.filter(t=>t.id!==id);
+  if(!deletedTxIds[acct])deletedTxIds[acct]=[];
+  deletedTxIds[acct].push(id);
+  // Write to localStorage immediately so refresh doesn't restore deleted tx
+  try{
+    const snap={exchanges:state.exchanges,_deletedTxIds:deletedTxIds};
+    PROFILES.forEach(pr=>{snap[pr]={bank:state[pr].bank,bookies:state[pr].bookies,transactions:state[pr].transactions,freeBets:state[pr].freeBets||[],casino:state[pr].casino||[]};});
+    localStorage.setItem('mbe_state',JSON.stringify(snap));
+  }catch(e){}
+  if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}
+  saveData('deleteTx');showToast('Transaction deleted & balances reversed');
+  // Smart update: remove just that row
+  const row=document.querySelector(`tr[data-txid="${id}"]`)||document.getElementById('pcard-'+id);
+  if(row){
+    row.style.transition='opacity .2s';row.style.opacity='0';
+    setTimeout(function(){row.remove();updateBadge();},200);
+  }else{render();}
+}
+
+
+function exportCasinoCSV(){
+  const sessions=PROFILES.flatMap(p=>(state[p].casino||[]).map(s=>({...s,_acct:p}))).sort((a,b)=>parseDate(a.date)-parseDate(b.date));
+  if(!sessions.length){showToast('No casino sessions to export','error');return;}
+  const headers=['Date','Account','Operator','Casino/Bookie','Starting Balance','Ending Balance','P&L','Notes'];
+  const rows=sessions.map(s=>{
+    const pnl=s.startBal!==undefined?s.endBal-s.startBal:s.netProfit||0;
+    return[s.date||'',profileLabel(s._acct),s.operator||'JG',s.casino||'',
+      s.startBal!==undefined?s.startBal.toFixed(2):'',
+      s.endBal!==undefined?s.endBal.toFixed(2):'',
+      pnl.toFixed(2),s.notes||''];
+  });
+  const nl=String.fromCharCode(10);
+  const csv=[headers,...rows].map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join(nl);
+  const blob=new Blob([csv],{type:'text/csv'}),url=URL.createObjectURL(blob),a=document.createElement('a');
+  a.href=url;a.download='mbworld_casino_'+todayStr().replace(/\//g,'-')+'.csv';a.click();URL.revokeObjectURL(url);
+  showToast('Casino CSV exported!');
+}
+
+function exportCSV(){
+  const txs=allTxs();
+  const headers=['Date','Account','Type','Bookmaker','Exchange','Event','Back Stake','Back Odds','Commission %','Result','P&L','Notes'];
+  const rows=txs.map(t=>[t.date||'',profileLabel(t._acct),t.type||'',t.bookie||'',t.exchange||'',t.event||t.notes||'',t.bstake||'',t.bodds||'',t.comm!==undefined?t.comm:'',t.result||'',t.pnl!==undefined?t.pnl.toFixed(2):'',t.notes||'']);
+  const csv=[headers,...rows].map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\n');
+  const blob=new Blob([csv],{type:'text/csv'}),url=URL.createObjectURL(blob),a=document.createElement('a');
+  a.href=url;a.download=`mbempire_${todayStr().replace(/\//g,'-')}.csv`;a.click();URL.revokeObjectURL(url);showToast('CSV exported!');
+}
+
+// ── REPORTS ──────────────────────────────────────────────────────────────────
+
+function renderReports(){
+  const allMap=monthlyPnl(allTxs());
+  const bookiePnl={};allTxs().filter(t=>t.result!=='Pending').forEach(t=>{if(!t.bookie||!t.pnl||t.type==='Balance Amendment')return;bookiePnl[t.bookie]=(bookiePnl[t.bookie]||0)+t.pnl;});
+  const topBookies=Object.entries(bookiePnl).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  const typePnl={};allTxs().forEach(t=>{if(!t.type||!t.pnl||t.type==='Balance Amendment')return;typePnl[t.type]=(typePnl[t.type]||0)+t.pnl;});
+  return`
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+    <div style="font-size:16px;font-weight:500;color:var(--text-primary)">Reports</div>
+    <div style="display:flex;gap:6px">
+      <button class="btn-sm" onclick="exportCSV()"><i class="ti ti-download" aria-hidden="true"></i> CSV</button>
+      <button class="btn-sm btn-sm-edit" onclick="downloadBackup()"><i class="ti ti-database-export" aria-hidden="true"></i> Backup</button>
+    </div>
+  </div>
+  <div style="background:var(--bg-card);border:0.5px solid var(--border-col);border-radius:10px;padding:12px 14px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between">
+    <div>
+      <div style="font-size:12px;font-weight:500;color:var(--text-primary);margin-bottom:2px">Full data backup</div>
+      <div id="backup-status" style="font-size:11px;color:var(--text-muted)">Checking...</div>
+    </div>
+    <button class="btn btn-primary" onclick="downloadBackup()" style="padding:8px 14px;font-size:12px"><i class="ti ti-download"></i> Download</button>
+  </div>
+  <div class="card" style="margin-bottom:12px">
+    <div class="card-header"><span class="card-title">Monthly P&L — Sports (All Accounts)</span></div>
+    <div style="padding:6px 10px;overflow-x:auto">${renderMonthBars(allMap)}</div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+    ${PROFILES.map(p=>`<div class="card"><div class="card-header"><span class="card-title" style="color:${profileColor(p)}">${profileLabel(p)}</span></div><div style="padding:6px 8px;overflow-x:auto">${renderMonthBars(monthlyPnl(state[p].transactions||[]),80)}</div></div>`).join('')}
+  </div>
+  <div class="card"><div class="card-header"><span class="card-title">Top bookies by P&L</span></div>
+    ${topBookies.length?topBookies.map(([name,pnl])=>`<div class="list-row"><div class="list-row-left"><div class="list-row-title">${name}</div></div><div class="list-row-right ${pnl>=0?'pos':'neg'}">${fmtS(pnl)}</div></div>`).join(''):'<div class="empty">No data yet</div>'}
+  </div>
+  <div class="card"><div class="card-header"><span class="card-title">P&L by type</span></div>
+    ${Object.entries(typePnl).sort((a,b)=>b[1]-a[1]).map(([type,pnl])=>`<div class="list-row"><div class="list-row-left"><span class="${pillClass(type)}">${type}</span></div><div class="list-row-right ${pnl>=0?'pos':'neg'}">${fmtS(pnl)}</div></div>`).join('')||'<div class="empty">No data yet</div>'}
+  </div>`;
+}
+
+// ── ACCOUNTS ─────────────────────────────────────────────────────────────────
+
+
+function renderAccountsMain(){
+  const acct=currentProfile==='both'?'me':currentProfile,p=state[acct];
+  return`
+  <div style="margin-bottom:14px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div style="font-size:13px;font-weight:500;color:var(--text-primary)">Bookmakers — <span style="color:${profileColor(acct)}">${profileLabel(acct)}</span> <span style="color:var(--text-secondary);font-weight:400">(${Object.keys(p.bookies||{}).length})</span></div>
+      <select class="filter-select" id="status-filter" onchange="render()"><option value="">All</option>${BOOKIE_STATUSES.map(s=>`<option>${s}</option>`).join('')}</select>
+    </div>
+    <div class="card">
+      <input class="search-input" type="text" placeholder="Search bookmakers…" oninput="filterBookies(this.value,'${acct}')"/>
+      <div id="bookie-list" style="max-height:380px;overflow-y:auto;-webkit-overflow-scrolling:touch">${renderBookieList(acct,'','')}</div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <input type="text" id="new-bookie-name" placeholder="Add new bookmaker…" style="flex:1"/>
+      <button class="btn btn-primary" style="padding:10px 16px;font-size:13px" onclick="addBookie('${acct}')">Add</button>
+    </div>
+  </div>
+  <div style="font-size:13px;font-weight:500;color:var(--text-primary);margin-bottom:10px">Bank accounts</div>
+  <div class="card" style="margin-bottom:14px">
+    ${PROFILES.map(pr=>`<div class="list-row">
+      <div class="list-row-left"><div class="list-row-title" style="display:flex;align-items:center;gap:7px"><div class="acct-dot dot-${pr}"></div>${profileLabel(pr)}'s bank</div></div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div class="list-row-right ${state[pr].bank>=0?'pos':'neg'}">${fmt(state[pr].bank)}</div>
+        <button class="btn-sm" onclick="showAmendModal('bank','${pr}',null)">Edit</button>
+      </div>
+    </div>`).join('')}
+  </div>
+  <div style="font-size:13px;font-weight:500;color:var(--text-primary);margin-bottom:10px">Exchanges (shared)</div>
+  <div class="card">
+    ${EXCHANGES.map(e=>`<div class="list-row">
+      <div class="list-row-left"><div class="list-row-title">${e}</div></div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div class="list-row-right ${state.exchanges[e]>0?'pos':state.exchanges[e]<0?'neg':''}">${fmt(state.exchanges[e])}</div>
+        <button class="btn-sm" onclick="adjustExch('${e}')">Edit</button>
+      </div>
+    </div>`).join('')}
+  </div>`;
+}
+
+function toggleVerifyRow(acct,name){
+  const safeId=name.replace(/[^a-z0-9]/gi,'_');
+  const row=document.getElementById('vrow-'+acct+'-'+safeId);
+  if(!row)return;
+  row.style.display=row.style.display==='none'?'flex':'none';
+  if(row.style.display==='flex'){
+    const inp=document.getElementById('vinput-'+acct+'-'+safeId);
+    if(inp)inp.focus();
+  }
+}
+
+function verifyBookie(acct,name){
+  const p=state[acct];
+  if(!p.bookies[name])return;
+  const stored=p.bookies[name].bal||0;
+  const safeId=name.replace(/[^a-z0-9]/gi,'_');
+  const input=document.getElementById('vinput-'+acct+'-'+safeId);
+  if(!input)return;
+  const entered=parseFloat(input.value);
+  if(isNaN(entered)){showToast('Enter a valid balance','error');return;}
+  const diff=Math.round((entered-stored)*100)/100;
+  if(Math.abs(diff)>0.001){
+    // Log balance amendment
+    const date=todayStr();
+    p.transactions=p.transactions||[];
+    p.transactions.push({id:Date.now(),date,type:'Balance Amendment',target:name,oldVal:stored,newVal:entered,diff,pnl:diff,notes:'Balance verified',result:'—',_acct:acct});
+    p.bookies[name].bal=entered;p.bookies[name].balUpdatedAt=Date.now();
+    showToast(name+' updated by '+fmtS(diff));
+  } else {
+    showToast(name+' balance confirmed ✓');
+  }
+  p.bookies[name].verifiedAt=Date.now();
+  if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('verify');
+  // Update bookie row in place
+  const safeId2=name.replace(/[^a-z0-9]/gi,'_');
+  const vrow=document.getElementById('vrow-'+acct+'-'+safeId2);
+  if(vrow){
+    // Update status label colour
+    const statusSpan=vrow.querySelector('span');
+    const vs=getVerifyStatus(p.bookies[name]);
+    if(statusSpan){statusSpan.textContent=vs.label;statusSpan.style.color=vs.col;}
+    vrow.style.display='none';
+  }
+  // Update RAG dot on bookie row
+  const ragDot=document.getElementById('rag-'+acct+'-'+safeId2);
+  const vs2=getVerifyStatus(p.bookies[name]);
+  if(ragDot){ragDot.style.background=vs2.col;}
+  // Re-render dashboard if currently on it, otherwise just update strip
+  if(currentTab==='dashboard'){
+    render();
+  } else {
+    updateDashboardStrip();
+  }
+}
+
+function getVerifyStats(){
+  const now=Date.now();
+  const ab=PROFILES.flatMap(pr=>Object.entries(state[pr].bookies||{})
+    .filter(([,d])=>d&&d.status==='Active')
+    .map(([,d])=>d));
+  const never=ab.filter(b=>!b.verifiedAt).length;
+  const overdue=ab.filter(b=>b.verifiedAt&&Math.floor((now-b.verifiedAt)/86400000)>7).length;
+  const recent=ab.filter(b=>b.verifiedAt&&Math.floor((now-b.verifiedAt)/86400000)<=7).length;
+  return{ab,never,overdue,recent,allVerified:!never&&!overdue};
+}
+
+function setTheme(t){
+  _theme=t;
+  localStorage.setItem('mbe_theme',t);
+  document.documentElement.setAttribute('data-theme',t);
+  // Update theme buttons
+  ['stone','slate'].forEach(function(th){
+    const btn=document.getElementById('theme-btn-'+th);
+    if(btn)btn.style.background=_theme===th?'rgba(255,255,255,0.15)':'transparent';
+  });
+}
+
+function toggleDashVisibility(){
+  _dashHidden=!_dashHidden;
+  localStorage.setItem('mbe_dash_hidden',_dashHidden?'1':'0');
+  render();
+}
+
+function updateDashboardStrip(){
+  const strip=document.getElementById('verify-strip');
+  if(!strip)return;
+  const {ab,never,overdue,recent,allVerified}=getVerifyStats();
+  strip.style.borderColor=allVerified?'rgba(34,197,94,0.3)':never?'rgba(248,113,113,0.3)':'rgba(240,165,0,0.3)';
+  const inner=strip.querySelector('.verify-strip-inner');
+  if(inner){
+    inner.innerHTML=(allVerified?'<span style="font-size:11px;color:#22C55E">✓ All '+ab.length+' verified</span>':'')
+      +(recent&&!allVerified?'<span style="font-size:11px;color:#22C55E">✓ '+recent+'</span>':'')
+      +(overdue?'<span style="font-size:11px;color:var(--text-warn);margin-left:10px">⚠ '+overdue+' overdue</span>':'')
+      +(never?'<span style="font-size:11px;color:#F87171;margin-left:10px">● '+never+' unverified</span>':'');
+  }
+}
+
+function getVerifyStatus(bookie){
+  const v=bookie.verifiedAt;
+  if(!v)return{label:'Never verified',days:null,col:'#F87171'};
+  const days=Math.floor((Date.now()-v)/(1000*60*60*24));
+  if(days===0)return{label:'Verified today',days:0,col:'#22C55E'};
+  if(days<=7)return{label:'Verified '+days+'d ago',days,col:'#22C55E'};
+  if(days<=14)return{label:'Verified '+days+'d ago',days,col:'#F0A500'};
+  return{label:'Verified '+days+'d ago',days,col:'#F87171'};
+}
+
+function renderBookieList(acct,search,statusFilter){
+  const p=state[acct];let keys=Object.keys(p.bookies||{}).sort((a,b)=>a.toLowerCase().localeCompare(b.toLowerCase()));
+  if(search)keys=keys.filter(b=>b.toLowerCase().includes(search.toLowerCase()));
+  if(statusFilter)keys=keys.filter(b=>p.bookies[b].status===statusFilter);
+  if(!keys.length)return`<div class="empty">No results</div>`;
+  return keys.map(b=>{const bk=p.bookies[b];
+    return`<div class="list-row" style="flex-direction:column;align-items:stretch;gap:6px;padding:10px 16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+        <div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            ${bk.status==='Active'?`<div id="rag-${acct}-${b.replace(/[^a-z0-9]/gi,'_')}" style="width:8px;height:8px;border-radius:50%;flex-shrink:0;background:${getVerifyStatus(bk).col}" title="${getVerifyStatus(bk).label}"></div>`:''}
+            <span style="font-size:13px;font-weight:500;color:var(--text-primary)">${b}</span>
+            ${statusBadge(bk.status||'Active')}
+          </div>
+          ${bk.notes?`<div style="font-size:11px;color:var(--text-secondary);margin-top:2px">${bk.notes}</div>`:''}
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+          <div style="font-size:13px;font-weight:500;color:${(bk.bal||0)>0?'#22C55E':(bk.bal||0)<0?'#F87171':getComputedStyle(document.documentElement).getPropertyValue('--text-secondary').trim()||'#C8C5BF'}">${fmt(bk.bal||0)}</div>
+          ${bk.status==='Active'?`<button class="btn-sm" onclick="toggleVerifyRow('${acct}','${b}')">Verify</button>`:''}
+          <button class="btn-sm" onclick="showBookieModal('${acct}','${b}')">Edit</button>
+        </div>
+      </div>
+      ${bk.status==='Active'?`<div id="vrow-${acct}-${b.replace(/[^a-z0-9]/gi,'_')}" style="display:none;align-items:center;gap:6px;padding:2px 0 4px">
+        <input type="number" id="vinput-${acct}-${b.replace(/[^a-z0-9]/gi,'_')}" placeholder="${(bk.bal||0).toFixed(2)}" step="0.01" inputmode="decimal" style="width:100px;padding:5px 8px;font-size:12px;border-radius:6px;background:var(--bg-input);border:0.5px solid var(--border-col);color:var(--text-primary)"/>
+        <button onclick="verifyBookie('${acct}','${b}')" class="btn-sm btn-sm-edit">Confirm</button>
+        <span style="font-size:10px;color:${getVerifyStatus(bk).col}">${getVerifyStatus(bk).label}</span>
+      </div>`:''}
+    </div>`;
+  }).join('');
+}
+
+function filterBookies(q,acct){
+  const sf=document.getElementById('status-filter')?.value||'';
+  const el=document.getElementById('bookie-list');if(el)el.innerHTML=renderBookieList(acct,q,sf);
+}
+
+function showBookieModal(acct,name){
+  const bk=state[acct].bookies[name];
+  document.getElementById('modal-root').innerHTML=`
+  <div class="modal-bg" onclick="if(event.target===this)closeModal()">
+    <div class="modal">
+      <div class="modal-handle"></div>
+      <div class="modal-title">${name}</div>
+      <div class="modal-sub">${profileLabel(acct)}'s account</div>
+      <div style="margin-bottom:12px"><div class="form-label">Balance (£)</div><input type="number" id="modal-bal" step="0.01" value="${(bk.bal||0).toFixed(2)}" inputmode="decimal" style="font-size:18px;font-weight:500"/></div>
+      <div style="margin-bottom:12px"><div class="form-label">Status</div><select id="modal-status">${BOOKIE_STATUSES.map(s=>`<option${bk.status===s?' selected':''}>${s}</option>`).join('')}</select></div>
+      <div style="margin-bottom:12px"><div class="form-label">Notes</div><textarea id="modal-notes" placeholder="e.g. Max stake £5, email verified…">${bk.notes||''}</textarea></div>
+      <div style="margin-bottom:4px"><div class="form-label">Reason for balance change</div><input type="text" id="modal-reason" placeholder="e.g. Casino offer, correction…"/></div>
+      <div class="modal-actions">
+        <button class="btn btn-primary" style="flex:1" onclick="confirmBookieEdit('${acct}','${name}')">Save</button>
+        <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      </div>
+    </div>
+  </div>`;}
+
+function confirmBookieEdit(acct,name){
+  const newBal=parseFloat(document.getElementById('modal-bal')?.value),newStatus=document.getElementById('modal-status')?.value||'Active',newNotes=document.getElementById('modal-notes')?.value||'',reason=document.getElementById('modal-reason')?.value||'Manual edit';
+  const bk=state[acct].bookies[name],oldBal=bk.bal||0;bk.status=newStatus;bk.notes=newNotes;
+  // Stamp balUpdatedAt on any change so merge logic preserves this device's changes
+  bk.balUpdatedAt=Date.now();
+  if(!isNaN(newBal)&&newBal!==oldBal){const diff=newBal-oldBal;bk.bal=newBal;if(!state[acct].transactions)state[acct].transactions=[];state[acct].transactions.push({id:Date.now(),date:todayStr(),type:'Balance Amendment',target:name,oldVal:oldBal,newVal:newBal,diff,pnl:diff,notes:reason,result:'—',_acct:acct});}
+  if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('bookieEdit');closeModal();showToast(`${name} updated`);render();
+}
+
+function showAmendModal(type,acct,name){
+  const label=type==='bank'?`${profileLabel(acct)}'s bank`:name,cur=type==='bank'?state[acct].bank:(state[acct].bookies[name]?.bal||0);
+  document.getElementById('modal-root').innerHTML=`
+  <div class="modal-bg" onclick="if(event.target===this)closeModal()">
+    <div class="modal">
+      <div class="modal-handle"></div>
+      <div class="modal-title">Edit balance</div>
+      <div class="modal-sub">${label} · Current: ${fmt(cur)}</div>
+      <div style="margin-bottom:12px"><div class="form-label">New balance (£)</div><input type="number" id="modal-val" step="0.01" value="${cur.toFixed(2)}" inputmode="decimal" style="font-size:20px;font-weight:500"/></div>
+      <div style="margin-bottom:4px"><div class="form-label">Reason (logged)</div><input type="text" id="modal-reason" placeholder="e.g. Casino offer, correction…"/></div>
+      <div class="modal-actions">
+        <button class="btn btn-primary" style="flex:1" onclick="confirmAmend('${type}','${acct}','${name||''}')">Save</button>
+        <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      </div>
+    </div>
+  </div>`;
+  setTimeout(()=>document.getElementById('modal-val')?.focus(),100);
+}
+
+function confirmAmend(type,acct,name){
+  const newVal=parseFloat(document.getElementById('modal-val')?.value),reason=document.getElementById('modal-reason')?.value||'Manual amendment';if(isNaN(newVal))return;
+  const p=state[acct];let oldVal,targetLabel;
+  if(type==='bank'){oldVal=p.bank;p.bank=newVal;targetLabel='Bank';}else{oldVal=p.bookies[name]?.bal||0;p.bookies[name].bal=newVal;targetLabel=name;}
+  const diff=newVal-oldVal;if(!p.transactions)p.transactions=[];
+  p.transactions.push({id:Date.now(),date:todayStr(),type:'Balance Amendment',target:targetLabel,oldVal,newVal,diff,pnl:diff,notes:reason,result:'—',_acct:acct});
+  if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}
+  saveData();closeModal();showToast(`${targetLabel} → ${fmt(newVal)}`);render();
+}
+
+function adjustExch(name){const cur=state.exchanges[name],val=prompt(`Set balance for ${name}:`,cur.toFixed(2));if(val===null)return;const n=parseFloat(val);if(isNaN(n))return;state.exchanges[name]=n;save('adjustExch');render();}
+function addBookie(acct){
+  const inp=document.getElementById('new-bookie-name'),name=inp?.value?.trim();if(!name)return;
+  if(!state[acct].bookies)state[acct].bookies={};
+  if(state[acct].bookies[name]){showToast('Already exists','error');return;}
+  state[acct].bookies[name]={bal:0,status:'Active',notes:''};save();inp.value='';render();
+}
+
+// ── BOOKIE SEARCH ────────────────────────────────────────────────────────────
+function getBookieList(){
+  return Object.keys(state[formAccount].bookies||{}).sort();
+}
+
+function renderBookieDropdownItems(items){
+  const dd=document.getElementById('bookie-dropdown');if(!dd)return;
+  if(!items.length){dd.innerHTML='<div style="padding:10px 12px;font-size:12px;color:var(--text-muted)">No results</div>';return;}
+  dd.innerHTML=items.slice(0,20).map(b=>`<div onclick="selectBookie('${b.replace(/'/g,"\\'")}') " style="padding:10px 12px;font-size:13px;color:var(--text-primary);cursor:pointer;border-bottom:0.5px solid var(--border-col2)" onmouseenter="this.style.background=getCssVar('--bg-card2')" onmouseleave="this.style.background=''">${b}</div>`).join('');
+}
+
+function showBookieDropdown(){
+  const dd=document.getElementById('bookie-dropdown');if(!dd)return;
+  const q=document.getElementById('f-bookie-search')?.value||'';
+  const list=getBookieList();
+  const filtered=q?list.filter(b=>b.toLowerCase().includes(q.toLowerCase())):list;
+  renderBookieDropdownItems(filtered);
+  dd.style.display='block';
+  // Close on outside click
+  setTimeout(()=>document.addEventListener('click',closeBookieDropdownOutside,{once:true}),10);
+}
+
+function closeBookieDropdownOutside(e){
+  const dd=document.getElementById('bookie-dropdown');
+  const inp=document.getElementById('f-bookie-search');
+  if(dd&&!dd.contains(e.target)&&e.target!==inp){dd.style.display='none';}
+  else if(dd&&dd.style.display!=='none'){document.addEventListener('click',closeBookieDropdownOutside,{once:true});}
+}
+
+function filterBookieDropdown(q){
+  const dd=document.getElementById('bookie-dropdown');if(!dd)return;
+  const list=getBookieList();
+  const filtered=q?list.filter(b=>b.toLowerCase().includes(q.toLowerCase())):list;
+  renderBookieDropdownItems(filtered);
+  dd.style.display='block';
+  // Clear the hidden value if user is typing a new search
+  const bh=document.getElementById('f-bookie');if(bh)bh.value='';
+}
+
+function selectBookie(name){
+  const inp=document.getElementById('f-bookie-search');if(inp)inp.value=name;
+  const bh=document.getElementById('f-bookie');if(bh)bh.value=name;
+  const dd=document.getElementById('bookie-dropdown');if(dd)dd.style.display='none';
+}
+
+// ── GUBBING RISK TRACKER ─────────────────────────────────────────────────────
+function calcBookieRisk(acct, bookieName){
+  const txs=(state[acct].transactions||[]).filter(t=>t.bookie===bookieName&&BET_ONLY.includes(t.type));
+  const settled=txs.filter(t=>t.result==='Won'||t.result==='Lost');
+  if(settled.length<2)return null;
+
+  // Mug bets — low odds bets to appear as normal punter
+  const mugBets=txs.filter(t=>t.type==='Mug').length;
+  const mugRatio=txs.length>0?mugBets/txs.length:0;
+
+  // Free bet ratio — using every offer looks automated
+  const freeBets=txs.filter(t=>t.type==='Free Bet').length;
+  const freeBetRatio=txs.length>0?freeBets/txs.length:0;
+
+  // Average back odds — always betting high odds looks like a sharp
+  const oddsArr=txs.filter(t=>t.bodds>0).map(t=>t.bodds);
+  const avgOdds=oddsArr.length?oddsArr.reduce((a,b)=>a+b,0)/oddsArr.length:0;
+  const hasLowOddsBets=oddsArr.some(o=>o<=2.0);
+  const allHighOdds=oddsArr.length>4&&!hasLowOddsBets;
+
+  // Bets per week — very high frequency looks automated
+  const dates=txs.map(t=>{const p=t.date?.split('/');return p?.length===3?new Date(+p[2],+p[1]-1,+p[0]):null;}).filter(Boolean);
+  let betsPerWeek=0;
+  if(dates.length>1){
+    const spanWeeks=Math.max((Math.max(...dates)-Math.min(...dates))/(1000*60*60*24*7),0.1);
+    betsPerWeek=txs.length/spanWeeks;
+  }
+
+  // Total P&L — very profitable accounts get restricted faster
+  const totalPnl=settled.reduce((a,t)=>a+(t.pnl||0),0);
+
+  // Score: 0 (safe) to 100 (high risk)
+  let score=0;
+  const flags=[];
+
+  // 1. Mug bet ratio — biggest factor
+  if(mugRatio===0&&txs.length>4){
+    score+=40;flags.push('No mug bets logged on this bookie');
+  } else if(mugRatio<0.1&&txs.length>4){
+    score+=25;flags.push(`Very low mug bet ratio (${Math.round(mugRatio*100)}%)`);
+  } else if(mugRatio<0.2&&txs.length>6){
+    score+=12;flags.push(`Low mug bet ratio (${Math.round(mugRatio*100)}%)`);
+  }
+
+  // 2. Always high odds — no low-odds bets ever placed
+  if(allHighOdds){
+    score+=25;flags.push(`Always high odds — avg ${avgOdds.toFixed(2)}, no bets under 2.0`);
+  } else if(avgOdds>3.5&&txs.length>5){
+    score+=12;flags.push(`High average odds (${avgOdds.toFixed(2)}) — add some low-odds bets`);
+  }
+
+  // 3. High free bet ratio — looks like pure bonus hunting
+  if(freeBetRatio>0.65&&txs.length>4){
+    score+=20;flags.push(`Mostly free bets (${Math.round(freeBetRatio*100)}%) — mix in qualifiers`);
+  } else if(freeBetRatio>0.45&&txs.length>4){
+    score+=10;flags.push(`High free bet ratio (${Math.round(freeBetRatio*100)}%)`);
+  }
+
+  // 4. High P&L — very profitable accounts attract attention
+  if(totalPnl>500){
+    score+=15;flags.push(`High profit on this bookie (£${totalPnl.toFixed(0)})`);
+  } else if(totalPnl>250){
+    score+=8;flags.push(`Good profit (£${totalPnl.toFixed(0)}) — monitor`);
+  }
+
+  // 5. Very high bet frequency
+  if(betsPerWeek>20){
+    score+=10;flags.push(`Very high frequency (${betsPerWeek.toFixed(1)} bets/week)`);
+  } else if(betsPerWeek>10){
+    score+=5;flags.push(`High frequency (${betsPerWeek.toFixed(1)} bets/week)`);
+  }
+
+  score=Math.min(score,100);
+  const level=score>=55?'red':score>=25?'amber':'green';
+  return{score,level,flags,txCount:txs.length,settled:settled.length,mugRatio,freeBetRatio,avgOdds,hasLowOddsBets,betsPerWeek,totalPnl};
+}
+
+function renderRisk(){
+  // Gather all bookies across all accounts with enough data
+  const allRisks=[];
+  PROFILES.forEach(acct=>{
+    Object.keys(state[acct].bookies||{}).forEach(bookie=>{
+      const risk=calcBookieRisk(acct,bookie);
+      if(risk)allRisks.push({acct,bookie,risk});
+    });
+  });
+
+  if(!allRisks.length)return`<div style="text-align:center;padding:60px 20px"><i class="ti ti-shield" style="font-size:48px;color:var(--text-muted)" aria-hidden="true"></i><div style="font-size:15px;font-weight:500;margin-top:12px;color:var(--text-primary)">No risk data yet</div><div style="font-size:13px;color:var(--text-muted);margin-top:6px">Log at least 2 settled bets per bookie to see risk analysis</div></div>`;
+
+  const red=allRisks.filter(r=>r.risk.level==='red');
+  const amber=allRisks.filter(r=>r.risk.level==='amber');
+  const green=allRisks.filter(r=>r.risk.level==='green');
+
+  // Sort: red first, then amber, then green, within each by score desc
+  const sorted=[...red,...amber,...green].sort((a,b)=>{
+    const order={red:0,amber:1,green:2};
+    if(order[a.risk.level]!==order[b.risk.level])return order[a.risk.level]-order[b.risk.level];
+    return b.risk.score-a.risk.score;
+  });
+
+  return`
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px">
+    <div class="metric-card" style="background:var(--bg-risk-red)">
+      <div class="metric-label" style="color:var(--text-neg)"><i class="ti ti-shield-x" aria-hidden="true"></i>High risk</div>
+      <div class="metric-value" style="color:#F87171">${red.length}</div>
+      <div class="metric-sub" style="color:#F87171">bookies</div>
+    </div>
+    <div class="metric-card" style="background:var(--bg-risk-amber)">
+      <div class="metric-label" style="color:#FBBF24"><i class="ti ti-shield-half" aria-hidden="true"></i>Medium</div>
+      <div class="metric-value" style="color:#FBBF24">${amber.length}</div>
+      <div class="metric-sub" style="color:#FBBF24">bookies</div>
+    </div>
+    <div class="metric-card" style="background:var(--bg-risk-green)">
+      <div class="metric-label" style="color:var(--text-accent)"><i class="ti ti-shield-check" aria-hidden="true"></i>Low risk</div>
+      <div class="metric-value" style="color:var(--text-accent)">${green.length}</div>
+      <div class="metric-sub" style="color:var(--text-accent)">bookies</div>
+    </div>
+  </div>
+
+  ${red.length?`<div style="font-size:11px;font-weight:500;color:var(--text-neg);letter-spacing:.3px;text-transform:uppercase;margin-bottom:8px"><i class="ti ti-alert-triangle" aria-hidden="true"></i> Action needed</div>
+  ${red.map(r=>renderRiskCard(r)).join('')}`:''}
+
+  ${amber.length?`<div style="font-size:11px;font-weight:500;color:var(--text-warn);letter-spacing:.3px;text-transform:uppercase;margin:12px 0 8px"><i class="ti ti-alert-circle" aria-hidden="true"></i> Monitor closely</div>
+  ${amber.map(r=>renderRiskCard(r)).join('')}`:''}
+
+  ${green.length?`<div style="font-size:11px;font-weight:500;color:var(--text-accent);letter-spacing:.3px;text-transform:uppercase;margin:12px 0 8px"><i class="ti ti-circle-check" aria-hidden="true"></i> Looking good</div>
+  ${green.map(r=>renderRiskCard(r)).join('')}`:''}`;
+}
+
+function renderRiskCard(r){
+  const {acct,bookie,risk}=r;
+  const levelColors={
+    red:{bg:'var(--bg-risk-red)',border:'rgba(248,113,113,0.4)',text:'#F87171',badge:'rgba(248,113,113,0.3)'},
+    amber:{bg:'var(--bg-risk-amber)',border:'rgba(251,191,36,0.4)',text:'var(--text-warn)',badge:'rgba(251,191,36,0.3)'},
+    green:{bg:'var(--bg-risk-green)',border:'rgba(34,197,94,0.4)',text:'var(--text-accent)',badge:'rgba(34,197,94,0.3)'},
+  }[risk.level];
+  const levelLabel={red:'High risk',amber:'Medium risk',green:'Low risk'}[risk.level];
+  const barWidth=Math.round(risk.score);
+
+  return`<div style="background:var(--bg-card);border:0.5px solid var(--border-col);border-left:2px solid ${levelColors.border};border-radius:12px;padding:14px;margin-bottom:8px">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px">
+      <div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+          <span style="font-size:14px;font-weight:500;color:var(--text-primary)">${bookie}</span>
+          ${acctPill(acct)}
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <span style="font-size:11px;color:var(--text-muted)">${risk.txCount} bets</span>
+          <span style="font-size:11px;color:var(--text-muted)">${Math.round(risk.mugRatio*100)}% mugged</span>
+          ${risk.avgOdds>0?`<span style="font-size:11px;color:var(--text-muted)">avg odds ${risk.avgOdds.toFixed(2)}</span>`:''}
+          <span style="font-size:11px;color:var(--text-muted)">£${risk.totalPnl.toFixed(0)} profit</span>
+        </div>
+      </div>
+      <span style="background:${levelColors.bg};color:${levelColors.text};border:0.5px solid ${levelColors.border};padding:3px 10px;border-radius:20px;font-size:11px;font-weight:500;flex-shrink:0">${levelLabel}</span>
+    </div>
+
+    <div style="background:var(--bg-input);border-radius:4px;height:4px;margin-bottom:10px;overflow:hidden">
+      <div style="background:${levelColors.text};height:100%;width:${barWidth}%;border-radius:4px;transition:width .5s"></div>
+    </div>
+
+    ${risk.flags.length?`<div style="display:flex;flex-direction:column;gap:4px">
+      ${risk.flags.map(f=>`<div style="font-size:11px;color:${levelColors.text};display:flex;align-items:center;gap:5px"><i class="ti ti-point-filled" style="font-size:8px" aria-hidden="true"></i>${f}</div>`).join('')}
+    </div>`:''}
+
+    ${risk.level!=='green'?`<div style="margin-top:10px;padding-top:10px;border-top:0.5px solid var(--border-col)">
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:5px;font-weight:500;text-transform:uppercase;letter-spacing:.3px">Suggested action</div>
+      <div style="font-size:12px;color:var(--text-secondary)">${getRiskAdvice(risk)}</div>
+    </div>`:''}
+  </div>`;
+}
+
+function getRiskAdvice(risk){
+  const tips=[];
+  if(risk.mugRatio<0.2)tips.push('Log more mug bets on this bookie — aim for 1 mug per 3–4 matched bets');
+  if(!risk.hasLowOddsBets||risk.avgOdds>3.5)tips.push('Place some bets at lower odds (1.3–2.0) to look like a normal punter');
+  if(risk.freeBetRatio>0.5)tips.push('Mix in more qualifying and mug bets alongside free bet usage');
+  if(risk.totalPnl>300)tips.push('Consider a gradual withdrawal to avoid drawing attention');
+  if(risk.betsPerWeek>15)tips.push('Reduce bet frequency — spread bets across more days');
+  return tips.length?tips.join(' · '):'Keep logging mug bets regularly to maintain a natural pattern';
+}
+
+
+// ── CASINO ───────────────────────────────────────────────────────────────────
+const CASINO_OFFER_TYPES=['Reload','Welcome','Free Spins','Cashback','Other'];
+let casinoFormAcct='me';
+let casinoView='log';
+let _casinoCache=null;
+let _casinoCacheKey='';
+let casinoOfferType='';
+let casinoPendingSpins=false;
+let casinoHasDeposit=false;
+let casinoOperator='JG';
+
+function getCasinoSessions(){
+  const key=PROFILES.map(p=>(state[p].casino||[]).length).join('-');
+  if(_casinoCache&&_casinoCacheKey===key)return _casinoCache;
+  _casinoCache=PROFILES.flatMap(p=>(state[p].casino||[]).map(s=>({...s,_acct:p}))).sort((a,b)=>b.id-a.id);
+  _casinoCacheKey=key;
+  return _casinoCache;
+}
+function invalidateCasinoCache(){_casinoCache=null;_casinoCacheKey='';}
+
+function renderCasino(){
+  const allSessions=PROFILES.flatMap(p=>(state[p].casino||[]).map(s=>({...s,_acct:p}))).sort((a,b)=>b.id-a.id);
+  const totalCasino=PROFILES.reduce((a,p)=>a+casinoPnl(p),0);
+  const sessionPnlAmt=s=>(s.startBal!==undefined&&s.endBal!==undefined&&(s.startBal!==0||s.endBal!==0))?s.endBal-s.startBal:(s.netProfit||0);
+  const jgPnl=allSessions.reduce((a,s)=>{
+    if(s.operator&&s.operator!=='JG')return a; // default to JG if no operator
+    return a+sessionPnlAmt(s);
+  },0);
+  const jpPnl=allSessions.reduce((a,s)=>{
+    if(s.operator!=='JP')return a;
+    return a+sessionPnlAmt(s);
+  },0);
+  const profilePnlHtml=PROFILES.map(p=>'<span>'+profileLabel(p)+': <span style="color:'+(casinoPnl(p)>=0?'#22C55E':'#F87171')+'">'+(  _dashHidden?'••••':fmtS(casinoPnl(p)))+'</span></span>').join('');
+
+  // Render view content separately so tabs work correctly
+  let viewHtml='';
+  if(casinoView==='log')viewHtml=renderCasinoForm();
+  else if(casinoView==='history')viewHtml=renderCasinoHistory();
+  else if(casinoView==='monthly')viewHtml=renderCasinoMonthly();
+  else viewHtml=renderCasinoSummaryView();
+
+  const _eyeI=_dashHidden?'ti-eye':'ti-eye-off';
+  return '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'    +'<button onclick="toggleDashVisibility()" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:4px"><i class="ti '+_eyeI+'"></i></button>'    +'<button class="btn-sm" onclick="exportCasinoCSV()"><i class="ti ti-download" aria-hidden="true"></i> Export CSV</button>'    +'</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">'
+    +'<div class="metric-card" style="grid-column:span 2">'
+    +'<div class="metric-label"><i class="ti ti-cards" aria-hidden="true"></i>Casino P&L</div>'
+    +'<div class="metric-value '+(totalCasino>=0?'pos':'neg')+'">'+(  _dashHidden?'••••••':fmtS(totalCasino))+'</div>'
+    +'<div class="metric-sub" style="display:flex;gap:10px;flex-wrap:wrap">'+profilePnlHtml+'</div>'
+    +'<div style="margin-top:6px;padding-top:6px;border-top:0.5px solid var(--border-col);display:flex;gap:10px">'
+    +'<span style="font-size:11px">JG: <span style="color:'+(jgPnl>=0?'#22C55E':'#F87171')+';font-weight:500">'+fmtS(jgPnl)+'</span></span>'
+    +'<span style="font-size:11px">JP: <span style="color:'+(jpPnl>=0?'#22C55E':'#F87171')+';font-weight:500">'+fmtS(jpPnl)+'</span></span>'
+    +'</div></div></div>'
+    +'<div style="display:flex;gap:8px;margin-bottom:14px">'
+    +'<button id="casino-tab-log" onclick="setCasinoView(0)" class="btn '+(casinoView==='log'?'btn-primary':'btn-ghost')+'" style="flex:1;padding:10px">Log</button>'
+    +'<button id="casino-tab-history" onclick="setCasinoView(1)" class="btn '+(casinoView==='history'?'btn-primary':'btn-ghost')+'" style="flex:1;padding:10px">History</button>'
+    +'<button id="casino-tab-monthly" onclick="setCasinoView(2)" class="btn '+(casinoView==='monthly'?'btn-primary':'btn-ghost')+'" style="flex:1;padding:10px">Monthly</button>'
+    +'<button id="casino-tab-summary" onclick="setCasinoView(3)" class="btn '+(casinoView==='summary'?'btn-primary':'btn-ghost')+'" style="flex:1;padding:10px">Summary</button>'
+    +'</div>'
+    +'<div id="casino-view">'+viewHtml+'</div>';
+}
+
+
+function renderCasinoMonthly(){
+  const allSessions=getCasinoSessions();
+  const monthlyMap={};
+  allSessions.forEach(s=>{
+    const d=s.date||'';
+    const parts=d.split('/');
+    if(parts.length<3)return;
+    const key=parts[2]+'-'+parts[1].padStart(2,'0');
+    if(!monthlyMap[key])monthlyMap[key]={JG:0,JP:0,total:0};
+    const pnl=(s.startBal!==undefined&&s.endBal!==undefined&&(s.startBal!==0||s.endBal!==0))?s.endBal-s.startBal:(s.netProfit||0);
+    const op=s.operator||'JG';if(monthlyMap[key][op]===undefined)monthlyMap[key][op]=0;monthlyMap[key][op]+=pnl;
+    monthlyMap[key].total+=pnl;
+  });
+  const monthKeys=Object.keys(monthlyMap).sort().reverse();
+  if(!monthKeys.length)return '<div class="empty">No casino sessions yet</div>';
+  const rows=monthKeys.map(k=>{
+    const mo=monthlyMap[k];
+    const label=k.slice(0,4)+'/'+k.slice(5);
+    return '<tr>'
+      +'<td style="font-size:12px">'+label+'</td>'
+      +'<td style="text-align:right;font-size:12px;color:'+(mo.JG>=0?'#22C55E':'#F87171')+'">'+fmtS(mo.JG)+'</td>'
+      +'<td style="text-align:right;font-size:12px;color:'+(mo.JP>=0?'#22C55E':'#F87171')+'">'+fmtS(mo.JP)+'</td>'
+      +'<td style="text-align:right;font-size:12px;font-weight:500;color:'+(mo.total>=0?'#22C55E':'#F87171')+'">'+fmtS(mo.total)+'</td>'
+      +'</tr>';
+  }).join('');
+  return '<div class="card">'
+    +'<div class="card-header"><span class="card-title">Monthly Casino P&L by Operator</span></div>'
+    +'<div style="overflow-x:auto">'
+    +'<table class="data-table" style="width:100%">'
+    +'<thead><tr><th>Month</th><th style="text-align:right">JG (£)</th><th style="text-align:right">JP (£)</th><th style="text-align:right">Total (£)</th></tr></thead>'
+    +'<tbody>'+rows+'</tbody>'
+    +'</table></div></div>';
+}
+
+
+function renderCasinoSummaryView(){
+  const allSessions=getCasinoSessions();
+  const sessionPnl=s=>(s.startBal!==undefined&&s.endBal!==undefined&&(s.startBal!==0||s.endBal!==0))?s.endBal-s.startBal:(s.netProfit||0);
+
+  // Split by operator — default to JG if no operator field (old sessions)
+  const jgSessions=allSessions.filter(s=>!s.operator||s.operator==='JG');
+  const jpSessions=allSessions.filter(s=>s.operator==='JP');
+  const jgPnl=jgSessions.reduce((a,s)=>a+sessionPnl(s),0);
+  const jpPnl=jpSessions.reduce((a,s)=>a+sessionPnl(s),0);
+  const totalPnl=jgPnl+jpPnl;
+  const totalSessions=allSessions.length;
+
+  // By casino
+  const casinoMap={};
+  allSessions.forEach(s=>{
+    if(!s.casino)return;
+    casinoMap[s.casino]=(casinoMap[s.casino]||0)+sessionPnl(s);
+  });
+  const entries=Object.entries(casinoMap).sort((a,b)=>b[1]-a[1]);
+  if(!entries.length)return '<div class="empty">No casino sessions yet</div>';
+
+  const rows=entries.map(([casino,pnl])=>'<div class="list-row">'
+    +'<div class="list-row-left"><div class="list-row-title" style="font-size:12px">'+(casino||'Unknown')+'</div></div>'
+    +'<div class="list-row-right" style="color:'+(pnl>=0?'#22C55E':'#F87171')+';font-size:12px">'+fmtS(pnl)+'</div>'
+    +'</div>').join('');
+
+  return '<div class="metric-card" style="margin-bottom:12px">'
+    +'<div class="metric-label"><i class="ti ti-cards" aria-hidden="true"></i>Combined Casino Summary</div>'
+    +'<div class="metric-value '+(totalPnl>=0?'pos':'neg')+'">'+fmtS(totalPnl)+'</div>'
+    +'<div class="metric-sub">'+totalSessions+' total sessions</div>'
+    +'<div style="margin-top:8px;padding-top:8px;border-top:0.5px solid var(--border-col);display:grid;grid-template-columns:1fr 1fr;gap:8px">'
+    +'<div style="background:var(--border-col2);border-radius:8px;padding:10px">'
+    +'<div style="font-size:10px;color:var(--text-muted);margin-bottom:4px">JG</div>'
+    +'<div style="font-size:16px;font-weight:500;color:'+(jgPnl>=0?'#22C55E':'#F87171')+'">'+fmtS(jgPnl)+'</div>'
+    +'<div style="font-size:11px;color:var(--text-muted);margin-top:2px">'+jgSessions.length+' sessions</div>'
+    +'</div>'
+    +'<div style="background:var(--border-col2);border-radius:8px;padding:10px">'
+    +'<div style="font-size:10px;color:var(--text-muted);margin-bottom:4px">JP</div>'
+    +'<div style="font-size:16px;font-weight:500;color:'+(jpPnl>=0?'#22C55E':'#F87171')+'">'+fmtS(jpPnl)+'</div>'
+    +'<div style="font-size:11px;color:var(--text-muted);margin-top:2px">'+jpSessions.length+' sessions</div>'
+    +'</div>'
+    +'</div></div>'
+    +'<div class="card">'
+    +'<div class="card-header"><span class="card-title">P&L by Casino</span></div>'
+    +rows
+    +'</div>';
+}
+
+
+function renderCasinoHistory(){
+  const sessions=getCasinoSessions();
+  if(!sessions.length)return '<div class="empty">No new casino sessions yet — log one above</div>';
+  const rows=sessions.map(s=>{
+    const pnl=(s.startBal!==undefined&&s.endBal!==undefined&&(s.startBal!==0||s.endBal!==0))?s.endBal-s.startBal:(s.netProfit||0);
+    const startStr=s.startBal!==undefined?fmt(s.startBal):'—';
+    const endStr=s.endBal!==undefined?fmt(s.endBal):'—';
+    return '<tr data-csid="'+s.id+'">'
+      +'<td style="font-size:11px;white-space:nowrap">'+(s.date||'')+'</td>'
+      +'<td style="text-align:center"><span class="dot-'+s._acct+'" style="display:inline-block;width:6px;height:6px;border-radius:50%"></span> '+profileLabel(s._acct)+'</td>'
+      +'<td style="text-align:center;font-size:11px">'+(s.operator||'JG')+'</td>'
+      +'<td style="font-size:11px">'+(s.casino||'')+'</td>'
+      +'<td style="text-align:right;font-size:12px">'+startStr+'</td>'
+      +'<td style="text-align:right;font-size:12px">'+endStr+'</td>'
+      +'<td style="text-align:right;font-size:12px;font-weight:500;color:'+(pnl>=0?'#22C55E':'#F87171')+'">'+fmtS(pnl)+'</td>'
+      +'<td><button onclick="deleteCasinoSession(\x27'+s._acct+'\x27,'+s.id+')" style="background:none;border:none;color:#F87171;cursor:pointer;padding:4px"><i class="ti ti-trash" style="font-size:13px"></i></button></td>'
+      +'</tr>';
+  }).join('');
+  return '<div class="card"><div class="card-header"><span class="card-title">Casino History</span></div>'
+    +'<div style="overflow-x:auto">'
+    +'<table class="data-table" style="width:100%;min-width:500px">'
+    +'<thead><tr>'
+    +'<th>Date</th><th>Acct</th><th>Op</th><th>Casino</th>'
+    +'<th style="text-align:right">Start (£)</th><th style="text-align:right">End (£)</th>'
+    +'<th style="text-align:right">P&L (£)</th><th></th>'
+    +'</tr></thead>'
+    +'<tbody>'+rows+'</tbody>'
+    +'</table></div></div>';
+}
+
+
+
+// ── QUICK CALCULATOR ─────────────────────────────────────────────────────────
+function renderQuickCalc(){
+  const isFB=calcBetType==='Free Bet';
+  const isUL=calcStrategy==='underlay';
+  const types=['Boost','Free Bet','Qualifier','Mug'];
+  const inputBg=getCssVar('--bg-input')||'#3D4349';
+  const typeBg={Boost:inputBg,'Free Bet':inputBg,Qualifier:inputBg,Mug:inputBg};
+  const typeCol={Boost:'#60A5FA','Free Bet':'#34D399',Qualifier:'#FBBF24',Mug:'#9A9590'};
+  const typeBtns=types.map(function(t){
+    const active=calcBetType===t;
+    const bg=active?(typeBg[t]||'#3D4349'):'#3D4349';
+    const col=active?(typeCol[t]||'#C8C5BF'):'#C8C5BF';
+    return '<button onclick="setCalcBetType(\'' + t + '\')" style="flex:1;padding:8px 4px;border-radius:8px;border:0.5px solid var(--border-col);background:'+bg+';color:'+col+';font-family:system-ui;font-size:11px;font-weight:500;cursor:pointer">'+t+'</button>';
+  }).join('');
+
+  const stratBtns=
+    '<button onclick="setCalcStrategy(\'underlay\')" class="btn '+(isUL?'btn-primary':'btn-ghost')+'" style="flex:1;padding:8px;font-size:12px">Underlay</button>'
+    +'<button onclick="setCalcStrategy(\'lockin\')" class="btn '+(isUL?'btn-ghost':'btn-primary')+'" style="flex:1;padding:8px;font-size:12px">Lock-in</button>';
+
+  return '<div class="card" style="margin-bottom:12px">'
+    +'<div style="height:4px"></div>'
+    +'<div class="card-body">'
+    +'<div style="margin-bottom:10px"><div class="form-label">Bet type</div>'
+    +'<div style="display:flex;gap:6px">'+typeBtns+'</div></div>'
+    +'<div style="margin-bottom:10px"><div class="form-label">Strategy</div>'
+    +'<div style="display:flex;gap:6px">'+stratBtns+'</div></div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:10px">'
+    +'<div class="form-group"><div class="form-label">Stake</div>'
+    +'<input type="number" id="qc-stake" placeholder="0.00" step="0.01" inputmode="decimal" oninput="calcQuick()" style="padding:8px;font-size:14px;font-weight:500"/></div>'
+    +'<div class="form-group"><div class="form-label">Back odds</div>'
+    +'<input type="number" id="qc-bodds" placeholder="2.00" step="0.01" inputmode="decimal" oninput="calcQuick()" style="padding:8px;font-size:14px;font-weight:500"/></div>'
+    +'<div class="form-group"><div class="form-label">Lay odds</div>'
+    +'<input type="number" id="qc-lodds" placeholder="2.00" step="0.01" inputmode="decimal" oninput="calcQuick()" style="padding:8px;font-size:14px;font-weight:500"/></div>'
+    +'</div>'
+    +'<div id="qc-results" style="display:none;background:var(--bg-card2);border-radius:10px;padding:12px 14px;margin-bottom:12px">'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">'
+    +'<div><div style="font-size:10px;color:var(--text-muted);margin-bottom:3px">Lay stake</div>'
+    +'<div style="display:flex;align-items:center;gap:6px">'
+    +'<div id="qc-laystake" style="font-size:20px;font-weight:500;color:var(--text-primary)">—</div>'
+    +'<button id="qc-copy-btn" onclick="copyLayStake()" style="display:none;padding:4px 8px;border-radius:6px;border:0.5px solid rgba(255,255,255,0.15);background:var(--bg-input);color:var(--text-secondary);font-size:11px;cursor:pointer;font-family:system-ui">Copy</button>'
+    +'</div></div>'
+    +'<div><div style="font-size:10px;color:var(--text-muted);margin-bottom:3px">If wins</div>'
+    +'<div id="qc-win" style="font-size:20px;font-weight:500;color:#22C55E">—</div></div>'
+    +'<div><div style="font-size:10px;color:var(--text-muted);margin-bottom:3px">If loses</div>'
+    +'<div id="qc-lose" style="font-size:20px;font-weight:500;color:var(--text-muted)">—</div></div>'
+    +'</div></div>'
+    +'<button id="qc-log-btn" onclick="logFromCalc()" style="display:none;width:100%;padding:13px;border-radius:10px;border:none;background:#22C55E;color:#fff;font-family:system-ui;font-size:15px;font-weight:500;cursor:pointer"><i class="ti ti-plus"></i> Log this bet</button>'
+    +'</div></div>';
+}
+
+
+function copyLayStake(){
+  const el=document.getElementById('qc-laystake');
+  if(!el)return;
+  const val=el.textContent.replace('£','').trim();
+  navigator.clipboard.writeText(val).then(function(){
+    const btn=document.getElementById('qc-copy-btn');
+    if(btn){btn.innerHTML='<i class="ti ti-check"></i>';setTimeout(function(){btn.innerHTML='<i class="ti ti-copy"></i>';},1500);}
+  }).catch(function(){
+    // Fallback for browsers without clipboard API
+    const ta=document.createElement('textarea');
+    ta.value=val;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);
+    showToast('Lay stake copied: £'+val);
+  });
+}
+
+function setCalcBetType(t){
+  calcBetType=t;
+  const qc=document.getElementById('qc-container');
+  if(qc){
+    qc.innerHTML=renderQuickCalc();
+    const s=document.getElementById('qc-stake');if(s)s.value=window._qcStake||'';
+    const b=document.getElementById('qc-bodds');if(b)b.value=window._qcBodds||'';
+    const l=document.getElementById('qc-lodds');if(l)l.value=window._qcLodds||'';
+    calcQuick();
+  }
+}
+
+function setCalcStrategy(s){
+  calcStrategy=s;
+  setCalcBetType(calcBetType);
+}
+
+function calcQuick(){
+  const bs=parseFloat(document.getElementById('qc-stake')?.value)||0;
+  const bo=parseFloat(document.getElementById('qc-bodds')?.value)||0;
+  const lo=parseFloat(document.getElementById('qc-lodds')?.value)||0;
+  // Store values for re-render preservation
+  window._qcStake=bs||'';
+  window._qcBodds=bo||'';
+  window._qcLodds=lo||'';
+
+  const res=document.getElementById('qc-results');
+  const btn=document.getElementById('qc-log-btn');
+  if(!bs||!bo||!lo){if(res)res.style.display='none';if(btn)btn.style.display='none';return;}
+
+  const isFB=calcBetType==='Free Bet';
+  const isUL=calcStrategy==='underlay';
+  let layStake,winPnl,losePnl;
+
+  if(isUL){
+    if(!isFB){
+      layStake=bs;
+      winPnl=bs*(bo-lo);
+      losePnl=0;
+    }else{
+      layStake=lo>1&&bo>2?bs*(bo-2)/(lo-1):0;
+      winPnl=bs;
+      losePnl=layStake;
+    }
+  }else{
+    if(!isFB){
+      layStake=lo>0?bs*bo/lo:0;
+      winPnl=layStake-bs;
+      losePnl=layStake-bs;
+    }else{
+      layStake=lo>0?bs*(bo-1)/lo:0;
+      winPnl=layStake;
+      losePnl=layStake;
+    }
+  }
+
+  const lsEl=document.getElementById('qc-laystake');
+  const winEl=document.getElementById('qc-win');
+  const loseEl=document.getElementById('qc-lose');
+
+  if(lsEl)lsEl.textContent='£'+layStake.toFixed(2);
+  if(winEl){winEl.textContent=fmtS(winPnl);winEl.style.color=winPnl>=0?'#22C55E':'#F87171';}
+  if(loseEl){loseEl.textContent=fmtS(losePnl);loseEl.style.color=losePnl>0?'#22C55E':losePnl<0?'#F87171':'#9A9590';}
+
+  if(res)res.style.display='block';
+  if(btn)btn.style.display='block';
+  const copyBtn=document.getElementById('qc-copy-btn');
+  if(copyBtn)copyBtn.style.display='inline-flex';
+}
+
+function logFromCalc(){
+  // Pre-fill the log form with calculator values and switch to Trade tab
+  const bs=window._qcStake||'';
+  const bo=window._qcBodds||'';
+  const lo=window._qcLodds||'';
+  // Set form state
+  selectedBetType=calcBetType;
+  isUnderlay=calcStrategy==='underlay';
+  currentTab='trade';tradeSubTab='log';
+  // Switch to Trade tab
+  document.querySelectorAll('.tab').forEach(el=>el.classList.remove('active'));
+  document.getElementById('tab-trade')?.classList.add('active');
+  document.getElementById('profile-bar').style.display='none';
+  const mc=document.getElementById('main-content');
+  if(mc)mc.innerHTML=renderTrade();
+  setTimeout(function(){
+    const fs=document.getElementById('f-bstake');if(fs)fs.value=bs;
+    const fb=document.getElementById('f-bodds');if(fb)fb.value=bo;
+    const fl=document.getElementById('f-lodds');if(fl)fl.value=lo;
+    // Set strategy buttons
+    setStrategy(calcStrategy);
+    // Update type buttons
+    document.querySelectorAll('[data-toptype]').forEach(function(el){
+      const isSelected=el.dataset.toptype===calcBetType;
+      el.style.background=isSelected?getTypeColor(calcBetType):getCssVar('--bg-card2')||'#252629';
+      el.style.color=isSelected?getTypeTextColor(calcBetType):'#C8C5BF';
+      el.style.borderColor=isSelected?'transparent':'rgba(255,255,255,0.10)';
+    });
+    document.querySelectorAll('.type-pill').forEach(function(el){
+      el.className='type-pill';
+      if(el.dataset.type===calcBetType)el.classList.add('sel','sel-'+calcBetType.toLowerCase().split(' ').join(''));
+    });
+    updateFormFields();
+    bindFormEvents();
+    autoCalcUnderlay();
+  },50);
+}
+
+function filterHistoryInPlace(){
+  const typeFilter=document.getElementById('hist-type-filter')?.value||'';
+  const resultFilter=document.getElementById('hist-result-filter')?.value||'';
+  let txs=profileTxs(currentProfile);
+  if(typeFilter)txs=txs.filter(t=>t.type===typeFilter);
+  if(resultFilter)txs=txs.filter(t=>t.result===resultFilter);
+  const showAll=currentProfile==='both';
+  const tableEl=document.querySelector('.table-wrap');
+  if(tableEl)tableEl.outerHTML=renderTxTable(txs,showAll);
+  const countEl=document.querySelector('[data-txcount]');
+  if(countEl)countEl.textContent=txs.length+' transactions';
+}
+
+// ── BACKUP ───────────────────────────────────────────────────────────────────
+function buildFullBackup(){
+  return{
+    version:2,
+    exportedAt:new Date().toISOString(),
+    exportedBy:'MBWorld',
+    state:{
+      exchanges:state.exchanges,
+      profiles:Object.fromEntries(PROFILES.map(pr=>[pr,{
+        bank:state[pr].bank,
+        bookies:state[pr].bookies,
+        transactions:state[pr].transactions,
+        freeBets:state[pr].freeBets||[],
+        casino:state[pr].casino||[]
+      }]))
+    }
+  };
+}
+
+async function downloadBackup(){
+  showToast('Preparing backup…','info');
+  try{
+    // Use server-side backup — reads directly from KV, always complete
+    const res=await fetch('/api/backup');
+    if(!res.ok)throw new Error('Backup failed: '+res.status);
+    const json=await res.json();
+    const blob=new Blob([JSON.stringify(json,null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    const date=todayStr().replace(/\//g,'-');
+    a.href=url;a.download=`mbworld-backup-${date}.json`;a.click();
+    URL.revokeObjectURL(url);
+    localStorage.setItem('mbe_last_backup',Date.now().toString());
+    showToast('Full backup downloaded ✓ (includes casino)');
+    updateBackupStatus();
+  }catch(e){
+    // Fallback to local backup
+    const backup=buildFullBackup();
+    const blob=new Blob([JSON.stringify(backup,null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    const date=todayStr().replace(/\//g,'-');
+    a.href=url;a.download=`mbworld-backup-${date}.json`;a.click();
+    URL.revokeObjectURL(url);
+    localStorage.setItem('mbe_last_backup',Date.now().toString());
+    showToast('Backup downloaded (local)');
+    updateBackupStatus();
+  }
+}
+
+function getLastBackupDays(){
+  const last=localStorage.getItem('mbe_last_backup');
+  if(!last)return null;
+  return Math.floor((Date.now()-parseInt(last))/86400000);
+}
+
+function updateBackupStatus(){
+  const el=document.getElementById('backup-status');
+  if(!el)return;
+  const days=getLastBackupDays();
+  if(days===null){el.textContent='Never backed up';el.style.color='#F87171';}
+  else if(days===0){el.textContent='Backed up today';el.style.color='#22C55E';}
+  else if(days<=7){el.textContent=`Last backup ${days}d ago`;el.style.color='#22C55E';}
+  else if(days<=14){el.textContent=`Last backup ${days}d ago`;el.style.color='#F0A500';}
+  else{el.textContent=`Last backup ${days}d ago — overdue`;el.style.color='#F87171';}
+}
+
+function checkAutoBackup(){
+  // Auto-backup: trigger on first Monday open if last backup > 6 days ago
+  const now=new Date();
+  const isMonday=now.getDay()===1;
+  const days=getLastBackupDays();
+  const lastAutoCheck=localStorage.getItem('mbe_auto_backup_check');
+  const todayKey=now.toISOString().slice(0,10);
+  if(lastAutoCheck===todayKey)return; // already checked today
+  localStorage.setItem('mbe_auto_backup_check',todayKey);
+  if(isMonday&&(days===null||days>6)){
+    // Show backup prompt after 3 seconds
+    setTimeout(function(){
+      showBackupPrompt();
+    },3000);
+  }
+}
+
+function showBackupPrompt(){
+  const days=getLastBackupDays();
+  const msg=days===null?'You have never backed up your data.':'Your last backup was '+days+' days ago.';
+  document.getElementById('modal-root').innerHTML=
+    '<div class="modal-bg">'    +'<div class="modal">'    +'<div class="modal-handle"></div>'    +'<div class="modal-title">Weekly Backup</div>'    +'<div class="modal-sub">'+msg+' Download a full backup now?</div>'    +'<div style="background:var(--bg-card);border-radius:10px;padding:12px 14px;margin-bottom:16px">'    +'<div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">Your backup includes:</div>'    +'<div style="font-size:12px;color:var(--text-secondary)">All transactions · Bookie balances · Casino sessions · Free bets · Exchange balances</div>'    +'</div>'    +'<div class="modal-actions">'    +'<button class="btn btn-primary" style="flex:1" onclick="downloadBackup();closeModal()"><i class="ti ti-download"></i> Download backup</button>'    +'<button class="btn btn-ghost" onclick="localStorage.setItem(\'mbe_last_backup\',Date.now().toString());closeModal()">Skip for now</button>'    +'</div>'    +'</div></div>';
+}
+
+// ── ROUTING ──────────────────────────────────────────────────────────────────
+function render(){
+  const el=document.getElementById('main-content');
+  if(!el)return;
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  const activeTab=document.getElementById('tab-'+currentTab);
+  if(activeTab)activeTab.classList.add('active');
+  if(currentTab==='dashboard'){
+    try{
+      const _s=document.getElementById('qc-stake')?.value||'';
+      const _b=document.getElementById('qc-bodds')?.value||'';
+      const _l=document.getElementById('qc-lodds')?.value||'';
+      el.innerHTML=renderDashboard();
+      const qs=document.getElementById('qc-stake');if(qs&&_s)qs.value=_s;
+      const qb=document.getElementById('qc-bodds');if(qb&&_b)qb.value=_b;
+      const ql=document.getElementById('qc-lodds');if(ql&&_l)ql.value=_l;
+      if(_s&&_b&&_l)calcQuick();
+      setTimeout(initMonthlyChart,80);
+    }catch(e){
+      el.innerHTML='<div style="padding:20px;color:#F87171;font-size:13px">Error: '+e.message+'</div>';
+    }
+  }
+  else if(currentTab==='pending')el.innerHTML=renderPending();
+  else if(currentTab==='trade'){
+    el.innerHTML=renderTrade();
+    if(tradeSubTab==='log')setTimeout(bindFormEvents,50);
+  }
+  else if(currentTab==='accounts')el.innerHTML=renderAccounts();
+  else if(currentTab==='casino')el.innerHTML=renderCasino();
+  else el.innerHTML=renderDashboard();
+  updateBadge();
+}
+
+function switchTab(t){
+  currentTab=t;
+  const pb=document.getElementById('profile-bar');
+  if(pb)pb.style.display=(t==='dashboard'||t==='trade'||t==='casino')?'none':'flex';
+  render();window.scrollTo(0,0);
+}
+
+function switchTradeTab(i){
+  tradeSubTab=i===1?'history':'log';
+  currentTab='trade';
+  render();
+}
+
+function setAccountsTab(i){
+  window._accountsSubTab=['accounts','risk','reports'][i];
+  currentTab='accounts';
+  document.getElementById('main-content').innerHTML=renderAccounts();
+  if(i===2)setTimeout(updateBackupStatus,50);
+}
+
+function setCasinoView(i){
+  casinoView=['log','history','monthly','summary'][i];
+  currentTab='casino';
+  render();
+}
+
+function renderTrade(){
+  const logActive=tradeSubTab==='log';
+  const histActive=tradeSubTab==='history';
+  const tabs='<div style="display:flex;gap:8px;margin-bottom:14px">'
+    +'<button onclick="switchTradeTab(0)" class="btn '+(logActive?'btn-primary':'btn-ghost')+'" style="flex:1;padding:10px">Log</button>'
+    +'<button onclick="switchTradeTab(1)" class="btn '+(histActive?'btn-primary':'btn-ghost')+'" style="flex:1;padding:10px">History</button>'
+    +'</div>';
+  if(histActive)return tabs+renderHistory();
+  return tabs+renderAdd();
+}
+
+function renderAccounts(){
+  const accountsSubTab=window._accountsSubTab||'accounts';
+  const subBar='<div style="display:flex;gap:6px;margin-bottom:14px">'
+    +'<button onclick="setAccountsTab(0)" class="btn '+(accountsSubTab==='accounts'?'btn-primary':'btn-ghost')+'" style="flex:1;padding:9px;font-size:12px">Accounts</button>'
+    +'<button onclick="setAccountsTab(1)" class="btn '+(accountsSubTab==='risk'?'btn-primary':'btn-ghost')+'" style="flex:1;padding:9px;font-size:12px">Risk</button>'
+    +'<button onclick="setAccountsTab(2)" class="btn '+(accountsSubTab==='reports'?'btn-primary':'btn-ghost')+'" style="flex:1;padding:9px;font-size:12px">Reports</button>'
+    +'</div>';
+  if(accountsSubTab==='risk')return subBar+renderRisk();
+  if(accountsSubTab==='reports')return subBar+renderReports();
+  return subBar+renderAccountsMain();
+}
+
+function renderCasinoForm(){
+  const acctBtns=PROFILES.map(function(pr){
+    return '<button class="acct-sel-btn '+(casinoFormAcct===pr?'active-'+pr:'')+'" onclick="casinoFormAcct=\''+pr+'\';setCasinoView(0)">'+profileLabel(pr)+'</button>';
+  }).join('');
+  const style2=getComputedStyle(document.documentElement);
+  const inputBg2=style2.getPropertyValue('--bg-input').trim();
+  const accentCol=style2.getPropertyValue('--text-accent').trim();
+  const jgBg=casinoOperator==='JG'?inputBg2:inputBg2;
+  const jgCol=casinoOperator==='JG'?accentCol:'var(--text-muted)';
+  const jpBg=casinoOperator==='JP'?inputBg2:inputBg2;
+  const jpCol=casinoOperator==='JP'?accentCol:'var(--text-muted)';
+  return '<div class="card"><div class="card-header"><span class="card-title">Log casino session</span></div>'
+    +'<div class="card-body" style="padding-bottom:80px">'
+    +'<div class="form-section"><div class="form-label">Account</div><div class="acct-selector">'+acctBtns+'</div></div>'
+    +'<div style="margin-bottom:10px"><div class="form-label">Operator</div><div style="display:flex;gap:6px">'
+    +'<button onclick="casinoOperator=\'JG\';setCasinoView(0)" style="flex:1;padding:9px;border-radius:8px;border:0.5px solid var(--border-col);background:'+jgBg+';color:'+jgCol+';font-family:system-ui;font-size:13px;font-weight:500;cursor:pointer">JG</button>'
+    +'<button onclick="casinoOperator=\'JP\';setCasinoView(0)" style="flex:1;padding:9px;border-radius:8px;border:0.5px solid var(--border-col);background:'+jpBg+';color:'+jpCol+';font-family:system-ui;font-size:13px;font-weight:500;cursor:pointer">JP</button>'
+    +'</div></div>'
+    +'<div style="display:grid;grid-template-columns:120px 1fr;gap:8px;margin-bottom:8px">'
+    +'<div class="form-group"><div class="form-label">Date</div><input type="text" id="c-date" value="'+todayStr()+'" style="font-size:12px"/></div>'
+    +'<div class="form-group"><div class="form-label">Casino / Bookie</div><div style="position:relative">'
+    +'<input type="text" id="c-casino-search" placeholder="Search..." autocomplete="off" oninput="filterCasinoBookies(this.value)" onfocus="showCasinoBookies()"/>'
+    +'<input type="hidden" id="c-casino" value=""/>'
+    +'<div id="casino-bookie-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:50;background:var(--bg-input);border:0.5px solid rgba(255,255,255,0.10);border-radius:8px;margin-top:3px;max-height:180px;overflow-y:auto"></div>'
+    +'</div></div></div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">'
+    +'<div class="form-group"><div class="form-label">Starting Balance</div><input type="number" id="c-start-bal" placeholder="0.00" step="0.01" inputmode="decimal" oninput="updateCasinoNet()"/></div>'
+    +'<div class="form-group"><div class="form-label">Ending Balance</div><input type="number" id="c-end-bal" placeholder="0.00" step="0.01" inputmode="decimal" oninput="updateCasinoNet()"/></div>'
+    +'</div>'
+    +'<div style="background:var(--bg-input);border-radius:8px;padding:12px;margin-bottom:8px">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center">'
+    +'<span style="font-size:12px;color:var(--text-secondary)">P&L</span>'
+    +'<span id="c-net" style="font-size:20px;font-weight:500;color:#22C55E">£0.00</span>'
+    +'</div></div>'
+    +'<div class="form-group"><div class="form-label">Notes</div><input type="text" id="c-notes" placeholder="optional"/></div>'
+    +'<div id="c-msg" style="font-size:12px;color:#F87171;margin-top:6px"></div>'
+    +'</div>'
+    +'<div style="position:fixed;bottom:calc(58px + env(safe-area-inset-bottom));left:0;right:0;padding:10px 16px;background:var(--bg-card);border-top:0.5px solid var(--border-col);display:flex;gap:8px;z-index:90;max-width:680px;margin:0 auto">'
+    +'<button class="btn btn-ghost" onclick="resetCasinoForm()" style="width:72px">Clear</button>'
+    +'<button class="btn btn-primary btn-full" onclick="saveCasinoSession()"><i class="ti ti-check"></i> Save session</button>'
+    +'</div></div>';
+}
+
+
+function showCasinoBookies(){
+  filterCasinoBookies(document.getElementById('c-casino-search')?.value||'');
+}
+
+function filterCasinoBookies(q){
+  const dd=document.getElementById('casino-bookie-dropdown');
+  if(!dd)return;
+  const bookies=Object.keys(state[casinoFormAcct]?.bookies||{}).sort();
+  const filtered=q?bookies.filter(function(b){return b.toLowerCase().includes(q.toLowerCase());}):bookies;
+  if(!filtered.length){dd.style.display='none';return;}
+  dd.innerHTML=filtered.map(function(b){
+    const safe=b.replace(/'/g,"&#39;");
+    return '<div onclick="selectCasinoBook(\''+safe+'\')" style="padding:8px 12px;cursor:pointer;font-size:13px;color:var(--text-primary);border-bottom:0.5px solid var(--border-col2)">'+b+'</div>';
+  }).join('');
+  dd.style.display='block';
+}
+
+function selectCasinoBook(name){
+  const s=document.getElementById('c-casino-search');
+  const h=document.getElementById('c-casino');
+  const dd=document.getElementById('casino-bookie-dropdown');
+  if(s)s.value=name;
+  if(h)h.value=name;
+  if(dd)dd.style.display='none';
+}
+
+function updateCasinoNet(){
+  const startBal=parseFloat(document.getElementById('c-start-bal')?.value)||0;
+  const endBal=parseFloat(document.getElementById('c-end-bal')?.value)||0;
+  const net=endBal-startBal;
+  const el=document.getElementById('c-net');
+  if(el){el.textContent=fmtS(net);el.style.color=net>=0?'#22C55E':'#F87171';}
+}
+
+function saveCasinoSession(){
+  const msg=document.getElementById('c-msg');
+  const casino=document.getElementById('c-casino')?.value||(document.getElementById('c-casino-search')?.value?.trim()||'');
+  if(!casino){if(msg)msg.textContent='Select a casino / bookie.';return;}
+  const startBal=parseFloat(document.getElementById('c-start-bal')?.value)||0;
+  const endBal=parseFloat(document.getElementById('c-end-bal')?.value)||0;
+  const net=endBal-startBal;
+  const p=state[casinoFormAcct];
+  if(!p.bookies[casino])p.bookies[casino]={bal:0,status:'Active',notes:''};
+  p.bookies[casino].bal=(p.bookies[casino].bal||0)+net;p.bookies[casino].balUpdatedAt=Date.now();
+  if(!p.casino)p.casino=[];
+  p.casino.push({
+    id:Date.now(),
+    date:document.getElementById('c-date')?.value||todayStr(),
+    casino,operator:casinoOperator,startBal,endBal,netProfit:net,
+    notes:document.getElementById('c-notes')?.value||'',_acct:casinoFormAcct,
+  });
+  if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('casinoSession');
+  invalidateCasinoCache();showToast('Casino session saved!');
+  // Smart update: only re-render casino tab content
+  if(currentTab==='casino'){
+    casinoView='history'; // switch to history to show what was just saved
+    const mc=document.getElementById('main-content');
+    if(mc)mc.innerHTML=renderCasino();
+  }else{render();}
+}
+
+function resetCasinoForm(){
+  casinoOperator='JG';
+  ['c-casino','c-casino-search','c-start-bal','c-end-bal','c-notes'].forEach(function(id){
+    const el=document.getElementById(id);if(el)el.value='';
+  });
+  const d=document.getElementById('c-date');if(d)d.value=todayStr();
+  const dd=document.getElementById('casino-bookie-dropdown');if(dd)dd.style.display='none';
+  const net=document.getElementById('c-net');if(net){net.textContent='£0.00';net.style.color='#22C55E';}
+  setCasinoView(0);
+}
+
+function deleteCasinoSession(acct,id){
+  if(!confirm('Delete this casino session?'))return;
+  const session=(state[acct].casino||[]).find(function(s){return s.id===id;});
+  if(session){
+    const p=state[acct];
+    const casino=session.casino;
+    const pnl=session.startBal!==undefined?session.endBal-session.startBal:session.netProfit||0;
+    if(p.bookies[casino])p.bookies[casino].bal=(p.bookies[casino].bal||0)-pnl;
+  }
+  state[acct].casino=(state[acct].casino||[]).filter(function(s){return s.id!==id;});
+  if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('deleteCasino');
+  invalidateCasinoCache();showToast('Session deleted');
+  // Smart update: remove just that row
+  const casinoRow=document.querySelector(`tr[data-csid="${id}"]`);
+  if(casinoRow){
+    casinoRow.style.transition='opacity .2s';casinoRow.style.opacity='0';
+    setTimeout(function(){casinoRow.remove();},200);
+  }else{render();}
+}
+
+// Prevent scroll wheel changing number inputs
+document.addEventListener('wheel', function(e){
+  if(document.activeElement&&document.activeElement.type==='number'){
+    document.activeElement.blur();
+  }
+}, {passive:false});
+
+async function loadApp(){
+  window._appLoading=true;
+  restoreQueue();
+  // Restore visibility — hidden by default unless user has explicitly shown
+  const savedVis=localStorage.getItem('mbe_dash_hidden');
+  _dashHidden=savedVis===null?true:savedVis==='1';
+  // Restore theme
+  const savedTheme=localStorage.getItem('mbe_theme')||'stone';
+  _theme=savedTheme;
+  document.documentElement.setAttribute('data-theme',savedTheme==='dark'?'':savedTheme); // restore any queued saves from last session
+  // Version check — clear localStorage cache if bookie list version changed
+  const BOOKIE_VERSION='v8';
+  if(localStorage.getItem('mbe_bookie_ver')!==BOOKIE_VERSION){
+    localStorage.removeItem('mbe_state');
+    localStorage.setItem('mbe_bookie_ver',BOOKIE_VERSION);
+  }
+  try{
+    await loadData();
+    // migrateLegacy runs inside fetchFromServer after server data loads
+  }catch(e){
+    console.error('Load failed:',e);
+  }finally{
+    window._appLoading=false;
+  }
+  const pb=document.getElementById('profile-bar');if(pb)pb.style.display='none';
+  switchProfile('me');
+  render();
+  checkAutoBackup();
+  // Now drain any queued saves - app is fully loaded
+  if(_saveQueue.length){
+    console.log('Draining',_saveQueue.length,'queued saves after load');
+    setTimeout(drainQueue, 2000);
+  }
+}
+
+function checkPin(){
+  if(sessionStorage.getItem('mbe_unlocked')==='1'){
+    document.getElementById('pin-screen').style.display='none';
+    document.getElementById('app-content').style.display='block';
+    loadApp();
+    return;
+  }
+  const pinKey='0069';
+  const ps=document.getElementById('pin-screen');
+  ps.style.cssText='display:flex;position:fixed;inset:0;background:var(--bg-card2);z-index:9999;flex-direction:column;align-items:center;justify-content:center;padding:40px 20px';
+  ps.innerHTML=`
+    <div style="font-size:22px;font-weight:500;color:var(--text-primary);margin-bottom:8px">MBWorld</div>
+    <div style="font-size:13px;color:var(--text-muted);margin-bottom:32px">Enter PIN to continue</div>
+    <div id="pin-dots" style="display:flex;gap:12px;margin-bottom:32px">
+      ${[0,1,2,3].map(i=>'<div style="width:14px;height:14px;border-radius:50%;border:2px solid var(--text-primary);background:transparent" id="pd'+i+'"></div>').join('')}
+    </div>
+    <div id="pin-error" style="font-size:12px;color:#F87171;margin-bottom:16px;min-height:18px"></div>
+    <div style="display:grid;grid-template-columns:repeat(3,72px);gap:12px">
+      ${[1,2,3,4,5,6,7,8,9,'',0,'⌫'].map(d=>`<button onclick="pinPress('${d}')" style="height:72px;border-radius:50%;border:0.5px solid var(--border-col);background:var(--bg-card);color:var(--text-primary);font-size:${d==='⌫'?'20':'22'}px;font-weight:500;font-family:system-ui,-apple-system,sans-serif;cursor:pointer;${d===''?'visibility:hidden':''}">${d}</button>`).join('')}
+    </div>`;
+  let entry='';
+  window.pinPress=function(d){
+    if(d==='⌫'){entry=entry.slice(0,-1);}
+    else if(d!==''){entry+=d;}
+    for(let i=0;i<4;i++){
+      const dot=document.getElementById('pd'+i);
+      if(dot)dot.style.background=i<entry.length?'var(--text-primary)':'transparent';if(dot)dot.style.borderColor='var(--text-primary)';
+    }
+    if(entry.length===4){
+      if(entry===pinKey){
+        sessionStorage.setItem('mbe_unlocked','1');
+        ps.style.display='none';
+        document.getElementById('app-content').style.display='block';
+        loadApp();
+      }else{
+        document.getElementById('pin-error').textContent='Incorrect PIN';
+        entry='';
+        for(let i=0;i<4;i++){const dot=document.getElementById('pd'+i);if(dot)dot.style.background='transparent';}
+      }
+    }
+  };
+}
+
+async function init(){
+  checkPin();
+}
+
+// Auto-drain queue when connection returns
+window.addEventListener('online',function(){
+  if(_saveQueue.length){
+    showToast('Connection restored — syncing '+_saveQueue.length+' pending save'+(_saveQueue.length>1?'s':''));
+    drainQueue();
+  }
+});
+window.addEventListener('offline',function(){
+  setSyncStatus('error');
+  showToast('⚠ You are offline — saves will queue','error');
+});
+
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.getRegistrations().then(regs=>{
+    regs.forEach(r=>r.unregister());
+  });
+}
+init();
+</script>
 </div>
 </body>
 </html>
