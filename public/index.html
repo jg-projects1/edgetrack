@@ -855,7 +855,7 @@ function renderDashboardMonthly(){
     const isCurrent=k===nowKey;
     const mask=_dashHidden&&!isCurrent;
     return '<tr'+(isCurrent?' style="background:rgba(255,255,255,0.03)"':'')+'>'
-      +'<td style="font-size:11px;font-weight:500">'+label+(isCurrent?' <span style="font-size:9px;color:#9A9590">(current)</span>':'')+'</td>'
+      +'<td style="font-size:11px;font-weight:500">'+label+'</td>'
       +'<td style="text-align:right;font-size:11px;color:'+(s>=0?'#22C55E':'#F87171')+'">'+  (mask?'••••':fmtS(s))+'</td>'
       +'<td style="text-align:right;font-size:11px;color:'+(c>=0?'#22C55E':'#F87171')+'">'+  (mask?'••••':fmtS(c))+'</td>'
       +'<td style="text-align:right;font-size:11px;font-weight:500;color:'+(t>=0?'#22C55E':'#F87171')+'">'+  (mask?'••••':fmtS(t))+'</td>'
@@ -917,7 +917,7 @@ function renderDashboard(){
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
     <div class="metric-card" style="grid-column:span 2">
       <div class="metric-label" style="display:flex;align-items:center;justify-content:space-between">
-        <span><i class="ti ti-trending-up" aria-hidden="true"></i>Combined P&L
+        <span>Combined P&L
         ${!_serverLoaded?'<span style="font-size:9px;color:#BA7517;background:rgba(186,117,23,0.15);padding:2px 7px;border-radius:10px;margin-left:6px">Updating...</span>':''}</span>
         <button onclick="toggleDashVisibility()" style="background:none;border:none;cursor:pointer;color:#9A9590;padding:2px 4px" title="${_dashHidden?'Show figures':'Hide figures'}"><i id="dash-vis-icon" class="ti ${_dashHidden?'ti-eye':'ti-eye-off'}"></i></button>
       </div>
@@ -929,7 +929,7 @@ function renderDashboard(){
       </div>
     </div>
     <div class="metric-card" style="grid-column:span 2">
-      <div class="metric-label"><i class="ti ti-cash" aria-hidden="true"></i>Total funds</div>
+      <div class="metric-label">Total funds</div>
       <div class="metric-value" data-sensitive="${fmt(totalFunds)}">${_dashHidden?'••••••':fmt(totalFunds)}</div>
       <div class="metric-sub" style="display:flex;gap:10px;flex-wrap:wrap">
         <span>Bank: <span data-sensitive="${fmt(totalBank)}">${_dashHidden?'••••':fmt(totalBank)}</span></span>
@@ -2499,8 +2499,7 @@ function renderQuickCalc(){
     +'<button onclick="setCalcStrategy(\'lockin\')" class="btn '+(isUL?'btn-ghost':'btn-primary')+'" style="flex:1;padding:8px;font-size:12px">Lock-in</button>';
 
   return '<div class="card" style="margin-bottom:12px">'
-    +'<div class="card-header"><span class="card-title">Quick Calculator</span>'
-    +'</div>'
+    +'<div style="height:4px"></div>'
     +'<div class="card-body">'
     +'<div style="margin-bottom:10px"><div class="form-label">Bet type</div>'
     +'<div style="display:flex;gap:6px">'+typeBtns+'</div></div>'
