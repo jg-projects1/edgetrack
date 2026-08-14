@@ -677,6 +677,7 @@ let currentProfile='me',currentTab='dashboard',tradeSubTab='log',formAccount='me
 let recentBookies=[]; // tracks last 8 used bookies
 let lastSavedTrade=null; // for quick duplicate after save
 let _duplicateMode=false; // true when form was opened via duplicate
+let _dashHidden=false; // true when dashboard figures are masked
 let lastExchange='Smarkets'; // tracks last used exchange
 let showMoreTypes=false; // toggle for extra bet types
 let showComm=false; // toggle for commission field
@@ -912,23 +913,25 @@ function renderDashboard(){
   <div id="qc-container">${renderQuickCalc()}</div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
     <div class="metric-card" style="grid-column:span 2">
-      <div class="metric-label"><i class="ti ti-trending-up" aria-hidden="true"></i>Combined P&L
-        ${!_serverLoaded?'<span style="font-size:9px;color:#BA7517;background:rgba(186,117,23,0.15);padding:2px 7px;border-radius:10px;margin-left:6px">Updating...</span>':''}
+      <div class="metric-label" style="display:flex;align-items:center;justify-content:space-between">
+        <span><i class="ti ti-trending-up" aria-hidden="true"></i>Combined P&L
+        ${!_serverLoaded?'<span style="font-size:9px;color:#BA7517;background:rgba(186,117,23,0.15);padding:2px 7px;border-radius:10px;margin-left:6px">Updating...</span>':''}</span>
+        <button onclick="toggleDashVisibility()" style="background:none;border:none;cursor:pointer;color:#9A9590;padding:2px 4px" title="${_dashHidden?'Show figures':'Hide figures'}"><i id="dash-vis-icon" class="ti ${_dashHidden?'ti-eye':'ti-eye-off'}"></i></button>
       </div>
-      <div class="metric-value ${combinedPnl>=0?'pos':'neg'}">${fmtS(combinedPnl)}</div>
+      <div class="metric-value ${combinedPnl>=0?'pos':'neg'}" data-sensitive="${fmtS(combinedPnl)}">${_dashHidden?'••••••':fmtS(combinedPnl)}</div>
       <div class="metric-sub" style="display:flex;gap:10px;flex-wrap:wrap">
         <span>All accounts · ${totalTrades} trades</span>
-        <span>Sports: <span style="color:${combinedSports>=0?'#22C55E':'#F87171'}">${fmtS(combinedSports)}</span></span>
-        <span>Casino: <span style="color:${combinedCasino>=0?'#22C55E':'#F87171'}">${fmtS(combinedCasino)}</span></span>
+        <span>Sports: <span style="color:${combinedSports>=0?'#22C55E':'#F87171'}" data-sensitive="${fmtS(combinedSports)}">${_dashHidden?'••••':fmtS(combinedSports)}</span></span>
+        <span>Casino: <span style="color:${combinedCasino>=0?'#22C55E':'#F87171'}" data-sensitive="${fmtS(combinedCasino)}">${_dashHidden?'••••':fmtS(combinedCasino)}</span></span>
       </div>
     </div>
     <div class="metric-card" style="grid-column:span 2">
       <div class="metric-label"><i class="ti ti-cash" aria-hidden="true"></i>Total funds</div>
-      <div class="metric-value">${fmt(totalFunds)}</div>
+      <div class="metric-value" data-sensitive="${fmt(totalFunds)}">${_dashHidden?'••••••':fmt(totalFunds)}</div>
       <div class="metric-sub" style="display:flex;gap:10px;flex-wrap:wrap">
-        <span>Bank: ${fmt(totalBank)}</span>
-        <span>Bookies: ${fmt(totalBookies)}</span>
-        <span>Exchanges: ${fmt(totalExchanges)}</span>
+        <span>Bank: <span data-sensitive="${fmt(totalBank)}">${_dashHidden?'••••':fmt(totalBank)}</span></span>
+        <span>Bookies: <span data-sensitive="${fmt(totalBookies)}">${_dashHidden?'••••':fmt(totalBookies)}</span></span>
+        <span>Exchanges: <span data-sensitive="${fmt(totalExchanges)}">${_dashHidden?'••••':fmt(totalExchanges)}</span></span>
       </div>
     </div>
   </div>
@@ -1949,6 +1952,18 @@ function getVerifyStats(){
   const overdue=ab.filter(b=>b.verifiedAt&&Math.floor((now-b.verifiedAt)/86400000)>7).length;
   const recent=ab.filter(b=>b.verifiedAt&&Math.floor((now-b.verifiedAt)/86400000)<=7).length;
   return{ab,never,overdue,recent,allVerified:!never&&!overdue};
+}
+
+function toggleDashVisibility(){
+  _dashHidden=!_dashHidden;
+  // Update eye icon
+  const icon=document.getElementById('dash-vis-icon');
+  if(icon)icon.className=_dashHidden?'ti ti-eye':'ti ti-eye-off';
+  // Mask/unmask all figures
+  const figures=document.querySelectorAll('[data-sensitive]');
+  figures.forEach(el=>{
+    el.textContent=_dashHidden?'••••••':el.dataset.sensitive;
+  });
 }
 
 function updateDashboardStrip(){
