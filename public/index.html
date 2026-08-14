@@ -14,68 +14,116 @@
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{height:100%;-webkit-text-size-adjust:100%}
-body{font-family:system-ui,-apple-system,sans-serif;background:#343A40;min-height:100%;font-size:14px;color:#F0EDE8;-webkit-tap-highlight-color:transparent}
+
+/* ── THEMES ────────────────────────────────────── */
+:root{
+  --bg-page:#343A40;
+  --bg-card:#2C3136;
+  --bg-input:#3D4349;
+  --bg-card2:#252629;
+  --text-primary:#F0EDE8;
+  --text-secondary:#C8C5BF;
+  --text-muted:#9A9590;
+  --text-accent:#22C55E;
+  --text-neg:#F87171;
+  --border-col:rgba(255,255,255,0.09);
+  --border-col2:rgba(255,255,255,0.07);
+  --tab-bg:#2C3136;
+  --tab-border:rgba(255,255,255,0.09);
+}
+[data-theme="stone"]{
+  --bg-page:#F5F0E8;
+  --bg-card:#EDE8DF;
+  --bg-input:#E2DDD4;
+  --bg-card2:#F5F0E8;
+  --text-primary:#1A1A1A;
+  --text-secondary:#3D3830;
+  --text-muted:#6B6560;
+  --text-accent:#16803C;
+  --text-neg:#B91C1C;
+  --border-col:rgba(0,0,0,0.10);
+  --border-col2:rgba(0,0,0,0.07);
+  --tab-bg:#EDE8DF;
+  --tab-border:rgba(0,0,0,0.10);
+}
+[data-theme="slate"]{
+  --bg-page:#1F1C18;
+  --bg-card:#2A2620;
+  --bg-input:#35302A;
+  --bg-card2:#1F1C18;
+  --text-primary:#F5F0E8;
+  --text-secondary:#D8D0C0;
+  --text-muted:#A09880;
+  --text-accent:#34D399;
+  --text-neg:#F87171;
+  --border-col:rgba(255,255,255,0.08);
+  --border-col2:rgba(255,255,255,0.05);
+  --tab-bg:#2A2620;
+  --tab-border:rgba(255,255,255,0.08);
+}
+body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg-page);min-height:100%;font-size:14px;color:var(--text-primary);-webkit-tap-highlight-color:transparent}
 .app{display:flex;flex-direction:column;min-height:100svh}
 
-.topbar{background:#2C3136;border-bottom:0.5px solid rgba(255,255,255,0.09);padding:14px 16px;padding-top:calc(14px + env(safe-area-inset-top));display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+.topbar{background:var(--bg-card);border-bottom:0.5px solid var(--border-col);padding:14px 16px;padding-top:calc(14px + env(safe-area-inset-top));display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
 .logo{font-size:17px;font-weight:500;letter-spacing:-.3px;color:#F0EDE8}
 .logo span{color:#22C55E}
-.sync-badge{display:flex;align-items:center;gap:5px;font-size:11px;color:#C8C5BF;background:#3D4349;padding:4px 10px;border-radius:20px;border:0.5px solid rgba(255,255,255,0.08)}
+.sync-badge{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-secondary);background:var(--bg-input);padding:4px 10px;border-radius:20px;border:0.5px solid rgba(255,255,255,0.08)}
 .sync-dot{width:5px;height:5px;border-radius:50%;background:#22C55E;flex-shrink:0}
 .sync-dot.syncing{background:#BA7517;animation:pulse 1s infinite}
 .sync-dot.error{background:#F87171}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 
-.profile-bar{background:#2C3136;border-bottom:0.5px solid rgba(255,255,255,0.08);padding:8px calc(max(16px,(100vw - 680px)/2));display:flex;align-items:center;gap:10px}
-.profile-label{font-size:11px;color:#9A9590;flex-shrink:0}
+.profile-bar{background:var(--bg-card);border-bottom:0.5px solid var(--border-col);padding:8px calc(max(16px,(100vw - 680px)/2));display:flex;align-items:center;gap:10px}
+.profile-label{font-size:11px;color:var(--text-muted);flex-shrink:0}
 .profile-toggle{display:flex;gap:4px}
-.profile-btn{padding:5px 12px;border-radius:20px;cursor:pointer;font-size:12px;font-weight:500;color:#C8C5BF;border:0.5px solid rgba(255,255,255,0.10);background:transparent;transition:all .15s;white-space:nowrap}
-.profile-btn.active-me{background:#7A4F00;color:#F5C842;border-color:#185FA5}
-.profile-btn.active-wife{background:#3C3489;color:#AFA9EC;border-color:#534AB7}
-.profile-btn.active-bp{background:#5C3800;color:#F0A500;border-color:#854F0B}
-.profile-btn.active-rq{background:#14532D;color:#86EFAC;border-color:#3B6D11}
-.profile-btn.active-both{background:#3D4349;color:#F0EDE8;border-color:rgba(255,255,255,0.10)}
+.profile-btn{padding:5px 12px;border-radius:20px;cursor:pointer;font-size:12px;font-weight:500;color:var(--text-secondary);border:0.5px solid rgba(255,255,255,0.10);background:transparent;transition:all .15s;white-space:nowrap}
+.profile-btn.active-me{background:#14B8A6;color:#fff;border-color:#14B8A6}
+.profile-btn.active-wife{background:#A78BFA;color:#fff;border-color:#A78BFA}
+.profile-btn.active-bp{background:#60A5FA;color:#fff;border-color:#60A5FA}
+.profile-btn.active-rq{background:#F87171;color:#fff;border-color:#F87171}
+.profile-btn.active-both{background:var(--bg-input);color:var(--text-primary);border-color:var(--text-muted)}
+.profile-btn.active-both{background:var(--bg-input);color:var(--text-primary);border-color:rgba(255,255,255,0.10)}
 
 .content{flex:1;padding:14px 16px;padding-bottom:calc(72px + env(safe-area-inset-bottom));max-width:680px;margin:0 auto;width:100%}
 
-.tab-bar{background:#2C3136;border-top:0.5px solid rgba(255,255,255,0.09);padding:6px calc(max(16px,(100vw - 680px)/2));padding-bottom:calc(6px + env(safe-area-inset-bottom));display:flex;position:fixed;bottom:0;left:0;right:0;z-index:100}
-.tab{flex:1;padding:5px 2px;cursor:pointer;font-size:9px;font-weight:500;color:#9A9590;border:none;background:none;text-align:center;display:flex;flex-direction:column;align-items:center;gap:3px;min-width:0;transition:color .15s}
+.tab-bar{background:var(--bg-card);border-top:0.5px solid var(--border-col);padding:6px calc(max(16px,(100vw - 680px)/2));padding-bottom:calc(6px + env(safe-area-inset-bottom));display:flex;position:fixed;bottom:0;left:0;right:0;z-index:100}
+.tab{flex:1;padding:5px 2px;cursor:pointer;font-size:9px;font-weight:500;color:var(--text-muted);border:none;background:none;text-align:center;display:flex;flex-direction:column;align-items:center;gap:3px;min-width:0;transition:color .15s}
 .tab i{font-size:20px;line-height:1}
-.tab.active{color:#22C55E}
+.tab.active{color:var(--text-accent)}
 .tab-label{font-size:9px;font-weight:500;white-space:nowrap}
 
-.card{background:#2C3136;border:0.5px solid rgba(255,255,255,0.09);border-radius:12px;overflow:hidden;margin-bottom:12px}
-.card-header{padding:12px 16px;border-bottom:0.5px solid rgba(255,255,255,0.08);display:flex;align-items:center;justify-content:space-between}
-.card-title{font-size:11px;font-weight:500;color:#9A9590;letter-spacing:.3px;text-transform:uppercase}
+.card{background:var(--bg-card);border:0.5px solid var(--border-col);border-radius:12px;overflow:hidden;margin-bottom:12px}
+.card-header{padding:12px 16px;border-bottom:0.5px solid var(--border-col);display:flex;align-items:center;justify-content:space-between}
+.card-title{font-size:11px;font-weight:500;color:var(--text-muted);letter-spacing:.3px;text-transform:uppercase}
 .card-body{padding:14px 16px}
 
-.metric-card{background:#3D4349;border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:3px}
-.metric-label{font-size:11px;color:#C8C5BF;font-weight:500;display:flex;align-items:center;gap:4px}
+.metric-card{background:var(--bg-input);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:3px}
+.metric-label{font-size:11px;color:var(--text-secondary);font-weight:500;display:flex;align-items:center;gap:4px}
 .metric-label i{font-size:14px}
-.metric-value{font-size:26px;font-weight:500;letter-spacing:-1px;color:#F0EDE8;line-height:1.1}
-.metric-value.pos{color:#22C55E}.metric-value.neg{color:#F87171}.metric-value.warn{color:#BA7517}
+.metric-value{font-size:26px;font-weight:500;letter-spacing:-1px;color:var(--text-primary);line-height:1.1}
+.metric-value.pos{color:var(--text-accent)}.metric-value.neg{color:#F87171}.metric-value.warn{color:#BA7517}
 .metric-sub{font-size:11px;color:#9A9590}
 
 .acct-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
-.acct-card{background:#2C3136;border:0.5px solid rgba(255,255,255,0.09);border-radius:12px;padding:14px}
+.acct-card{background:var(--bg-card);border:0.5px solid var(--border-col);border-radius:12px;padding:14px}
 .acct-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
 .acct-name{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:500;color:#F0EDE8}
 .acct-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
-.dot-me{background:#F0A500}.dot-wife{background:#7F77DD}.dot-bp{background:#BA7517}.dot-rq{background:#639922}
+.dot-me{background:#14B8A6}.dot-wife{background:#A78BFA}.dot-bp{background:#60A5FA}.dot-rq{background:#F87171}
 .acct-pnl{font-size:12px;font-weight:500}
-.acct-pnl.pos{color:#22C55E}.acct-pnl.neg{color:#F87171}
+.acct-pnl.pos{color:var(--text-accent)}.acct-pnl.neg{color:#F87171}
 .acct-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-top:0.5px solid rgba(255,255,255,0.08)}
-.acct-row-label{font-size:11px;color:#9A9590;display:flex;align-items:center;gap:4px}
+.acct-row-label{font-size:11px;color:var(--text-muted);display:flex;align-items:center;gap:4px}
 .acct-row-label i{font-size:13px}
 .acct-row-val{font-size:12px;font-weight:500;color:#F0EDE8}
 
 .list-row{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:0.5px solid rgba(255,255,255,0.05);transition:background .1s}
 .list-row:last-child{border-bottom:none}
 .list-row-left{display:flex;flex-direction:column;gap:3px;flex:1;min-width:0;margin-right:10px}
-.list-row-title{font-size:13px;font-weight:500;color:#F0EDE8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.list-row-title{font-size:13px;font-weight:500;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .list-row-meta{display:flex;gap:5px;align-items:center;flex-wrap:wrap}
 .list-row-right{font-size:13px;font-weight:500;flex-shrink:0}
-.list-row-right.pos{color:#22C55E}.list-row-right.neg{color:#F87171}.list-row-right.warn{color:#BA7517}
+.list-row-right.pos{color:var(--text-accent)}.list-row-right.neg{color:#F87171}.list-row-right.warn{color:#BA7517}
 
 .pill{display:inline-flex;align-items:center;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:500;white-space:nowrap;border:0.5px solid transparent}
 .pill-me{background:#7A4F00;color:#F5C842;border-color:#185FA5}
@@ -94,122 +142,119 @@ body{font-family:system-ui,-apple-system,sans-serif;background:#343A40;min-heigh
 .pill-arb{background:#5C3800;color:#F0A500}
 .pill-deposit,.pill-withdrawal{background:#0D4F5C;color:#5DCAA5}
 .pill-exchangedeposit,.pill-exchangewithdrawal{background:#0D4F5C;color:#5DCAA5}
-.pill-balanceamendment{background:#3D4349;color:#C8C5BF}
+.pill-balanceamendment{background:var(--bg-input);color:#C8C5BF}
 
 .badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:500}
 .badge-active{background:#14532D;color:#86EFAC}
 .badge-restricted{background:#5C3800;color:#F0A500}
 .badge-gubbed{background:#791F1F;color:#F09595}
-.badge-closed{background:#3D4349;color:#9A9590}
+.badge-closed{background:var(--bg-input);color:#9A9590}
 
 /* ── FORM ── */
 .form-section{margin-bottom:14px}
-.form-label{font-size:10px;font-weight:500;color:#9A9590;letter-spacing:.3px;text-transform:uppercase;display:block;margin-bottom:5px}
+.form-label{font-size:10px;font-weight:500;color:var(--text-muted);letter-spacing:.3px;text-transform:uppercase;display:block;margin-bottom:5px}
 .form-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
 .form-row.single{grid-template-columns:1fr}
 .form-row.triple{grid-template-columns:1fr 1fr 1fr}
 .form-group{display:flex;flex-direction:column;gap:4px}
 .form-group.span2{grid-column:1/-1}
-input[type=text],input[type=number],select,textarea{width:100%;background:#3D4349;border:0.5px solid rgba(255,255,255,0.10);border-radius:8px;padding:9px 11px;font-family:system-ui,-apple-system,sans-serif;font-size:13px;color:#F0EDE8;outline:none;-webkit-appearance:none;appearance:none;transition:border-color .15s}
+input[type=text],input[type=number],select,textarea{width:100%;background:var(--bg-input);border:0.5px solid rgba(255,255,255,0.10);border-radius:8px;padding:9px 11px;font-family:system-ui,-apple-system,sans-serif;font-size:13px;color:var(--text-primary);outline:none;-webkit-appearance:none;appearance:none;transition:border-color .15s}
 input:focus,select:focus,textarea:focus{border-color:rgba(255,255,255,0.25);background:#575A65}
 input#f-pnl{border-color:#22C55E;font-size:15px;font-weight:500;background:#2A3D35}
 input#f-pnl:focus{background:#2E4A3A}
 input#f-date{font-size:12px;padding:7px 10px}
 textarea{resize:vertical;min-height:60px}
-select option{background:#3D4349;color:#F0EDE8}
+select option{background:var(--bg-input);color:#F0EDE8}
 
 /* ── TYPE GROUPS ── */
 .type-groups{display:flex;flex-direction:column;gap:8px}
-.type-group-label{font-size:10px;font-weight:500;color:#9A9590;letter-spacing:.3px;text-transform:uppercase;margin-bottom:5px}
+.type-group-label{font-size:10px;font-weight:500;color:var(--text-muted);letter-spacing:.3px;text-transform:uppercase;margin-bottom:5px}
 .type-pills{display:flex;flex-wrap:wrap;gap:5px}
-.type-pill{padding:5px 12px;border-radius:20px;font-size:12px;font-weight:500;cursor:pointer;border:0.5px solid rgba(255,255,255,0.10);background:#3D4349;color:#C8C5BF;transition:all .15s}
+.type-pill{padding:5px 12px;border-radius:20px;font-size:12px;font-weight:500;cursor:pointer;border:0.5px solid rgba(255,255,255,0.10);background:var(--bg-input);color:var(--text-secondary);transition:all .15s}
 .type-pill.sel{border-width:1px}
-.sel-qualifier{background:#7A4F00;color:#F5C842;border-color:#185FA5}
-.sel-freebet{background:#14532D;color:#86EFAC;border-color:#3B6D11}
-.sel-boost{background:#5C3800;color:#F0A500;border-color:#854F0B}
-.sel-mug{background:#042C53;color:#F5C842;border-color:#7A4F00}
-.sel-extraplace{background:#3C3489;color:#AFA9EC;border-color:#534AB7}
-.sel-2up{background:#085041;color:#5DCAA5;border-color:#0F6E56}
-.sel-mbal{background:#72243E;color:#ED93B1;border-color:#993556}
-.sel-cashback{background:#14532D;color:#86EFAC;border-color:#3B6D11}
-.sel-cashout{background:#791F1F;color:#F09595;border-color:#A32D2D}
-.sel-arb{background:#5C3800;color:#F0A500;border-color:#854F0B}
-.sel-deposit,.sel-withdrawal{background:#0D4F5C;color:#5DCAA5;border-color:#0F8FA5}
-.sel-exchangedeposit,.sel-exchangewithdrawal{background:#0D4F5C;color:#5DCAA5;border-color:#0F8FA5}
-.sel-balanceamendment{background:#575A65;color:#B4B2A9;border-color:#9A9590}
+.sel-qualifier{background:var(--bg-input);color:#FBBF24;border-color:#FBBF24}
+.sel-freebet{background:var(--bg-input);color:#34D399;border-color:#34D399}
+.sel-boost{background:var(--bg-input);color:#60A5FA;border-color:#60A5FA}
+.sel-mug{background:var(--bg-input);color:var(--text-muted);border-color:var(--text-muted)}
+.sel-extraplace{background:var(--bg-input);color:#C084FC;border-color:#C084FC}
+.sel-2up{background:var(--bg-input);color:#F87171;border-color:#F87171}
+.sel-mbal{background:var(--bg-input);color:#FB923C;border-color:#FB923C}
+.sel-cashback{background:var(--bg-input);color:#A78BFA;border-color:#A78BFA}
+.sel-cashout{background:var(--bg-input);color:#94A3B8;border-color:#94A3B8}
+.sel-arb{background:var(--bg-input);color:#F472B6;border-color:#F472B6}
+.sel-deposit,.sel-withdrawal{background:var(--bg-input);color:#34D399;border-color:#34D399}
+.sel-exchangedeposit,.sel-exchangewithdrawal{background:var(--bg-input);color:#34D399;border-color:#34D399}
+.sel-balanceamendment{background:var(--bg-input);color:var(--text-muted);border-color:var(--text-muted)}
 
 .acct-selector{display:flex;gap:5px;flex-wrap:wrap}
-.acct-sel-btn{flex:1;min-width:60px;padding:7px 5px;border-radius:8px;border:0.5px solid rgba(255,255,255,0.10);background:#3D4349;color:#C8C5BF;font-family:system-ui,-apple-system,sans-serif;font-size:12px;font-weight:500;cursor:pointer;text-align:center;transition:all .15s}
-.acct-sel-btn.active-me{background:#7A4F00;color:#F5C842;border-color:#185FA5}
-.acct-sel-btn.active-wife{background:#3C3489;color:#AFA9EC;border-color:#534AB7}
-.acct-sel-btn.active-bp{background:#5C3800;color:#F0A500;border-color:#854F0B}
-.acct-sel-btn.active-rq{background:#14532D;color:#86EFAC;border-color:#3B6D11}
+.acct-sel-btn{flex:1;min-width:60px;padding:7px 5px;border-radius:8px;border:0.5px solid rgba(255,255,255,0.10);background:var(--bg-input);color:var(--text-secondary);font-family:system-ui,-apple-system,sans-serif;font-size:12px;font-weight:500;cursor:pointer;text-align:center;transition:all .15s}
 
-.btn{padding:11px 20px;border-radius:8px;font-family:system-ui,-apple-system,sans-serif;font-size:14px;font-weight:500;cursor:pointer;border:0.5px solid rgba(255,255,255,0.09);background:#3D4349;color:#F0EDE8;transition:all .15s;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+
+.btn{padding:11px 20px;border-radius:8px;font-family:system-ui,-apple-system,sans-serif;font-size:14px;font-weight:500;cursor:pointer;border:0.5px solid var(--border-col);background:var(--bg-input);color:var(--text-primary);transition:all .15s;display:inline-flex;align-items:center;justify-content:center;gap:6px}
 .btn:active{transform:scale(0.98)}
-.btn-primary{background:#22C55E;color:#fff;border-color:#22C55E}
+.btn-primary{background:var(--text-accent);color:#fff;border-color:var(--text-accent)}
 .btn-primary:hover{background:#0F6E56;border-color:#0F6E56}
 .btn-full{width:100%;padding:13px}
 .btn-danger{background:#791F1F;color:#F09595;border-color:#A32D2D}
-.btn-ghost{background:#3D4349;color:#C8C5BF;border-color:rgba(255,255,255,0.09)}
-.btn-sm{padding:4px 10px;font-size:11px;border-radius:6px;font-family:system-ui,-apple-system,sans-serif;font-weight:500;cursor:pointer;border:0.5px solid rgba(255,255,255,0.10);background:#3D4349;color:#C8C5BF;transition:all .15s}
-.btn-sm-edit{background:#5C3800;color:#F0A500;border-color:#854F0B}
-.btn-sm-dupe{background:#7A4F00;color:#F5C842;border-color:#185FA5}
+.btn-ghost{background:var(--bg-input);color:var(--text-secondary);border-color:rgba(255,255,255,0.09)}
+.btn-sm{padding:4px 10px;font-size:11px;border-radius:6px;font-family:system-ui,-apple-system,sans-serif;font-weight:500;cursor:pointer;border:0.5px solid rgba(255,255,255,0.10);background:var(--bg-input);color:var(--text-secondary);transition:all .15s}
+.btn-sm-edit{background:var(--bg-input);color:var(--text-accent);border-color:var(--text-accent)}
+.btn-sm-dupe{background:var(--bg-input);color:#60A5FA;border-color:#60A5FA}
 .btn-sm-danger{background:#791F1F;color:#F09595;border-color:#A32D2D}
-.btn-won{background:#14532D;color:#86EFAC;border:0.5px solid #3B6D11;padding:9px 16px;border-radius:8px;font-family:system-ui,-apple-system,sans-serif;font-size:13px;font-weight:500;cursor:pointer;transition:all .15s;flex:1}
-.btn-lost{background:#791F1F;color:#F09595;border:0.5px solid #A32D2D;padding:9px 16px;border-radius:8px;font-family:system-ui,-apple-system,sans-serif;font-size:13px;font-weight:500;cursor:pointer;transition:all .15s;flex:1}
+.btn-won{background:rgba(34,197,94,0.15);color:#22C55E;border:0.5px solid rgba(34,197,94,0.3);padding:9px 16px;border-radius:8px;font-family:system-ui,-apple-system,sans-serif;font-size:13px;font-weight:500;cursor:pointer;transition:all .15s;flex:1}
+.btn-lost{background:rgba(248,113,113,0.15);color:#F87171;border:0.5px solid rgba(248,113,113,0.3);padding:9px 16px;border-radius:8px;font-family:system-ui,-apple-system,sans-serif;font-size:13px;font-weight:500;cursor:pointer;transition:all .15s;flex:1}
 
-.table-wrap{overflow:auto;border-radius:12px;border:0.5px solid rgba(255,255,255,0.09);margin-bottom:12px;background:#2C3136;-webkit-overflow-scrolling:touch}
+.table-wrap{overflow:auto;border-radius:12px;border:0.5px solid var(--border-col);margin-bottom:12px;background:var(--bg-card);-webkit-overflow-scrolling:touch}
 .data-table{width:100%;border-collapse:collapse;min-width:460px}
-.data-table th{padding:8px 12px;text-align:left;font-size:10px;font-weight:500;letter-spacing:.3px;text-transform:uppercase;color:#9A9590;border-bottom:0.5px solid rgba(255,255,255,0.08);background:#3D4349;white-space:nowrap;position:sticky;top:0}
-.data-table td{padding:9px 12px;font-size:12px;border-bottom:0.5px solid rgba(255,255,255,0.04);vertical-align:middle;color:#F0EDE8}
+.data-table th{padding:8px 12px;text-align:left;font-size:10px;font-weight:500;letter-spacing:.3px;text-transform:uppercase;color:var(--text-muted);border-bottom:0.5px solid var(--border-col);background:var(--bg-input);white-space:nowrap;position:sticky;top:0}
+.data-table td{padding:9px 12px;font-size:12px;border-bottom:0.5px solid rgba(255,255,255,0.04);vertical-align:middle;color:var(--text-primary)}
 .data-table tr:last-child td{border-bottom:none}
 .data-table tr:hover td{background:#4A4D58}
-.pos{color:#22C55E;font-weight:500}.neg{color:#F87171;font-weight:500}.muted{color:#9A9590}
+.pos{color:var(--text-accent);font-weight:500}.neg{color:#F87171;font-weight:500}.muted{color:var(--text-muted)}
 
-.pending-card{background:#2C3136;border:0.5px solid rgba(255,255,255,0.09);border-radius:12px;padding:14px;margin-bottom:10px}
-.pending-event{font-size:14px;font-weight:500;color:#F0EDE8;margin-bottom:6px}
+.pending-card{background:var(--bg-card);border:0.5px solid var(--border-col);border-radius:12px;padding:14px;margin-bottom:10px}
+.pending-event{font-size:14px;font-weight:500;color:var(--text-primary);margin-bottom:6px}
 .pending-meta{display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
-.pending-info{background:#3D4349;border-radius:8px;padding:10px 12px;display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+.pending-info{background:var(--bg-input);border-radius:8px;padding:10px 12px;display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
 .pinfo-item{display:flex;flex-direction:column;gap:2px}
-.pinfo-label{font-size:10px;color:#9A9590;font-weight:500;text-transform:uppercase;letter-spacing:.3px}
+.pinfo-label{font-size:10px;color:var(--text-muted);font-weight:500;text-transform:uppercase;letter-spacing:.3px}
 .pinfo-val{font-size:13px;font-weight:500;color:#F0EDE8}
-.pinfo-val.pos{color:#22C55E}.pinfo-val.neg{color:#F87171}
+.pinfo-val.pos{color:var(--text-accent)}.pinfo-val.neg{color:#F87171}
 
 .month-wrap{display:flex;align-items:flex-end;gap:4px;overflow-x:auto;padding:6px 2px 2px}
 .month-col{display:flex;flex-direction:column;align-items:center;gap:2px;flex:0 0 auto;min-width:44px}
 .month-bar{width:36px;border-radius:3px 3px 0 0;min-height:3px}
-.month-bar.pos{background:#22C55E}.month-bar.neg{background:#F87171;border-radius:0 0 3px 3px}
-.month-lbl{font-size:9px;color:#9A9590;font-weight:500}
+.month-bar.pos{background:var(--text-accent)}.month-bar.neg{background:#F87171;border-radius:0 0 3px 3px}
+.month-lbl{font-size:9px;color:var(--text-muted);font-weight:500}
 .month-val{font-size:9px;font-weight:500}
-.month-val.pos{color:#22C55E}.month-val.neg{color:#F87171}
+.month-val.pos{color:var(--text-accent)}.month-val.neg{color:#F87171}
 
-.flow-preview{background:#085041;border:0.5px solid#0F6E56;border-radius:8px;padding:9px 12px;font-size:12px;color:#5DCAA5;display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.flow-preview{background:rgba(34,197,94,0.1);border:0.5px solid rgba(34,197,94,0.3);border-radius:8px;padding:9px 12px;font-size:12px;color:var(--text-accent);display:flex;align-items:center;gap:8px;margin-bottom:10px}
 
 .dest-selector{display:flex;gap:5px;flex-wrap:wrap}
-.dest-btn{flex:1;min-width:55px;padding:6px 5px;border-radius:8px;border:0.5px solid rgba(255,255,255,0.10);background:#3D4349;color:#C8C5BF;font-family:system-ui,-apple-system,sans-serif;font-size:11px;font-weight:500;cursor:pointer;text-align:center;transition:all .15s}
-.dest-btn.active{background:#085041;color:#5DCAA5;border-color:#0F6E56}
+.dest-btn{flex:1;min-width:55px;padding:6px 5px;border-radius:8px;border:0.5px solid rgba(255,255,255,0.10);background:var(--bg-input);color:var(--text-secondary);font-family:system-ui,-apple-system,sans-serif;font-size:11px;font-weight:500;cursor:pointer;text-align:center;transition:all .15s}
+.dest-btn.active{background:var(--text-accent);color:#fff;border-color:var(--text-accent)}
 
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;display:flex;align-items:flex-end;justify-content:center}
 @media(min-width:600px){.modal-bg{align-items:center}}
-.modal{background:#2C3136;border-radius:16px 16px 0 0;border:0.5px solid rgba(255,255,255,0.10);padding:20px;padding-bottom:calc(20px + env(safe-area-inset-bottom));width:100%;max-width:500px}
+.modal{background:var(--bg-card);border-radius:16px 16px 0 0;border:0.5px solid rgba(255,255,255,0.10);padding:20px;padding-bottom:calc(20px + env(safe-area-inset-bottom));width:100%;max-width:500px}
 @media(min-width:600px){.modal{border-radius:14px;padding:24px}}
 .modal-handle{width:32px;height:3px;background:rgba(255,255,255,0.09);border-radius:2px;margin:0 auto 16px}
 .modal-title{font-size:16px;font-weight:500;margin-bottom:4px;color:#F0EDE8}
-.modal-sub{font-size:12px;color:#9A9590;margin-bottom:16px}
+.modal-sub{font-size:12px;color:var(--text-muted);margin-bottom:16px}
 .modal-actions{display:flex;gap:8px;margin-top:16px}
 
 .toast{position:fixed;top:50%;left:50%;transform:translateX(-50%) translateY(-50%) scale(0.85);background:#22C55E;border-radius:12px;padding:14px 24px;font-size:15px;font-weight:600;color:#fff;z-index:999;opacity:0;transition:all .3s cubic-bezier(.34,1.56,.64,1);pointer-events:none;white-space:nowrap;max-width:90vw;box-shadow:0 4px 24px rgba(0,0,0,0.4);display:flex;align-items:center;gap:8px}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(-50%) scale(1)}
 
-.loading{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:50vh;gap:12px;color:#9A9590;font-size:13px}
-.spinner{width:28px;height:28px;border:2px solid rgba(255,255,255,0.09);border-top-color:#22C55E;border-radius:50%;animation:spin .7s linear infinite}
+.loading{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:50vh;gap:12px;color:var(--text-muted);font-size:13px}
+.spinner{width:28px;height:28px;border:2px solid rgba(255,255,255,0.09);border-top-color:var(--text-accent);border-radius:50%;animation:spin .7s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
-.empty{padding:30px 20px;text-align:center;color:#9A9590;font-size:13px}
-.search-input{width:100%;background:#3D4349;border:none;border-bottom:0.5px solid rgba(255,255,255,0.08);padding:10px 16px;font-family:system-ui,-apple-system,sans-serif;font-size:14px;color:#F0EDE8;outline:none}
+.empty{padding:30px 20px;text-align:center;color:var(--text-muted);font-size:13px}
+.search-input{width:100%;background:var(--bg-input);border:none;border-bottom:0.5px solid var(--border-col);padding:10px 16px;font-family:system-ui,-apple-system,sans-serif;font-size:14px;color:var(--text-primary);outline:none}
 .search-input::placeholder{color:#9A9590}
 .filter-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
-.filter-select{background:#2C3136;border:0.5px solid rgba(255,255,255,0.10);border-radius:8px;padding:7px 10px;font-family:system-ui,-apple-system,sans-serif;font-size:12px;color:#F0EDE8;outline:none;-webkit-appearance:none}
+.filter-select{background:var(--bg-card);border:0.5px solid rgba(255,255,255,0.10);border-radius:8px;padding:7px 10px;font-family:system-ui,-apple-system,sans-serif;font-size:12px;color:var(--text-primary);outline:none;-webkit-appearance:none}
 </style>
 </head>
 <body>
@@ -218,7 +263,14 @@ select option{background:#3D4349;color:#F0EDE8}
 <div class="app">
   <div class="topbar">
     <div class="logo">MB<span>World</span></div>
-    <div class="sync-badge"><div class="sync-dot" id="sync-dot"></div><span id="sync-label">Loading</span></div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <div style="display:flex;align-items:center;gap:2px;background:rgba(255,255,255,0.07);border-radius:16px;padding:3px">
+        <button id="theme-btn-dark" onclick="setTheme('dark')" title="Dark" style="border:none;cursor:pointer;padding:3px 9px;border-radius:12px;background:rgba(255,255,255,0.15);font-family:system-ui;font-size:10px;font-weight:500;color:var(--text-primary);transition:background .2s">Dark</button>
+        <button id="theme-btn-stone" onclick="setTheme('stone')" title="Warm Cream" style="border:none;cursor:pointer;padding:3px 9px;border-radius:12px;background:transparent;font-family:system-ui;font-size:10px;font-weight:500;color:var(--text-primary);transition:background .2s">Cream</button>
+        <button id="theme-btn-slate" onclick="setTheme('slate')" title="Charcoal Warm" style="border:none;cursor:pointer;padding:3px 9px;border-radius:12px;background:transparent;font-family:system-ui;font-size:10px;font-weight:500;color:var(--text-primary);transition:background .2s">Warm</button>
+      </div>
+      <div class="sync-badge"><div class="sync-dot" id="sync-dot"></div><span id="sync-label">Loading</span></div>
+    </div>
   </div>
   <div class="profile-bar" id="profile-bar" style="display:none">
     <span class="profile-label">Viewing</span>
@@ -678,6 +730,7 @@ let recentBookies=[]; // tracks last 8 used bookies
 let lastSavedTrade=null; // for quick duplicate after save
 let _duplicateMode=false; // true when form was opened via duplicate
 let _dashHidden=true; // hidden by default
+let _theme='dark'; // dark | stone | slate
 let lastExchange='Smarkets'; // tracks last used exchange
 let showMoreTypes=false; // toggle for extra bet types
 let showComm=false; // toggle for commission field
@@ -712,12 +765,12 @@ function sportsPnl(p){return(state[p].transactions||[]).filter(t=>t.type!=='Bala
 
 
 function getTypeColor(t){
-  const map={'Qualifier':'#7A4F00','Free Bet':'#14532D','Boost':'#5C3800','Mug':'#042C53'};
-  return map[t]||'#252629';
+  const style=getComputedStyle(document.documentElement);
+  return style.getPropertyValue('--bg-input').trim()||'#3D4349';
 }
 function getTypeTextColor(t){
-  const map={'Qualifier':'#F5C842','Free Bet':'#86EFAC','Boost':'#F0A500','Mug':'#F5C842'};
-  return map[t]||'#C8C5BF';
+  const map={Boost:'#60A5FA','Free Bet':'#34D399',Qualifier:'#FBBF24',Mug:'#9A9590','Extra Place':'#C084FC','2Up':'#F87171',MBAL:'#FB923C','Cash Back':'#A78BFA','Cash Out':'#94A3B8',Arb:'#F472B6'};
+  return map[t]||'#9A9590';
 }
 function toggleMoreTypes(){
   showMoreTypes=!showMoreTypes;
@@ -895,10 +948,10 @@ function renderPerformanceCard(){
   return '<div class="card" style="margin-bottom:12px">'
     +'<div class="card-header"><span class="card-title">Performance</span></div>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:rgba(255,255,255,0.06);border-radius:0 0 10px 10px;overflow:hidden">'
-    +'<div style="background:#343A40;padding:12px"><div style="font-size:10px;color:#9A9590;margin-bottom:3px">Win rate</div><div style="font-size:18px;font-weight:500;color:#F0EDE8">'+winRate+'%</div><div style="font-size:10px;color:#9A9590">'+won+' of '+total+' bets</div></div>'
-    +'<div style="background:#343A40;padding:12px"><div style="font-size:10px;color:#9A9590;margin-bottom:3px">Avg P&L / bet</div><div style="font-size:18px;font-weight:500;color:'+(avgPnl>=0?'#22C55E':'#F87171')+'">'+fmtS(avgPnl)+'</div><div style="font-size:10px;color:#9A9590">all settled bets</div></div>'
-    +'<div style="background:#343A40;padding:12px"><div style="font-size:10px;color:#9A9590;margin-bottom:3px">This month</div><div style="font-size:18px;font-weight:500;color:'+(monthPnl>=0?'#22C55E':'#F87171')+'">'+fmtS(monthPnl)+'</div><div style="font-size:10px;color:#9A9590">'+thisMonth.length+' bets</div></div>'
-    +'<div style="background:#343A40;padding:12px"><div style="font-size:10px;color:#9A9590;margin-bottom:3px">Best bookie</div><div style="font-size:13px;font-weight:500;color:#F0EDE8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(bestBookie?bestBookie[0]:'—')+'</div><div style="font-size:10px;color:'+(bestBookie&&bestBookie[1]>=0?'#22C55E':'#F87171')+'">'+( bestBookie?fmtS(bestBookie[1]):'')+'</div></div>'
+    +'<div style="background:#343A40;padding:12px"><div style="font-size:10px;color:var(--text-muted);margin-bottom:3px">Win rate</div><div style="font-size:18px;font-weight:500;color:var(--text-primary)">'+winRate+'%</div><div style="font-size:10px;color:var(--text-muted)">'+won+' of '+total+' bets</div></div>'
+    +'<div style="background:#343A40;padding:12px"><div style="font-size:10px;color:var(--text-muted);margin-bottom:3px">Avg P&L / bet</div><div style="font-size:18px;font-weight:500;color:'+(avgPnl>=0?'#22C55E':'#F87171')+'">'+fmtS(avgPnl)+'</div><div style="font-size:10px;color:var(--text-muted)">all settled bets</div></div>'
+    +'<div style="background:#343A40;padding:12px"><div style="font-size:10px;color:var(--text-muted);margin-bottom:3px">This month</div><div style="font-size:18px;font-weight:500;color:'+(monthPnl>=0?'#22C55E':'#F87171')+'">'+fmtS(monthPnl)+'</div><div style="font-size:10px;color:var(--text-muted)">'+thisMonth.length+' bets</div></div>'
+    +'<div style="background:#343A40;padding:12px"><div style="font-size:10px;color:var(--text-muted);margin-bottom:3px">Best bookie</div><div style="font-size:13px;font-weight:500;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(bestBookie?bestBookie[0]:'—')+'</div><div style="font-size:10px;color:'+(bestBookie&&bestBookie[1]>=0?'#22C55E':'#F87171')+'">'+( bestBookie?fmtS(bestBookie[1]):'')+'</div></div>'
     +'</div></div>';
 }
 
@@ -919,7 +972,7 @@ function renderDashboard(){
       <div class="metric-label" style="display:flex;align-items:center;justify-content:space-between">
         <span>Combined P&L
         ${!_serverLoaded?'<span style="font-size:9px;color:#BA7517;background:rgba(186,117,23,0.15);padding:2px 7px;border-radius:10px;margin-left:6px">Updating...</span>':''}</span>
-        <button onclick="toggleDashVisibility()" style="background:none;border:none;cursor:pointer;color:#9A9590;padding:2px 4px" title="${_dashHidden?'Show figures':'Hide figures'}"><i id="dash-vis-icon" class="ti ${_dashHidden?'ti-eye':'ti-eye-off'}"></i></button>
+        <button onclick="toggleDashVisibility()" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:2px 4px" title="${_dashHidden?'Show figures':'Hide figures'}"><i id="dash-vis-icon" class="ti ${_dashHidden?'ti-eye':'ti-eye-off'}"></i></button>
       </div>
       <div class="metric-value ${combinedPnl>=0?'pos':'neg'}" data-sensitive="${fmtS(combinedPnl)}">${_dashHidden?'••••••':fmtS(combinedPnl)}</div>
       <div class="metric-sub" style="display:flex;gap:10px;flex-wrap:wrap">
@@ -962,8 +1015,8 @@ function renderDashboard(){
     const {ab,never,overdue,recent,allVerified}=getVerifyStats();
     if(!ab.length)return'';
     const borderCol=allVerified?'rgba(34,197,94,0.3)':never?'rgba(248,113,113,0.3)':'rgba(240,165,0,0.3)';
-    return'<div id="verify-strip" onclick="switchTab(\'accounts\')" style="background:#2C3136;border:0.5px solid '+borderCol+';border-radius:10px;padding:10px 14px;margin-bottom:12px;cursor:pointer;display:flex;align-items:center;justify-content:space-between">'
-      +'<div style="font-size:11px;color:#9A9590;font-weight:500;text-transform:uppercase;letter-spacing:.3px">Balance Verification</div>'
+    return'<div id="verify-strip" onclick="switchTab(\'accounts\')" style="background:var(--bg-card);border:0.5px solid '+borderCol+';border-radius:10px;padding:10px 14px;margin-bottom:12px;cursor:pointer;display:flex;align-items:center;justify-content:space-between">'
+      +'<div style="font-size:11px;color:var(--text-muted);font-weight:500;text-transform:uppercase;letter-spacing:.3px">Balance Verification</div>'
       +'<div class="verify-strip-inner" style="display:flex;gap:10px">'
       +(allVerified?'<span style="font-size:11px;color:#22C55E">✓ All '+ab.length+' verified</span>':'')
       +(recent&&!allVerified?'<span style="font-size:11px;color:#22C55E">✓ '+recent+'</span>':'')
@@ -992,14 +1045,14 @@ function renderFreeBetsPanel(){
       <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:0.5px solid rgba(255,255,255,0.08)">
         <div>
           <div style="font-size:13px;color:#F0F0F5">${fb.bookie}</div>
-          <div style="font-size:11px;color:#9A9590">${profileLabel(fb._pr)} · ${fb.date}</div>
+          <div style="font-size:11px;color:var(--text-muted)">${profileLabel(fb._pr)} · ${fb.date}</div>
         </div>
-        <button onclick="markFreeBetUsed('${fb._pr}','${fb.id}')" style="font-size:11px;padding:4px 10px;border-radius:6px;border:0.5px solid rgba(255,255,255,0.2);background:#3D4349;color:#F0F0F5;cursor:pointer">Mark used</button>
+        <button onclick="markFreeBetUsed('${fb._pr}','${fb.id}')" style="font-size:11px;padding:4px 10px;border-radius:6px;border:0.5px solid rgba(255,255,255,0.2);background:var(--bg-input);color:#F0F0F5;cursor:pointer">Mark used</button>
       </div>`).join('')}
     </div>`:''}
     ${used.length>0?`
     <details style="margin-top:4px">
-      <summary style="font-size:11px;color:#9A9590;cursor:pointer;list-style:none">▸ ${used.length} used</summary>
+      <summary style="font-size:11px;color:var(--text-muted);cursor:pointer;list-style:none">▸ ${used.length} used</summary>
       <div style="margin-top:6px">
         ${used.map(fb=>`
         <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:0.5px solid rgba(255,255,255,0.06)">
@@ -1028,7 +1081,7 @@ function markFreeBetUsed(pr,id){
 // ── PENDING ──────────────────────────────────────────────────────────────────
 function renderPending(){
   const pending=pendingAll();
-  if(!pending.length)return`<div style="text-align:center;padding:60px 20px"><i class="ti ti-circle-check" style="font-size:48px;color:#22C55E" aria-hidden="true"></i><div style="font-size:15px;font-weight:500;margin-top:12px;color:#F0EDE8">All settled</div></div>`;
+  if(!pending.length)return`<div style="text-align:center;padding:60px 20px"><i class="ti ti-circle-check" style="font-size:48px;color:#22C55E" aria-hidden="true"></i><div style="font-size:15px;font-weight:500;margin-top:12px;color:var(--text-primary)">All settled</div></div>`;
   return`
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
     <div class="metric-card"><div class="metric-label">Pending</div><div class="metric-value warn">${pending.length}</div></div>
@@ -1040,9 +1093,9 @@ function renderPending(){
       <div class="pending-event">${t.event||'Unnamed event'}</div>
       <div class="pending-meta">
         <span class="${pillClass(t.type)}">${t.type}</span>${acctPill(t._acct)}
-        <span style="font-size:11px;color:#C8C5BF">${t.date}</span>
-        <span style="font-size:11px;color:#C8C5BF">${t.bookie||'—'}</span>
-        ${t.exchange?`<span style="font-size:11px;color:#9A9590;background:rgba(255,255,255,0.06);padding:2px 6px;border-radius:4px">${t.exchange}</span>`:''}
+        <span style="font-size:11px;color:var(--text-secondary)">${t.date}</span>
+        <span style="font-size:11px;color:var(--text-secondary)">${t.bookie||'—'}</span>
+        ${t.exchange?`<span style="font-size:11px;color:var(--text-muted);background:rgba(255,255,255,0.06);padding:2px 6px;border-radius:4px">${t.exchange}</span>`:''}
         ${isFB?'<span class="badge" style="background:#EAF3DE;color:#3B6D11">SNR</span>':''}
         ${t.underlay?'<span class="badge" style="background:#0D4F5C;color:#5DCAA5;border:0.5px solid rgba(93,202,165,0.3)">U</span>':''}
       </div>
@@ -1187,7 +1240,7 @@ function settleBet(acct,id,result){
     // If on pending tab, check if any pending remain
     else if(currentTab==='pending'&&pendingAll().length===0){
       const mc=document.getElementById('main-content');
-      if(mc)mc.innerHTML='<div style="text-align:center;padding:60px 20px"><i class="ti ti-circle-check" style="font-size:48px;color:#22C55E"></i><div style="font-size:15px;font-weight:500;margin-top:12px;color:#F0EDE8">All settled</div></div>';
+      if(mc)mc.innerHTML='<div style="text-align:center;padding:60px 20px"><i class="ti ti-circle-check" style="font-size:48px;color:#22C55E"></i><div style="font-size:15px;font-weight:500;margin-top:12px;color:var(--text-primary)">All settled</div></div>';
     }
   },300);
 }
@@ -1240,13 +1293,13 @@ function renderAdd(prefill){
   const moreTypes=['Mug','Extra Place','2Up','MBAL','Cash Back','Cash Out','Arb'];
   const isMoreSel=moreTypes.includes(selectedBetType);
   return`
-  ${lastSavedTrade&&!prefill?`<div style="background:#2C3136;border:0.5px solid rgba(255,255,255,0.09);border-radius:12px;padding:12px 16px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:10px">
+  ${lastSavedTrade&&!prefill?`<div style="background:var(--bg-card);border:0.5px solid var(--border-col);border-radius:12px;padding:12px 16px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:10px">
     <div style="min-width:0">
-      <div style="font-size:10px;color:#9A9590;font-weight:500;text-transform:uppercase;letter-spacing:.3px;margin-bottom:3px">Last saved</div>
-      <div style="font-size:13px;font-weight:500;color:#F0EDE8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${lastSavedTrade.bookie}${lastSavedTrade.event?' · '+lastSavedTrade.event:''}</div>
-      <div style="font-size:11px;color:#9A9590;margin-top:2px">${lastSavedTrade.type} · ${PROFILE_LABELS[lastSavedTrade._acct]||lastSavedTrade._acct}</div>
+      <div style="font-size:10px;color:var(--text-muted);font-weight:500;text-transform:uppercase;letter-spacing:.3px;margin-bottom:3px">Last saved</div>
+      <div style="font-size:13px;font-weight:500;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${lastSavedTrade.bookie}${lastSavedTrade.event?' · '+lastSavedTrade.event:''}</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:2px">${lastSavedTrade.type} · ${PROFILE_LABELS[lastSavedTrade._acct]||lastSavedTrade._acct}</div>
     </div>
-    <button onclick="duplicateTrade(lastSavedTrade._acct,null,lastSavedTrade)" style="flex-shrink:0;padding:8px 14px;border-radius:8px;border:0.5px solid #185FA5;background:#7A4F00;color:#F5C842;font-family:system-ui,-apple-system,sans-serif;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap"><i class="ti ti-copy"></i> Duplicate</button>
+    <button onclick="duplicateTrade(lastSavedTrade._acct,null,lastSavedTrade)" style="flex-shrink:0;padding:8px 14px;border-radius:8px;border:0.5px solid #60A5FA;background:var(--bg-input);color:#60A5FA;font-family:system-ui,-apple-system,sans-serif;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap"><i class="ti ti-copy"></i> Duplicate</button>
   </div>`:''}
   <div class="card">
     <div class="card-header">
@@ -1269,7 +1322,7 @@ function renderAdd(prefill){
         </div>
         <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center">
           ${(showMoreTypes||isMoreSel||['Deposit','Withdrawal','Exchange Deposit','Exchange Withdrawal','Balance Amendment'].includes(selectedBetType))?[...moreTypes,'Deposit','Withdrawal','Exchange Deposit','Exchange Withdrawal','Balance Amendment'].map(t=>`<div class="type-pill${selectedBetType===t?' sel sel-'+t.toLowerCase().replace(/\s/g,''):''}" data-type="${t}" onclick="selectBetType('${t}')">${t}</div>`).join(''):''}
-          <div class="type-pill${showMoreTypes?' sel':''}" onclick="toggleMoreTypes()" style="${showMoreTypes?'background:#575A65;color:#B4B2A9;border-color:#9A9590':''}">${showMoreTypes?'Less ▲':'More ▼'}</div>
+          <div class="type-pill${showMoreTypes?' sel':''}" onclick="toggleMoreTypes()" style="${showMoreTypes?'background:#575A65;color:#B4B2A9;border-color:var(--text-muted)':''}">${showMoreTypes?'Less ▲':'More ▼'}</div>
         </div>
       </div>
 
@@ -1280,7 +1333,7 @@ function renderAdd(prefill){
             <div style="position:relative">
               <input type="text" id="f-bookie-search" placeholder="Search…" autocomplete="off" oninput="filterBookieDropdown(this.value)" onfocus="showBookieDropdown()" value="${pf.bookie||''}" style="padding-right:10px"/>
               <input type="hidden" id="f-bookie" value="${pf.bookie||''}"/>
-              <div id="bookie-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:50;background:#3D4349;border:0.5px solid rgba(255,255,255,0.10);border-radius:8px;margin-top:3px;max-height:200px;overflow-y:auto;-webkit-overflow-scrolling:touch"></div>
+              <div id="bookie-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:50;background:var(--bg-input);border:0.5px solid rgba(255,255,255,0.10);border-radius:8px;margin-top:3px;max-height:200px;overflow-y:auto;-webkit-overflow-scrolling:touch"></div>
             </div>
           </div>
           <div class="form-group" id="fg-exchange"><div class="form-label">Exchange</div><select id="f-exchange"><option value="">—</option>${exchOpts}</select></div>
@@ -1288,10 +1341,10 @@ function renderAdd(prefill){
 
         ${recentBookies.length?`<div id="fg-recent-bookies" style="margin-bottom:8px">
           <div class="form-label">Recent</div>
-          <div style="display:flex;gap:5px;flex-wrap:wrap">${recentBookies.map(b=>`<button onclick="selectBookie('${b.replace(/'/g,"\\'")}');document.getElementById('f-bookie-search').value='${b.replace(/'/g,"\\'")}'" style="padding:4px 10px;border-radius:20px;border:0.5px solid rgba(255,255,255,0.09);background:#3D4349;color:#B4B2A9;font-family:system-ui,-apple-system,sans-serif;font-size:11px;cursor:pointer;white-space:nowrap">${b}</button>`).join('')}</div>
+          <div style="display:flex;gap:5px;flex-wrap:wrap">${recentBookies.map(b=>`<button onclick="selectBookie('${b.replace(/'/g,"\\'")}');document.getElementById('f-bookie-search').value='${b.replace(/'/g,"\\'")}'" style="padding:4px 10px;border-radius:20px;border:0.5px solid var(--border-col);background:var(--bg-input);color:#B4B2A9;font-family:system-ui,-apple-system,sans-serif;font-size:11px;cursor:pointer;white-space:nowrap">${b}</button>`).join('')}</div>
         </div>`:''}
 
-        <div class="form-row single" id="fg-event"><div class="form-group"><div class="form-label" style="color:#9A9590">Event <span style="font-size:9px;text-transform:none;letter-spacing:0">(optional)</span></div><input type="text" id="f-event" placeholder="e.g. Arsenal vs Chelsea" value="${pf.event||''}" style="font-size:12px;padding:7px 10px;background:#4A4D58;border-color:rgba(255,255,255,0.09)"/></div></div>
+        <div class="form-row single" id="fg-event"><div class="form-group"><div class="form-label" style="color:var(--text-muted)">Event <span style="font-size:9px;text-transform:none;letter-spacing:0">(optional)</span></div><input type="text" id="f-event" placeholder="e.g. Arsenal vs Chelsea" value="${pf.event||''}" style="font-size:12px;padding:7px 10px;background:#4A4D58;border-color:rgba(255,255,255,0.09)"/></div></div>
 
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px" id="fg-stake-odds">
           <div class="form-group" id="fg-bstake"><div class="form-label">Stake</div><input type="number" id="f-bstake" placeholder="0.00" step="0.01" inputmode="decimal" value="${pf.bstake||''}" oninput="autoCalcUnderlay()" style="padding:7px 8px"/></div>
@@ -1300,23 +1353,23 @@ function renderAdd(prefill){
         </div>
         <div id="fg-partial-wrap" style="display:none;margin-bottom:8px">
           <div style="display:flex;align-items:center;gap:8px">
-            <span style="font-size:11px;color:#9A9590">Partial %</span>
+            <span style="font-size:11px;color:var(--text-muted)">Partial %</span>
             <input type="number" id="f-partial" placeholder="100" min="1" max="100" step="1" inputmode="numeric" value="100" oninput="autoCalcUnderlay()" style="width:70px;padding:5px 8px;font-size:12px"/>
-            <button onclick="document.getElementById('fg-partial-wrap').style.display='none'" style="font-size:10px;color:#9A9590;background:none;border:none;cursor:pointer">✕</button>
+            <button onclick="document.getElementById('fg-partial-wrap').style.display='none'" style="font-size:10px;color:var(--text-muted);background:none;border:none;cursor:pointer">✕</button>
           </div>
-          <div id="underlay-calc" style="background:#2C3136;border-radius:8px;padding:7px 10px;margin-top:4px;display:none">
+          <div id="underlay-calc" style="background:var(--bg-card);border-radius:8px;padding:7px 10px;margin-top:4px;display:none">
             <div style="display:flex;justify-content:space-between;gap:8px">
               <div style="display:flex;flex-direction:column;gap:2px;flex:1">
-                <span id="ul-win-label" style="font-size:10px;color:#9A9590">If wins</span>
+                <span id="ul-win-label" style="font-size:10px;color:var(--text-muted)">If wins</span>
                 <span id="ul-win-display" style="font-size:14px;font-weight:500;color:#22C55E">—</span>
               </div>
               <div style="display:flex;flex-direction:column;gap:2px;flex:1;text-align:center">
-                <span id="ul-lose-label" style="font-size:10px;color:#9A9590">If loses</span>
-                <span id="ul-lose-display" style="font-size:14px;font-weight:500;color:#9A9590">£0.00</span>
+                <span id="ul-lose-label" style="font-size:10px;color:var(--text-muted)">If loses</span>
+                <span id="ul-lose-display" style="font-size:14px;font-weight:500;color:var(--text-muted)">£0.00</span>
               </div>
               <div style="display:flex;flex-direction:column;gap:2px;flex:1;text-align:right">
-                <span style="font-size:10px;color:#9A9590">Lay stake</span>
-                <span id="ul-liab-display" style="font-size:14px;font-weight:500;color:#C8C5BF">—</span>
+                <span style="font-size:10px;color:var(--text-muted)">Lay stake</span>
+                <span id="ul-liab-display" style="font-size:14px;font-weight:500;color:var(--text-secondary)">—</span>
               </div>
             </div>
           </div>
@@ -1325,9 +1378,9 @@ function renderAdd(prefill){
         <div style="margin-bottom:8px" id="fg-comm-toggle">
           ${showComm?`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:end">
             <div class="form-group"><div class="form-label">Commission (%)</div><input type="number" id="f-comm" placeholder="0" step="0.1" inputmode="decimal" value="${pf.comm||0}"/></div>
-            <button onclick="toggleComm()" style="padding:9px 12px;border-radius:8px;border:0.5px solid rgba(255,255,255,0.10);background:#3D4349;color:#9A9590;font-family:system-ui,-apple-system,sans-serif;font-size:11px;cursor:pointer;margin-bottom:1px">Remove</button>
+            <button onclick="toggleComm()" style="padding:9px 12px;border-radius:8px;border:0.5px solid rgba(255,255,255,0.10);background:var(--bg-input);color:var(--text-muted);font-family:system-ui,-apple-system,sans-serif;font-size:11px;cursor:pointer;margin-bottom:1px">Remove</button>
           </div>`
-          :`<button onclick="toggleComm()" style="padding:6px 12px;border-radius:20px;border:0.5px solid rgba(255,255,255,0.10);background:transparent;color:#9A9590;font-family:system-ui,-apple-system,sans-serif;font-size:11px;cursor:pointer"><input type="hidden" id="f-comm" value="0"/>+ Add commission</button>`}
+          :`<button onclick="toggleComm()" style="padding:6px 12px;border-radius:20px;border:0.5px solid rgba(255,255,255,0.10);background:transparent;color:var(--text-muted);font-family:system-ui,-apple-system,sans-serif;font-size:11px;cursor:pointer"><input type="hidden" id="f-comm" value="0"/>+ Add commission</button>`}
         </div>
 
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px" id="fg-result-pnl">
@@ -1338,7 +1391,7 @@ function renderAdd(prefill){
               <span class="form-label" style="margin-bottom:0;flex-shrink:0">Strategy</span>
               <button id="btn-underlay" onclick="setStrategy('underlay')" class="btn btn-primary" style="flex:1;padding:6px;font-size:12px">Underlay</button>
               <button id="btn-lockin" onclick="setStrategy('lockin')" class="btn btn-ghost" style="flex:1;padding:6px;font-size:12px">Lock-in</button>
-              <button onclick="document.getElementById('fg-partial-wrap').style.display=document.getElementById('fg-partial-wrap').style.display==='none'?'block':'none'" style="font-size:10px;color:#9A9590;background:none;border:0.5px solid rgba(255,255,255,0.1);border-radius:6px;padding:4px 8px;cursor:pointer">Partial</button>
+              <button onclick="document.getElementById('fg-partial-wrap').style.display=document.getElementById('fg-partial-wrap').style.display==='none'?'block':'none'" style="font-size:10px;color:var(--text-muted);background:none;border:0.5px solid var(--border-col);border-radius:6px;padding:4px 8px;cursor:pointer">Partial</button>
             </div>
           </div>
 
@@ -1348,11 +1401,11 @@ function renderAdd(prefill){
         <div class="form-row single" id="fg-exchbank" style="display:none"><div class="form-group"><div class="form-label">Linked bank</div><div class="dest-selector">${PROFILES.map(pr=>`<button class="dest-btn ${exchTransferBank===pr?'active':''}" id="ebank-${pr}" onclick="setExchBank('${pr}')">${profileLabel(pr)}</button>`).join('')}</div></div></div>
         <div class="form-row single" id="fg-amend-target" style="display:none"><div class="form-group"><div class="form-label">Amend</div><select id="f-amend-target" onchange="updateAmendCurrent()"><option value="">— select —</option><option value="bank">Bank account</option><optgroup label="Bookmakers">${Object.keys(p.bookies||{}).map(b=>`<option value="bookie:${b}">${b}</option>`).join('')}</optgroup></select></div></div>
         <div class="form-row" id="fg-amend-bal">
-          <div class="form-group" id="fg-amend-current" style="display:none"><div class="form-label">Current balance</div><input type="text" id="f-amend-current" readonly style="color:#9A9590"/></div>
+          <div class="form-group" id="fg-amend-current" style="display:none"><div class="form-label">Current balance</div><input type="text" id="f-amend-current" readonly style="color:var(--text-muted)"/></div>
           <div class="form-group" id="fg-amend-new" style="display:none"><div class="form-label">New balance (£)</div><input type="number" id="f-amend-new" placeholder="0.00" step="0.01" inputmode="decimal"/></div>
         </div>
         <div class="form-row single" id="fg-amend-reason" style="display:none"><div class="form-group"><div class="form-label">Reason</div><input type="text" id="f-amend-reason" placeholder="e.g. Casino offer, correction…"/></div></div>
-        <div class="form-row single" id="fg-notes"><div class="form-group"><div class="form-label" style="color:#9A9590">Notes <span style="font-size:9px;text-transform:none;letter-spacing:0">(optional)</span></div><input type="text" id="f-notes" placeholder="Any extra details…" value="${pf.notes||''}" style="font-size:12px;padding:7px 10px;background:#4A4D58;border-color:rgba(255,255,255,0.09)"/></div></div>
+        <div class="form-row single" id="fg-notes"><div class="form-group"><div class="form-label" style="color:var(--text-muted)">Notes <span style="font-size:9px;text-transform:none;letter-spacing:0">(optional)</span></div><input type="text" id="f-notes" placeholder="Any extra details…" value="${pf.notes||''}" style="font-size:12px;padding:7px 10px;background:#4A4D58;border-color:rgba(255,255,255,0.09)"/></div></div>
       </div>
 
       <div id="flow-preview" style="display:none" class="flow-preview"><i class="ti ti-arrows-exchange" aria-hidden="true"></i><span id="flow-text"></span></div>
@@ -1687,7 +1740,7 @@ function renderHistory(){
     <select class="filter-select" id="hist-result-filter" onchange="filterHistoryInPlace()"><option value="">All results</option><option>Won</option><option>Lost</option><option>Pending</option></select>
     <button class="btn-sm" onclick="exportCSV()" style="margin-left:auto"><i class="ti ti-download" aria-hidden="true"></i> CSV</button>
   </div>
-  <div style="font-size:11px;color:#C8C5BF;margin-bottom:10px" data-txcount>${txs.length} transactions</div>
+  <div style="font-size:11px;color:var(--text-secondary);margin-bottom:10px" data-txcount>${txs.length} transactions</div>
   ${renderTxTable(txs,showAll)}`;
 }
 
@@ -1701,11 +1754,11 @@ function renderTxTable(txs,showAcct){
     const pnlStr=t.result==='Pending'?`<span class="warn">pending</span>`:`<span class="${(t.pnl||0)>=0?'pos':'neg'}">${fmtS(t.pnl||0)}</span>`;
     const resStr=t.result==='Won'?'<span class="pos">Won</span>':t.result==='Lost'?'<span class="neg">Lost</span>':t.result==='—'?'<span class="muted">—</span>':'<span class="warn">pending</span>';
     return`<tr data-txid="${t.id}">
-      <td style="white-space:nowrap;font-size:11px;color:#C8C5BF">${t.date}</td>
+      <td style="white-space:nowrap;font-size:11px;color:var(--text-secondary)">${t.date}</td>
       ${showAcct?`<td>${acctPill(t._acct)}</td>`:''}
       <td><span class="${pillClass(t.type)}">${t.type}</span></td>
       <td style="font-weight:500">${isAmend?t.target:(isExchT?t.exchange:t.bookie)||'—'}</td>
-      <td style="max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#C8C5BF;font-size:11px">${(isBookieT||isExchT)&&t.amount?fmt(t.amount):t.event||t.notes||'—'}</td>
+      <td style="max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-secondary);font-size:11px">${(isBookieT||isExchT)&&t.amount?fmt(t.amount):t.event||t.notes||'—'}</td>
       <td>${resStr}</td>
       <td><div style="display:flex;align-items:center;gap:4px">${pnlStr}<button class="btn-sm btn-sm-edit" onclick="editPnl('${t._acct}',${t.id})" style="padding:3px 7px;font-size:10px"><i class="ti ti-edit" aria-hidden="true"></i></button></div></td>
       <td style="white-space:nowrap">
@@ -1821,16 +1874,16 @@ function renderReports(){
   const typePnl={};allTxs().forEach(t=>{if(!t.type||!t.pnl||t.type==='Balance Amendment')return;typePnl[t.type]=(typePnl[t.type]||0)+t.pnl;});
   return`
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-    <div style="font-size:16px;font-weight:500;color:#F0EDE8">Reports</div>
+    <div style="font-size:16px;font-weight:500;color:var(--text-primary)">Reports</div>
     <div style="display:flex;gap:6px">
       <button class="btn-sm" onclick="exportCSV()"><i class="ti ti-download" aria-hidden="true"></i> CSV</button>
       <button class="btn-sm btn-sm-edit" onclick="downloadBackup()"><i class="ti ti-database-export" aria-hidden="true"></i> Backup</button>
     </div>
   </div>
-  <div style="background:#2C3136;border:0.5px solid rgba(255,255,255,0.09);border-radius:10px;padding:12px 14px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between">
+  <div style="background:var(--bg-card);border:0.5px solid var(--border-col);border-radius:10px;padding:12px 14px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between">
     <div>
-      <div style="font-size:12px;font-weight:500;color:#F0EDE8;margin-bottom:2px">Full data backup</div>
-      <div id="backup-status" style="font-size:11px;color:#9A9590">Checking...</div>
+      <div style="font-size:12px;font-weight:500;color:var(--text-primary);margin-bottom:2px">Full data backup</div>
+      <div id="backup-status" style="font-size:11px;color:var(--text-muted)">Checking...</div>
     </div>
     <button class="btn btn-primary" onclick="downloadBackup()" style="padding:8px 14px;font-size:12px"><i class="ti ti-download"></i> Download</button>
   </div>
@@ -1857,7 +1910,7 @@ function renderAccountsMain(){
   return`
   <div style="margin-bottom:14px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-      <div style="font-size:13px;font-weight:500;color:#F0EDE8">Bookmakers — <span style="color:${profileColor(acct)}">${profileLabel(acct)}</span> <span style="color:#C8C5BF;font-weight:400">(${Object.keys(p.bookies||{}).length})</span></div>
+      <div style="font-size:13px;font-weight:500;color:var(--text-primary)">Bookmakers — <span style="color:${profileColor(acct)}">${profileLabel(acct)}</span> <span style="color:var(--text-secondary);font-weight:400">(${Object.keys(p.bookies||{}).length})</span></div>
       <select class="filter-select" id="status-filter" onchange="render()"><option value="">All</option>${BOOKIE_STATUSES.map(s=>`<option>${s}</option>`).join('')}</select>
     </div>
     <div class="card">
@@ -1869,7 +1922,7 @@ function renderAccountsMain(){
       <button class="btn btn-primary" style="padding:10px 16px;font-size:13px" onclick="addBookie('${acct}')">Add</button>
     </div>
   </div>
-  <div style="font-size:13px;font-weight:500;color:#F0EDE8;margin-bottom:10px">Bank accounts</div>
+  <div style="font-size:13px;font-weight:500;color:var(--text-primary);margin-bottom:10px">Bank accounts</div>
   <div class="card" style="margin-bottom:14px">
     ${PROFILES.map(pr=>`<div class="list-row">
       <div class="list-row-left"><div class="list-row-title" style="display:flex;align-items:center;gap:7px"><div class="acct-dot dot-${pr}"></div>${profileLabel(pr)}'s bank</div></div>
@@ -1879,7 +1932,7 @@ function renderAccountsMain(){
       </div>
     </div>`).join('')}
   </div>
-  <div style="font-size:13px;font-weight:500;color:#F0EDE8;margin-bottom:10px">Exchanges (shared)</div>
+  <div style="font-size:13px;font-weight:500;color:var(--text-primary);margin-bottom:10px">Exchanges (shared)</div>
   <div class="card">
     ${EXCHANGES.map(e=>`<div class="list-row">
       <div class="list-row-left"><div class="list-row-title">${e}</div></div>
@@ -1957,6 +2010,17 @@ function getVerifyStats(){
   return{ab,never,overdue,recent,allVerified:!never&&!overdue};
 }
 
+function setTheme(t){
+  _theme=t;
+  localStorage.setItem('mbe_theme',t);
+  document.documentElement.setAttribute('data-theme',t==='dark'?'':t);
+  // Update theme buttons
+  ['dark','stone','slate'].forEach(function(th){
+    const btn=document.getElementById('theme-btn-'+th);
+    if(btn)btn.style.background=_theme===th?'rgba(255,255,255,0.15)':'transparent';
+  });
+}
+
 function toggleDashVisibility(){
   _dashHidden=!_dashHidden;
   localStorage.setItem('mbe_dash_hidden',_dashHidden?'1':'0');
@@ -1998,10 +2062,10 @@ function renderBookieList(acct,search,statusFilter){
         <div>
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
             ${bk.status==='Active'?`<div id="rag-${acct}-${b.replace(/[^a-z0-9]/gi,'_')}" style="width:8px;height:8px;border-radius:50%;flex-shrink:0;background:${getVerifyStatus(bk).col}" title="${getVerifyStatus(bk).label}"></div>`:''}
-            <span style="font-size:13px;font-weight:500;color:#F0EDE8">${b}</span>
+            <span style="font-size:13px;font-weight:500;color:var(--text-primary)">${b}</span>
             ${statusBadge(bk.status||'Active')}
           </div>
-          ${bk.notes?`<div style="font-size:11px;color:#C8C5BF;margin-top:2px">${bk.notes}</div>`:''}
+          ${bk.notes?`<div style="font-size:11px;color:var(--text-secondary);margin-top:2px">${bk.notes}</div>`:''}
         </div>
         <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
           <div style="font-size:13px;font-weight:500;color:${(bk.bal||0)>0?'#22C55E':(bk.bal||0)<0?'#F87171':'#C8C5BF'}">${fmt(bk.bal||0)}</div>
@@ -2010,7 +2074,7 @@ function renderBookieList(acct,search,statusFilter){
         </div>
       </div>
       ${bk.status==='Active'?`<div id="vrow-${acct}-${b.replace(/[^a-z0-9]/gi,'_')}" style="display:none;align-items:center;gap:6px;padding:2px 0 4px">
-        <input type="number" id="vinput-${acct}-${b.replace(/[^a-z0-9]/gi,'_')}" placeholder="${(bk.bal||0).toFixed(2)}" step="0.01" inputmode="decimal" style="width:100px;padding:5px 8px;font-size:12px;border-radius:6px;background:#3D4349;border:0.5px solid rgba(255,255,255,0.1);color:#F0EDE8"/>
+        <input type="number" id="vinput-${acct}-${b.replace(/[^a-z0-9]/gi,'_')}" placeholder="${(bk.bal||0).toFixed(2)}" step="0.01" inputmode="decimal" style="width:100px;padding:5px 8px;font-size:12px;border-radius:6px;background:var(--bg-input);border:0.5px solid var(--border-col);color:var(--text-primary)"/>
         <button onclick="verifyBookie('${acct}','${b}')" class="btn-sm btn-sm-edit">Confirm</button>
         <span style="font-size:10px;color:${getVerifyStatus(bk).col}">${getVerifyStatus(bk).label}</span>
       </div>`:''}
@@ -2093,8 +2157,8 @@ function getBookieList(){
 
 function renderBookieDropdownItems(items){
   const dd=document.getElementById('bookie-dropdown');if(!dd)return;
-  if(!items.length){dd.innerHTML='<div style="padding:10px 12px;font-size:12px;color:#9A9590">No results</div>';return;}
-  dd.innerHTML=items.slice(0,20).map(b=>`<div onclick="selectBookie('${b.replace(/'/g,"\\'")}') " style="padding:10px 12px;font-size:13px;color:#F0EDE8;cursor:pointer;border-bottom:0.5px solid rgba(255,255,255,0.05)" onmouseenter="this.style.background='#2e2f33'" onmouseleave="this.style.background=''">${b}</div>`).join('');
+  if(!items.length){dd.innerHTML='<div style="padding:10px 12px;font-size:12px;color:var(--text-muted)">No results</div>';return;}
+  dd.innerHTML=items.slice(0,20).map(b=>`<div onclick="selectBookie('${b.replace(/'/g,"\\'")}') " style="padding:10px 12px;font-size:13px;color:var(--text-primary);cursor:pointer;border-bottom:0.5px solid rgba(255,255,255,0.05)" onmouseenter="this.style.background='#2e2f33'" onmouseleave="this.style.background=''">${b}</div>`).join('');
 }
 
 function showBookieDropdown(){
@@ -2218,7 +2282,7 @@ function renderRisk(){
     });
   });
 
-  if(!allRisks.length)return`<div style="text-align:center;padding:60px 20px"><i class="ti ti-shield" style="font-size:48px;color:#9A9590" aria-hidden="true"></i><div style="font-size:15px;font-weight:500;margin-top:12px;color:#F0EDE8">No risk data yet</div><div style="font-size:13px;color:#9A9590;margin-top:6px">Log at least 2 settled bets per bookie to see risk analysis</div></div>`;
+  if(!allRisks.length)return`<div style="text-align:center;padding:60px 20px"><i class="ti ti-shield" style="font-size:48px;color:var(--text-muted)" aria-hidden="true"></i><div style="font-size:15px;font-weight:500;margin-top:12px;color:var(--text-primary)">No risk data yet</div><div style="font-size:13px;color:var(--text-muted);margin-top:6px">Log at least 2 settled bets per bookie to see risk analysis</div></div>`;
 
   const red=allRisks.filter(r=>r.risk.level==='red');
   const amber=allRisks.filter(r=>r.risk.level==='amber');
@@ -2270,24 +2334,24 @@ function renderRiskCard(r){
   const levelLabel={red:'High risk',amber:'Medium risk',green:'Low risk'}[risk.level];
   const barWidth=Math.round(risk.score);
 
-  return`<div style="background:#2C3136;border:0.5px solid rgba(255,255,255,0.09);border-left:2px solid ${levelColors.border};border-radius:12px;padding:14px;margin-bottom:8px">
+  return`<div style="background:var(--bg-card);border:0.5px solid var(--border-col);border-left:2px solid ${levelColors.border};border-radius:12px;padding:14px;margin-bottom:8px">
     <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px">
       <div>
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-          <span style="font-size:14px;font-weight:500;color:#F0EDE8">${bookie}</span>
+          <span style="font-size:14px;font-weight:500;color:var(--text-primary)">${bookie}</span>
           ${acctPill(acct)}
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <span style="font-size:11px;color:#9A9590">${risk.txCount} bets</span>
-          <span style="font-size:11px;color:#9A9590">${Math.round(risk.mugRatio*100)}% mugged</span>
-          ${risk.avgOdds>0?`<span style="font-size:11px;color:#9A9590">avg odds ${risk.avgOdds.toFixed(2)}</span>`:''}
-          <span style="font-size:11px;color:#9A9590">£${risk.totalPnl.toFixed(0)} profit</span>
+          <span style="font-size:11px;color:var(--text-muted)">${risk.txCount} bets</span>
+          <span style="font-size:11px;color:var(--text-muted)">${Math.round(risk.mugRatio*100)}% mugged</span>
+          ${risk.avgOdds>0?`<span style="font-size:11px;color:var(--text-muted)">avg odds ${risk.avgOdds.toFixed(2)}</span>`:''}
+          <span style="font-size:11px;color:var(--text-muted)">£${risk.totalPnl.toFixed(0)} profit</span>
         </div>
       </div>
       <span style="background:${levelColors.bg};color:${levelColors.text};border:0.5px solid ${levelColors.border};padding:3px 10px;border-radius:20px;font-size:11px;font-weight:500;flex-shrink:0">${levelLabel}</span>
     </div>
 
-    <div style="background:#3D4349;border-radius:4px;height:4px;margin-bottom:10px;overflow:hidden">
+    <div style="background:var(--bg-input);border-radius:4px;height:4px;margin-bottom:10px;overflow:hidden">
       <div style="background:${levelColors.text};height:100%;width:${barWidth}%;border-radius:4px;transition:width .5s"></div>
     </div>
 
@@ -2296,7 +2360,7 @@ function renderRiskCard(r){
     </div>`:''}
 
     ${risk.level!=='green'?`<div style="margin-top:10px;padding-top:10px;border-top:0.5px solid rgba(255,255,255,0.08)">
-      <div style="font-size:11px;color:#9A9590;margin-bottom:5px;font-weight:500;text-transform:uppercase;letter-spacing:.3px">Suggested action</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:5px;font-weight:500;text-transform:uppercase;letter-spacing:.3px">Suggested action</div>
       <div style="font-size:12px;color:#B4B2A9">${getRiskAdvice(risk)}</div>
     </div>`:''}
   </div>`;
@@ -2430,14 +2494,14 @@ function renderCasinoSummaryView(){
     +'<div class="metric-sub">'+totalSessions+' total sessions</div>'
     +'<div style="margin-top:8px;padding-top:8px;border-top:0.5px solid rgba(255,255,255,0.08);display:grid;grid-template-columns:1fr 1fr;gap:8px">'
     +'<div style="background:rgba(255,255,255,0.05);border-radius:8px;padding:10px">'
-    +'<div style="font-size:10px;color:#9A9590;margin-bottom:4px">JG</div>'
+    +'<div style="font-size:10px;color:var(--text-muted);margin-bottom:4px">JG</div>'
     +'<div style="font-size:16px;font-weight:500;color:'+(jgPnl>=0?'#22C55E':'#F87171')+'">'+fmtS(jgPnl)+'</div>'
-    +'<div style="font-size:11px;color:#9A9590;margin-top:2px">'+jgSessions.length+' sessions</div>'
+    +'<div style="font-size:11px;color:var(--text-muted);margin-top:2px">'+jgSessions.length+' sessions</div>'
     +'</div>'
     +'<div style="background:rgba(255,255,255,0.05);border-radius:8px;padding:10px">'
-    +'<div style="font-size:10px;color:#9A9590;margin-bottom:4px">JP</div>'
+    +'<div style="font-size:10px;color:var(--text-muted);margin-bottom:4px">JP</div>'
     +'<div style="font-size:16px;font-weight:500;color:'+(jpPnl>=0?'#22C55E':'#F87171')+'">'+fmtS(jpPnl)+'</div>'
-    +'<div style="font-size:11px;color:#9A9590;margin-top:2px">'+jpSessions.length+' sessions</div>'
+    +'<div style="font-size:11px;color:var(--text-muted);margin-top:2px">'+jpSessions.length+' sessions</div>'
     +'</div>'
     +'</div></div>'
     +'<div class="card">'
@@ -2485,13 +2549,15 @@ function renderQuickCalc(){
   const isFB=calcBetType==='Free Bet';
   const isUL=calcStrategy==='underlay';
   const types=['Boost','Free Bet','Qualifier','Mug'];
-  const typeBg={Boost:'#5C3800','Free Bet':'#14532D',Qualifier:'#7A4F00',Mug:'#042C53'};
-  const typeCol={Boost:'#F0A500','Free Bet':'#86EFAC',Qualifier:'#F5C842',Mug:'#F5C842'};
+  const style=getComputedStyle(document.documentElement);
+  const inputBg=style.getPropertyValue('--bg-input').trim()||'#3D4349';
+  const typeBg={Boost:inputBg,'Free Bet':inputBg,Qualifier:inputBg,Mug:inputBg};
+  const typeCol={Boost:'#60A5FA','Free Bet':'#34D399',Qualifier:'#FBBF24',Mug:'#9A9590'};
   const typeBtns=types.map(function(t){
     const active=calcBetType===t;
     const bg=active?(typeBg[t]||'#3D4349'):'#3D4349';
     const col=active?(typeCol[t]||'#C8C5BF'):'#C8C5BF';
-    return '<button onclick="setCalcBetType(\'' + t + '\')" style="flex:1;padding:8px 4px;border-radius:8px;border:0.5px solid rgba(255,255,255,0.1);background:'+bg+';color:'+col+';font-family:system-ui;font-size:11px;font-weight:500;cursor:pointer">'+t+'</button>';
+    return '<button onclick="setCalcBetType(\'' + t + '\')" style="flex:1;padding:8px 4px;border-radius:8px;border:0.5px solid var(--border-col);background:'+bg+';color:'+col+';font-family:system-ui;font-size:11px;font-weight:500;cursor:pointer">'+t+'</button>';
   }).join('');
 
   const stratBtns=
@@ -2515,15 +2581,15 @@ function renderQuickCalc(){
     +'</div>'
     +'<div id="qc-results" style="display:none;background:#252830;border-radius:10px;padding:12px 14px;margin-bottom:12px">'
     +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">'
-    +'<div><div style="font-size:10px;color:#9A9590;margin-bottom:3px">Lay stake</div>'
+    +'<div><div style="font-size:10px;color:var(--text-muted);margin-bottom:3px">Lay stake</div>'
     +'<div style="display:flex;align-items:center;gap:6px">'
-    +'<div id="qc-laystake" style="font-size:20px;font-weight:500;color:#F0EDE8">—</div>'
-    +'<button id="qc-copy-btn" onclick="copyLayStake()" style="display:none;padding:4px 8px;border-radius:6px;border:0.5px solid rgba(255,255,255,0.15);background:#3D4349;color:#C8C5BF;font-size:11px;cursor:pointer;font-family:system-ui">Copy</button>'
+    +'<div id="qc-laystake" style="font-size:20px;font-weight:500;color:var(--text-primary)">—</div>'
+    +'<button id="qc-copy-btn" onclick="copyLayStake()" style="display:none;padding:4px 8px;border-radius:6px;border:0.5px solid rgba(255,255,255,0.15);background:var(--bg-input);color:var(--text-secondary);font-size:11px;cursor:pointer;font-family:system-ui">Copy</button>'
     +'</div></div>'
-    +'<div><div style="font-size:10px;color:#9A9590;margin-bottom:3px">If wins</div>'
+    +'<div><div style="font-size:10px;color:var(--text-muted);margin-bottom:3px">If wins</div>'
     +'<div id="qc-win" style="font-size:20px;font-weight:500;color:#22C55E">—</div></div>'
-    +'<div><div style="font-size:10px;color:#9A9590;margin-bottom:3px">If loses</div>'
-    +'<div id="qc-lose" style="font-size:20px;font-weight:500;color:#9A9590">—</div></div>'
+    +'<div><div style="font-size:10px;color:var(--text-muted);margin-bottom:3px">If loses</div>'
+    +'<div id="qc-lose" style="font-size:20px;font-weight:500;color:var(--text-muted)">—</div></div>'
     +'</div></div>'
     +'<button id="qc-log-btn" onclick="logFromCalc()" style="display:none;width:100%;padding:13px;border-radius:10px;border:none;background:#22C55E;color:#fff;font-family:system-ui;font-size:15px;font-weight:500;cursor:pointer"><i class="ti ti-plus"></i> Log this bet</button>'
     +'</div></div>';
@@ -2754,7 +2820,7 @@ function showBackupPrompt(){
   const days=getLastBackupDays();
   const msg=days===null?'You have never backed up your data.':'Your last backup was '+days+' days ago.';
   document.getElementById('modal-root').innerHTML=
-    '<div class="modal-bg">'    +'<div class="modal">'    +'<div class="modal-handle"></div>'    +'<div class="modal-title">Weekly Backup</div>'    +'<div class="modal-sub">'+msg+' Download a full backup now?</div>'    +'<div style="background:#2C3136;border-radius:10px;padding:12px 14px;margin-bottom:16px">'    +'<div style="font-size:12px;color:#9A9590;margin-bottom:4px">Your backup includes:</div>'    +'<div style="font-size:12px;color:#C8C5BF">All transactions · Bookie balances · Casino sessions · Free bets · Exchange balances</div>'    +'</div>'    +'<div class="modal-actions">'    +'<button class="btn btn-primary" style="flex:1" onclick="downloadBackup();closeModal()"><i class="ti ti-download"></i> Download backup</button>'    +'<button class="btn btn-ghost" onclick="localStorage.setItem(\'mbe_last_backup\',Date.now().toString());closeModal()">Skip for now</button>'    +'</div>'    +'</div></div>';
+    '<div class="modal-bg">'    +'<div class="modal">'    +'<div class="modal-handle"></div>'    +'<div class="modal-title">Weekly Backup</div>'    +'<div class="modal-sub">'+msg+' Download a full backup now?</div>'    +'<div style="background:var(--bg-card);border-radius:10px;padding:12px 14px;margin-bottom:16px">'    +'<div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">Your backup includes:</div>'    +'<div style="font-size:12px;color:var(--text-secondary)">All transactions · Bookie balances · Casino sessions · Free bets · Exchange balances</div>'    +'</div>'    +'<div class="modal-actions">'    +'<button class="btn btn-primary" style="flex:1" onclick="downloadBackup();closeModal()"><i class="ti ti-download"></i> Download backup</button>'    +'<button class="btn btn-ghost" onclick="localStorage.setItem(\'mbe_last_backup\',Date.now().toString());closeModal()">Skip for now</button>'    +'</div>'    +'</div></div>';
 }
 
 // ── ROUTING ──────────────────────────────────────────────────────────────────
@@ -2850,29 +2916,29 @@ function renderCasinoForm(){
     +'<div class="card-body" style="padding-bottom:80px">'
     +'<div class="form-section"><div class="form-label">Account</div><div class="acct-selector">'+acctBtns+'</div></div>'
     +'<div style="margin-bottom:10px"><div class="form-label">Operator</div><div style="display:flex;gap:6px">'
-    +'<button onclick="casinoOperator=\'JG\';setCasinoView(0)" style="flex:1;padding:9px;border-radius:8px;border:0.5px solid rgba(255,255,255,0.09);background:'+jgBg+';color:'+jgCol+';font-family:system-ui;font-size:13px;font-weight:500;cursor:pointer">JG</button>'
-    +'<button onclick="casinoOperator=\'JP\';setCasinoView(0)" style="flex:1;padding:9px;border-radius:8px;border:0.5px solid rgba(255,255,255,0.09);background:'+jpBg+';color:'+jpCol+';font-family:system-ui;font-size:13px;font-weight:500;cursor:pointer">JP</button>'
+    +'<button onclick="casinoOperator=\'JG\';setCasinoView(0)" style="flex:1;padding:9px;border-radius:8px;border:0.5px solid var(--border-col);background:'+jgBg+';color:'+jgCol+';font-family:system-ui;font-size:13px;font-weight:500;cursor:pointer">JG</button>'
+    +'<button onclick="casinoOperator=\'JP\';setCasinoView(0)" style="flex:1;padding:9px;border-radius:8px;border:0.5px solid var(--border-col);background:'+jpBg+';color:'+jpCol+';font-family:system-ui;font-size:13px;font-weight:500;cursor:pointer">JP</button>'
     +'</div></div>'
     +'<div style="display:grid;grid-template-columns:120px 1fr;gap:8px;margin-bottom:8px">'
     +'<div class="form-group"><div class="form-label">Date</div><input type="text" id="c-date" value="'+todayStr()+'" style="font-size:12px"/></div>'
     +'<div class="form-group"><div class="form-label">Casino / Bookie</div><div style="position:relative">'
     +'<input type="text" id="c-casino-search" placeholder="Search..." autocomplete="off" oninput="filterCasinoBookies(this.value)" onfocus="showCasinoBookies()"/>'
     +'<input type="hidden" id="c-casino" value=""/>'
-    +'<div id="casino-bookie-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:50;background:#3D4349;border:0.5px solid rgba(255,255,255,0.10);border-radius:8px;margin-top:3px;max-height:180px;overflow-y:auto"></div>'
+    +'<div id="casino-bookie-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:50;background:var(--bg-input);border:0.5px solid rgba(255,255,255,0.10);border-radius:8px;margin-top:3px;max-height:180px;overflow-y:auto"></div>'
     +'</div></div></div>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">'
     +'<div class="form-group"><div class="form-label">Starting Balance</div><input type="number" id="c-start-bal" placeholder="0.00" step="0.01" inputmode="decimal" oninput="updateCasinoNet()"/></div>'
     +'<div class="form-group"><div class="form-label">Ending Balance</div><input type="number" id="c-end-bal" placeholder="0.00" step="0.01" inputmode="decimal" oninput="updateCasinoNet()"/></div>'
     +'</div>'
-    +'<div style="background:#3D4349;border-radius:8px;padding:12px;margin-bottom:8px">'
+    +'<div style="background:var(--bg-input);border-radius:8px;padding:12px;margin-bottom:8px">'
     +'<div style="display:flex;justify-content:space-between;align-items:center">'
-    +'<span style="font-size:12px;color:#C8C5BF">P&L</span>'
+    +'<span style="font-size:12px;color:var(--text-secondary)">P&L</span>'
     +'<span id="c-net" style="font-size:20px;font-weight:500;color:#22C55E">£0.00</span>'
     +'</div></div>'
     +'<div class="form-group"><div class="form-label">Notes</div><input type="text" id="c-notes" placeholder="optional"/></div>'
     +'<div id="c-msg" style="font-size:12px;color:#F87171;margin-top:6px"></div>'
     +'</div>'
-    +'<div style="position:fixed;bottom:calc(58px + env(safe-area-inset-bottom));left:0;right:0;padding:10px 16px;background:#2C3136;border-top:0.5px solid rgba(255,255,255,0.08);display:flex;gap:8px;z-index:90;max-width:680px;margin:0 auto">'
+    +'<div style="position:fixed;bottom:calc(58px + env(safe-area-inset-bottom));left:0;right:0;padding:10px 16px;background:var(--bg-card);border-top:0.5px solid rgba(255,255,255,0.08);display:flex;gap:8px;z-index:90;max-width:680px;margin:0 auto">'
     +'<button class="btn btn-ghost" onclick="resetCasinoForm()" style="width:72px">Clear</button>'
     +'<button class="btn btn-primary btn-full" onclick="saveCasinoSession()"><i class="ti ti-check"></i> Save session</button>'
     +'</div></div>';
@@ -2891,7 +2957,7 @@ function filterCasinoBookies(q){
   if(!filtered.length){dd.style.display='none';return;}
   dd.innerHTML=filtered.map(function(b){
     const safe=b.replace(/'/g,"&#39;");
-    return '<div onclick="selectCasinoBook(\''+safe+'\')" style="padding:8px 12px;cursor:pointer;font-size:13px;color:#F0EDE8;border-bottom:0.5px solid rgba(255,255,255,0.06)">'+b+'</div>';
+    return '<div onclick="selectCasinoBook(\''+safe+'\')" style="padding:8px 12px;cursor:pointer;font-size:13px;color:var(--text-primary);border-bottom:0.5px solid rgba(255,255,255,0.06)">'+b+'</div>';
   }).join('');
   dd.style.display='block';
 }
@@ -2983,7 +3049,11 @@ async function loadApp(){
   restoreQueue();
   // Restore visibility — hidden by default unless user has explicitly shown
   const savedVis=localStorage.getItem('mbe_dash_hidden');
-  _dashHidden=savedVis===null?true:savedVis==='1'; // restore any queued saves from last session
+  _dashHidden=savedVis===null?true:savedVis==='1';
+  // Restore theme
+  const savedTheme=localStorage.getItem('mbe_theme')||'dark';
+  _theme=savedTheme;
+  document.documentElement.setAttribute('data-theme',savedTheme==='dark'?'':savedTheme); // restore any queued saves from last session
   // Version check — clear localStorage cache if bookie list version changed
   const BOOKIE_VERSION='v8';
   if(localStorage.getItem('mbe_bookie_ver')!==BOOKIE_VERSION){
@@ -3020,14 +3090,14 @@ function checkPin(){
   const ps=document.getElementById('pin-screen');
   ps.style.cssText='display:flex;position:fixed;inset:0;background:#343A40;z-index:9999;flex-direction:column;align-items:center;justify-content:center;padding:40px 20px';
   ps.innerHTML=`
-    <div style="font-size:22px;font-weight:500;color:#F0EDE8;margin-bottom:8px">MBWorld</div>
-    <div style="font-size:13px;color:#9A9590;margin-bottom:32px">Enter PIN to continue</div>
+    <div style="font-size:22px;font-weight:500;color:var(--text-primary);margin-bottom:8px">MBWorld</div>
+    <div style="font-size:13px;color:var(--text-muted);margin-bottom:32px">Enter PIN to continue</div>
     <div id="pin-dots" style="display:flex;gap:12px;margin-bottom:32px">
       ${[0,1,2,3].map(i=>'<div style="width:14px;height:14px;border-radius:50%;border:2px solid #9A9590;background:transparent" id="pd'+i+'"></div>').join('')}
     </div>
     <div id="pin-error" style="font-size:12px;color:#F87171;margin-bottom:16px;min-height:18px"></div>
     <div style="display:grid;grid-template-columns:repeat(3,72px);gap:12px">
-      ${[1,2,3,4,5,6,7,8,9,'',0,'⌫'].map(d=>`<button onclick="pinPress('${d}')" style="height:72px;border-radius:50%;border:0.5px solid rgba(255,255,255,0.10);background:#2C3136;color:#F0EDE8;font-size:${d==='⌫'?'20':'22'}px;font-weight:500;font-family:system-ui,-apple-system,sans-serif;cursor:pointer;${d===''?'visibility:hidden':''}">${d}</button>`).join('')}
+      ${[1,2,3,4,5,6,7,8,9,'',0,'⌫'].map(d=>`<button onclick="pinPress('${d}')" style="height:72px;border-radius:50%;border:0.5px solid rgba(255,255,255,0.10);background:var(--bg-card);color:var(--text-primary);font-size:${d==='⌫'?'20':'22'}px;font-weight:500;font-family:system-ui,-apple-system,sans-serif;cursor:pointer;${d===''?'visibility:hidden':''}">${d}</button>`).join('')}
     </div>`;
   let entry='';
   window.pinPress=function(d){
