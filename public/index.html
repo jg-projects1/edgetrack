@@ -75,9 +75,12 @@ input::placeholder{color:var(--text-muted)}
 select{background:var(--bg-input);color:var(--text-primary);border:0.5px solid var(--border-col)}
 textarea{background:var(--bg-input);color:var(--text-primary);border:0.5px solid var(--border-col)}
 [data-theme="stone"] input,[data-theme="stone"] select,[data-theme="stone"] textarea{
-  background:var(--bg-input);color:#1A1A1A;border:0.5px solid rgba(0,0,0,0.15)
+  background:#EDE8DF !important;color:#1A1A1A !important;border:1px solid rgba(0,0,0,0.20) !important
 }
-[data-theme="stone"] input::placeholder{color:#8A8078}
+[data-theme="stone"] input::placeholder{color:#8A8078 !important}
+[data-theme="stone"] .form-group input,[data-theme="stone"] .form-group select,[data-theme="stone"] .form-group textarea{
+  background:#EDE8DF !important;color:#1A1A1A !important
+}
 [data-theme="stone"] .badge-active{background:#C8E6D4;color:#1B5E35;border-color:#B0D4BC}
 [data-theme="stone"] .badge-restricted{background:#FDE8CC;color:#7A3000;border-color:#F5C898}
 [data-theme="stone"] .badge-gubbed{background:#FAD4D4;color:#8B0000;border-color:#F0B0B0}
@@ -324,7 +327,6 @@ select option{background:var(--bg-input);color:var(--text-primary)}
     <div class="logo">MB<span>World</span></div>
     <div style="display:flex;align-items:center;gap:8px">
       <div style="display:flex;align-items:center;gap:2px;background:var(--border-col);border-radius:16px;padding:3px">
-        <button id="theme-btn-dark" onclick="setTheme('dark')" title="Dark" style="border:none;cursor:pointer;padding:3px 9px;border-radius:12px;background:rgba(255,255,255,0.15);font-family:system-ui;font-size:10px;font-weight:500;color:var(--text-primary);transition:background .2s">Dark</button>
         <button id="theme-btn-stone" onclick="setTheme('stone')" title="Warm Cream" style="border:none;cursor:pointer;padding:3px 9px;border-radius:12px;background:transparent;font-family:system-ui;font-size:10px;font-weight:500;color:var(--text-primary);transition:background .2s">Cream</button>
         <button id="theme-btn-slate" onclick="setTheme('slate')" title="Charcoal Warm" style="border:none;cursor:pointer;padding:3px 9px;border-radius:12px;background:transparent;font-family:system-ui;font-size:10px;font-weight:500;color:var(--text-primary);transition:background .2s">Warm</button>
       </div>
@@ -3157,7 +3159,7 @@ function checkPin(){
     <div style="font-size:22px;font-weight:500;color:var(--text-primary);margin-bottom:8px">MBWorld</div>
     <div style="font-size:13px;color:var(--text-muted);margin-bottom:32px">Enter PIN to continue</div>
     <div id="pin-dots" style="display:flex;gap:12px;margin-bottom:32px">
-      ${[0,1,2,3].map(i=>'<div style="width:14px;height:14px;border-radius:50%;border:2px solid var(--text-muted);background:transparent" id="pd'+i+'"></div>').join('')}
+      ${[0,1,2,3].map(i=>'<div style="width:14px;height:14px;border-radius:50%;border:2px solid var(--text-primary);background:transparent" id="pd'+i+'"></div>').join('')}
     </div>
     <div id="pin-error" style="font-size:12px;color:#F87171;margin-bottom:16px;min-height:18px"></div>
     <div style="display:grid;grid-template-columns:repeat(3,72px);gap:12px">
@@ -3169,7 +3171,7 @@ function checkPin(){
     else if(d!==''){entry+=d;}
     for(let i=0;i<4;i++){
       const dot=document.getElementById('pd'+i);
-      if(dot)dot.style.background=i<entry.length?'var(--text-primary)':'transparent';
+      if(dot)dot.style.background=i<entry.length?'var(--text-primary)':'transparent';if(dot)dot.style.borderColor='var(--text-primary)';
     }
     if(entry.length===4){
       if(entry===pinKey){
