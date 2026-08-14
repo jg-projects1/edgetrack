@@ -17,7 +17,7 @@ html{height:100%;-webkit-text-size-adjust:100%}
 body{font-family:system-ui,-apple-system,sans-serif;background:#343A40;min-height:100%;font-size:14px;color:#F0EDE8;-webkit-tap-highlight-color:transparent}
 .app{display:flex;flex-direction:column;min-height:100svh}
 
-.topbar{background:#2C3136;border-bottom:0.5px solid rgba(255,255,255,0.09);padding:0 16px;padding-top:env(safe-area-inset-top);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+.topbar{background:#2C3136;border-bottom:0.5px solid rgba(255,255,255,0.09);padding:14px 16px;padding-top:calc(14px + env(safe-area-inset-top));display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
 .logo{font-size:17px;font-weight:500;letter-spacing:-.3px;color:#F0EDE8}
 .logo span{color:#22C55E}
 .sync-badge{display:flex;align-items:center;gap:5px;font-size:11px;color:#C8C5BF;background:#3D4349;padding:4px 10px;border-radius:20px;border:0.5px solid rgba(255,255,255,0.08)}
@@ -26,7 +26,7 @@ body{font-family:system-ui,-apple-system,sans-serif;background:#343A40;min-heigh
 .sync-dot.error{background:#F87171}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 
-.profile-bar{background:#2C3136;border-bottom:0.5px solid rgba(255,255,255,0.08);padding:8px 16px}
+.profile-bar{background:#2C3136;border-bottom:0.5px solid rgba(255,255,255,0.08);padding:8px calc(max(16px,(100vw - 680px)/2));display:flex;align-items:center;gap:10px}
 .profile-label{font-size:11px;color:#9A9590;flex-shrink:0}
 .profile-toggle{display:flex;gap:4px}
 .profile-btn{padding:5px 12px;border-radius:20px;cursor:pointer;font-size:12px;font-weight:500;color:#C8C5BF;border:0.5px solid rgba(255,255,255,0.10);background:transparent;transition:all .15s;white-space:nowrap}
@@ -38,7 +38,7 @@ body{font-family:system-ui,-apple-system,sans-serif;background:#343A40;min-heigh
 
 .content{flex:1;padding:14px 16px;padding-bottom:calc(72px + env(safe-area-inset-bottom));max-width:680px;margin:0 auto;width:100%}
 
-.tab-bar{background:#2C3136;border-top:0.5px solid rgba(255,255,255,0.09);padding:6px 4px;padding-bottom:calc(6px + env(safe-area-inset-bottom));display:flex;position:fixed;bottom:0;left:0;right:0;z-index:100}
+.tab-bar{background:#2C3136;border-top:0.5px solid rgba(255,255,255,0.09);padding:6px calc(max(16px,(100vw - 680px)/2));padding-bottom:calc(6px + env(safe-area-inset-bottom));display:flex;position:fixed;bottom:0;left:0;right:0;z-index:100}
 .tab{flex:1;padding:5px 2px;cursor:pointer;font-size:9px;font-weight:500;color:#9A9590;border:none;background:none;text-align:center;display:flex;flex-direction:column;align-items:center;gap:3px;min-width:0;transition:color .15s}
 .tab i{font-size:20px;line-height:1}
 .tab.active{color:#22C55E}
@@ -233,7 +233,7 @@ select option{background:#3D4349;color:#F0EDE8}
   <div class="content" id="main-content">
     <div class="loading"><div class="spinner"></div>Loading…</div>
   </div>
-  <div class="tab-bar"><div class="bar-inner" style="padding:0">
+  <div class="tab-bar">
     <button class="tab active" id="tab-dashboard" onclick="switchTab('dashboard')"><i class="ti ti-layout-dashboard" aria-hidden="true"></i><span class="tab-label">Dashboard</span></button>
     <button class="tab" id="tab-pending" onclick="switchTab('pending')"><i class="ti ti-clock" aria-hidden="true"></i><span class="tab-label">Settle <span id="pending-badge" style="display:none;background:#BA7517;color:#fff;border-radius:10px;padding:0 5px;font-size:9px;font-weight:500">0</span></span></button>
     <button class="tab" id="tab-trade" onclick="switchTab('trade')"><i class="ti ti-repeat" aria-hidden="true"></i><span class="tab-label">Trade</span></button>
