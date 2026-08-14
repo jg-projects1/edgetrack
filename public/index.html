@@ -1647,16 +1647,15 @@ function duplicateTrade(acct,id,rawTx){
     // Exchange
     const fe=document.getElementById('f-exchange');if(fe&&tx.exchange){
       fe.value=tx.exchange;
-      // Set selected option
       Array.from(fe.options).forEach(o=>o.selected=o.value===tx.exchange);
     }
-    // Odds and stake
-    const bs=document.getElementById('f-bstake');if(bs)bs.value=tx.bstake||'';
-    const bo=document.getElementById('f-bodds');if(bo)bo.value=tx.bodds||'';
-    const lo=document.getElementById('f-lodds');if(lo)lo.value=tx.lodds||'';
+    // Odds and stake — only set if value exists, don't overwrite render
+    const bs=document.getElementById('f-bstake');if(bs&&tx.bstake)bs.value=tx.bstake;
+    const bo=document.getElementById('f-bodds');if(bo&&tx.bodds)bo.value=tx.bodds;
+    // Lay odds — only set if tx has it, otherwise keep rendered value
+    if(tx.lodds){const lo=document.getElementById('f-lodds');if(lo)lo.value=tx.lodds;}
     // Strategy
     setStrategy(isUnderlay?'underlay':'lockin');
-    // Trigger calculator
     autoCalcUnderlay();
   },50);
   showToast('Duplicated — edit and save');window.scrollTo(0,0);
