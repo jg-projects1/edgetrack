@@ -391,7 +391,11 @@ async function loadData(){
         PROFILES.forEach(pr=>{
           if(parsed[pr]){
             state[pr]=JSON.parse(JSON.stringify(parsed[pr]));
-            if(!state[pr].casino)state[pr].casino=[];
+            if(state[pr].casino){
+              // Filter locally deleted sessions from cache
+              const deletedSet=new Set((casinoDeletedIds[pr]||[]).map(String));
+              state[pr].casino=state[pr].casino.filter(s=>!deletedSet.has(String(s.id)));
+            } else {state[pr].casino=[];}
             if(!state[pr].freeBets)state[pr].freeBets=[];
           }
         });
@@ -652,9 +656,13 @@ async function saveData(source='unknown'){
           });
           mergedTxs.sort((a,b)=>{const da=parseDate(a.date),db=parseDate(b.date);return db!==da?db-da:b.id-a.id;});
           state[pr].transactions=mergedTxs;
-          // Casino data from save response
-          if(sportsJson.data[pr].casino)state[pr].casino=JSON.parse(JSON.stringify(sportsJson.data[pr].casino));
-          else if(!state[pr].casino)state[pr].casino=[];
+          // Casino data from server - filter out locally deleted sessions
+          if(sportsJson.data[pr].casino){
+            const deletedSet=new Set((casinoDeletedIds[pr]||[]).map(String));
+            state[pr].casino=JSON.parse(JSON.stringify(
+              sportsJson.data[pr].casino.filter(s=>!deletedSet.has(String(s.id)))
+            ));
+          } else if(!state[pr].casino){state[pr].casino=[];}
           if(!state[pr].freeBets)state[pr].freeBets=[];
         }
       });
@@ -1400,7 +1408,7 @@ function settleBet(acct,id,result){
   tx.result=result;applyBalanceOnSettle(tx,p,result);
   // Immediately write to localStorage so refresh picks up settled state
   try{
-    const snap={exchanges:state.exchanges,_deletedTxIds:deletedTxIds};
+    const snap={exchanges:state.exchanges,_deletedTxIds:deletedTxIds,_casinoDeletedIds:casinoDeletedIds};
     PROFILES.forEach(pr=>{snap[pr]={bank:state[pr].bank,bookies:state[pr].bookies,transactions:state[pr].transactions,freeBets:state[pr].freeBets||[],casino:state[pr].casino||[]};});
     localStorage.setItem('mbe_state',JSON.stringify(snap));
   }catch(e){}
@@ -1999,7 +2007,7 @@ function deleteTx(acct,id){
   deletedTxIds[acct].push(id);
   // Write to localStorage immediately so refresh doesn't restore deleted tx
   try{
-    const snap={exchanges:state.exchanges,_deletedTxIds:deletedTxIds};
+    const snap={exchanges:state.exchanges,_deletedTxIds:deletedTxIds,_casinoDeletedIds:casinoDeletedIds};
     PROFILES.forEach(pr=>{snap[pr]={bank:state[pr].bank,bookies:state[pr].bookies,transactions:state[pr].transactions,freeBets:state[pr].freeBets||[],casino:state[pr].casino||[]};});
     localStorage.setItem('mbe_state',JSON.stringify(snap));
   }catch(e){}
@@ -2567,16 +2575,27 @@ let casinoHasDeposit=false;
 let casinoOperator='JG';
 
 function getCasinoSessions(){
-  const key=PROFILES.map(p=>(state[p].casino||[]).length).join('-');
+  // Cache key includes total count AND a hash of deleted IDs
+  const key=PROFILES.map(p=>(state[p].casino||[]).length).join('-')+JSON.stringify(casinoDeletedIds);
   if(_casinoCache&&_casinoCacheKey===key)return _casinoCache;
-  _casinoCache=PROFILES.flatMap(p=>(state[p].casino||[]).map(s=>({...s,_acct:p}))).sort((a,b)=>b.id-a.id);
+  const raw=[];
+  PROFILES.forEach(p=>{
+    const sessions=state[p].casino||[];
+    const deletedSet=new Set((casinoDeletedIds[p]||[]).map(String));
+    sessions.forEach(s=>{
+      if(!deletedSet.has(String(s.id)))raw.push({...s,_acct:p});
+    });
+  });
+  // Sort once and cache
+  raw.sort((a,b)=>b.id-a.id);
+  _casinoCache=raw;
   _casinoCacheKey=key;
   return _casinoCache;
 }
 function invalidateCasinoCache(){_casinoCache=null;_casinoCacheKey='';}
 
 function renderCasino(){
-  const allSessions=PROFILES.flatMap(p=>(state[p].casino||[]).map(s=>({...s,_acct:p}))).sort((a,b)=>b.id-a.id);
+  const allSessions=getCasinoSessions();
   const totalCasino=PROFILES.reduce((a,p)=>a+casinoPnl(p),0);
   const sessionPnlAmt=s=>(s.startBal!==undefined&&s.endBal!==undefined&&(s.startBal!==0||s.endBal!==0))?s.endBal-s.startBal:(s.netProfit||0);
   const jgPnl=allSessions.reduce((a,s)=>{
@@ -2704,7 +2723,11 @@ function renderCasinoSummaryView(){
 function renderCasinoHistory(){
   const sessions=getCasinoSessions();
   if(!sessions.length)return '<div class="empty">No new casino sessions yet — log one above</div>';
-  const rows=sessions.map(s=>{
+  // Cap at 200 most recent for performance - use search to find older
+  const PAGE=200;
+  const _histPage=window._casinoHistPage||0;
+  const pageSessions=sessions.slice(_histPage*PAGE,(_histPage+1)*PAGE);
+  const rows=pageSessions.map(s=>{
     const pnl=(s.startBal!==undefined&&s.endBal!==undefined&&(s.startBal!==0||s.endBal!==0))?s.endBal-s.startBal:(s.netProfit||0);
     const startStr=s.startBal!==undefined?fmt(s.startBal):'—';
     const endStr=s.endBal!==undefined?fmt(s.endBal):'—';
@@ -2719,7 +2742,15 @@ function renderCasinoHistory(){
       +'<td><button onclick="deleteCasinoSession(\x27'+s._acct+'\x27,'+s.id+')" style="background:none;border:none;color:#F87171;cursor:pointer;padding:4px"><i class="ti ti-trash" style="font-size:13px"></i></button></td>'
       +'</tr>';
   }).join('');
-  return '<div class="card"><div class="card-header"><span class="card-title">Casino History</span></div>'
+  const totalPages=Math.ceil(sessions.length/PAGE);
+  const pagination=totalPages>1
+    ?'<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-top:0.5px solid var(--border-col);font-size:11px;color:var(--text-muted)">'
+      +'<button onclick="window._casinoHistPage=Math.max(0,(_casinoHistPage||0)-1);setCasinoView(1)" style="background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:4px 8px;font-size:11px;font-family:system-ui"'+((_histPage===0)?'disabled style="opacity:0.3;cursor:default"':'')+'>← Newer</button>'
+      +'<span>'+(_histPage+1)+' of '+totalPages+' ('+sessions.length+' sessions)</span>'
+      +'<button onclick="window._casinoHistPage=Math.min(totalPages-1,(_casinoHistPage||0)+1);setCasinoView(1)" style="background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:4px 8px;font-size:11px;font-family:system-ui"'+(_histPage>=totalPages-1?'disabled style="opacity:0.3;cursor:default"':'')+'>Older →</button>'
+      +'</div>'
+    :'';
+  return '<div class="card"><div class="card-header"><span class="card-title">Casino History</span><span style="font-size:10px;color:var(--text-muted)">'+sessions.length+' sessions</span></div>'
     +'<div style="overflow-x:auto">'
     +'<table class="data-table" style="width:100%;min-width:500px">'
     +'<thead><tr>'
@@ -2728,7 +2759,7 @@ function renderCasinoHistory(){
     +'<th style="text-align:right">P&L (£)</th><th></th>'
     +'</tr></thead>'
     +'<tbody>'+rows+'</tbody>'
-    +'</table></div></div>';
+    +'</table></div>'+pagination+'</div>';
 }
 
 
@@ -3223,22 +3254,36 @@ function resetCasinoForm(){
 
 function deleteCasinoSession(acct,id){
   if(!confirm('Delete this casino session?'))return;
-  const session=(state[acct].casino||[]).find(function(s){return s.id===id;});
+  // Find session across ALL profiles - use _acct from session, not just parameter
+  let realAcct=acct;
+  let session=null;
+  PROFILES.forEach(pr=>{
+    const found=(state[pr].casino||[]).find(s=>String(s.id)===String(id));
+    if(found){session=found;realAcct=pr;}
+  });
   if(session){
-    const p=state[acct];
+    const p=state[realAcct];
     const casino=session.casino;
-    const pnl=session.startBal!==undefined?session.endBal-session.startBal:session.netProfit||0;
-    if(p.bookies[casino])p.bookies[casino].bal=(p.bookies[casino].bal||0)-pnl;
+    const pnl=(session.startBal!==undefined&&session.endBal!==undefined&&(session.startBal!==0||session.endBal!==0))?session.endBal-session.startBal:(session.netProfit||0);
+    if(p.bookies&&p.bookies[casino]){
+      p.bookies[casino].bal=(p.bookies[casino].bal||0)-pnl;
+      p.bookies[casino].balUpdatedAt=Date.now();
+    }
+    state[realAcct].casino=(state[realAcct].casino||[]).filter(s=>String(s.id)!==String(id));
   }
-  state[acct].casino=(state[acct].casino||[]).filter(function(s){return s.id!==id;});
+  // Track deleted ID on all profiles to prevent server restore
+  PROFILES.forEach(pr=>{
+    if(!casinoDeletedIds[pr])casinoDeletedIds[pr]=[];
+    casinoDeletedIds[pr].push(id);
+  });
   if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('deleteCasino');
   invalidateCasinoCache();showToast('Session deleted');
   // Smart update: remove just that row
-  const casinoRow=document.querySelector(`tr[data-csid="${id}"]`);
+  const casinoRow=document.querySelector('tr[data-csid="'+id+'"]');
   if(casinoRow){
     casinoRow.style.transition='opacity .2s';casinoRow.style.opacity='0';
     setTimeout(function(){casinoRow.remove();},200);
-  }else{render();}
+  }else{setCasinoView(1);}
 }
 
 // Prevent scroll wheel changing number inputs
