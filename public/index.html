@@ -814,8 +814,29 @@ function totalBookie(p){return Object.values(state[p].bookies||{}).reduce((a,b)=
 function totalPnl(p){return(state[p].transactions||[]).filter(t=>t.type!=='Balance Amendment').reduce((a,t)=>a+(t.pnl||0),0);}
 function pendingAll(){return PROFILES.flatMap(p=>(state[p].transactions||[]).filter(t=>t.result==='Pending').map(t=>({...t,_acct:p})));}
 function parseDate(d){if(!d)return 0;const p=d.split('/');if(p.length===3)return new Date(+p[2],+p[1]-1,+p[0]).getTime();return 0;}
-function allTxs(){return PROFILES.flatMap(p=>(state[p].transactions||[]).map(t=>({...t,_acct:p}))).sort((a,b)=>{const dd=parseDate(b.date)-parseDate(a.date);return dd!==0?dd:b.id-a.id;});}
-function profileTxs(p){return p==='both'?allTxs():(state[p].transactions||[]).map(t=>({...t,_acct:p})).sort((a,b)=>{const dd=parseDate(b.date)-parseDate(a.date);return dd!==0?dd:b.id-a.id;});}
+function allTxs(){
+  const key=PROFILES.map(p=>(state[p].transactions||[]).length).join('-');
+  if(_txCache['both']&&_txCacheKey['both']===key)return _txCache['both'];
+  const all=PROFILES.flatMap(p=>{
+    const deleted=new Set((deletedTxIds[p]||[]).map(String));
+    return(state[p].transactions||[]).filter(t=>!deleted.has(String(t.id))).map(t=>({...t,_acct:p}));
+  }).sort((a,b)=>{const dd=parseDate(b.date)-parseDate(a.date);return dd!==0?dd:b.id-a.id;});
+  _txCache['both']=all;_txCacheKey['both']=key;
+  return all;
+}
+function profileTxs(p){
+  if(p==='both')return allTxs();
+  const key=(state[p].transactions||[]).length+'_'+(deletedTxIds[p]||[]).length;
+  if(_txCache[p]&&_txCacheKey[p]===key)return _txCache[p];
+  const deleted=new Set((deletedTxIds[p]||[]).map(String));
+  _txCache[p]=(state[p].transactions||[])
+    .filter(t=>!deleted.has(String(t.id)))
+    .map(t=>({...t,_acct:p}))
+    .sort((a,b)=>{const dd=parseDate(b.date)-parseDate(a.date);return dd!==0?dd:b.id-a.id;});
+  _txCacheKey[p]=key;
+  return _txCache[p];
+}
+function invalidateTxCache(p){if(p)delete _txCache[p];else _txCache={};}
 function pillClass(t){return'pill pill-'+(t||'').toLowerCase().replace(/\s/g,'');}
 function acctPill(a){return`<span class="pill pill-${a}">${PROFILE_LABELS[a]||a}</span>`;}
 function todayStr(){const d=new Date();return[String(d.getDate()).padStart(2,'0'),String(d.getMonth()+1).padStart(2,'0'),d.getFullYear()].join('/');}
@@ -919,6 +940,12 @@ function switchProfile(p){
   currentProfile=p;
   PROFILES.forEach(x=>{const b=document.getElementById('pbtn-'+x);if(b){b.className='profile-btn';if(x===p)b.classList.add('active-'+x);}});
   const bb=document.getElementById('pbtn-both');if(bb){bb.className='profile-btn';if(p==='both')bb.classList.add('active-both');}
+  // Smart update: if on trade history, just refresh the table
+  window._txPage=0;
+  if(currentTab==='trade'&&tradeSubTab==='history'){
+    const mc=document.getElementById('main-content');
+    if(mc){mc.innerHTML=renderTrade();updateBadge();return;}
+  }
   render();
 }
 
@@ -1849,7 +1876,7 @@ function submitTx(){
   // Store last saved tx for quick duplicate
   const lastTx={type:selectedBetType,bookie:document.getElementById('f-bookie')?.value||(document.getElementById('f-bookie-search')?.value||''),exchange:document.getElementById('f-exchange')?.value||'',event:document.getElementById('f-event')?.value||'',bstake:document.getElementById('f-bstake')?.value||'',bodds:document.getElementById('f-bodds')?.value||'',lodds:document.getElementById('f-lodds')?.value||'',pnl:document.getElementById('f-pnl')?.value||'',underlay:isUnderlay,notes:document.getElementById('f-notes')?.value||'',_acct:formAccount};
   lastSavedTrade=lastTx;
-  if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('logTrade');showToast('✓ Trade saved');msg.textContent='';
+  if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}invalidateTxCache(formAccount);saveData('logTrade');showToast('✓ Trade saved');msg.textContent='';
   // Stay on form — keep type, bookie, exchange; clear event/stake/odds/pnl
   const keepBookie=document.getElementById('f-bookie-search')?.value||'';
   const keepBookieVal=document.getElementById('f-bookie')?.value||'';
@@ -1930,6 +1957,19 @@ function renderHistory(){
 
 function renderTxTable(txs,showAcct){
   if(!txs.length)return`<div class="empty">No transactions yet</div>`;
+  // Paginate for performance - show 300 at a time
+  const PAGE=300;
+  const page=window._txPage||0;
+  const pageTxs=txs.slice(page*PAGE,(page+1)*PAGE);
+  const totalPages=Math.ceil(txs.length/PAGE);
+  const paginationHtml=totalPages>1
+    ?`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-top:0.5px solid var(--border-col);font-size:11px;color:var(--text-muted)">
+        <button onclick="window._txPage=Math.max(0,(window._txPage||0)-1);filterHistoryInPlace()" style="background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:4px 8px;font-size:11px;font-family:system-ui"${page===0?' disabled style="opacity:0.3"':''}>← Newer</button>
+        <span>${page+1} of ${totalPages} (${txs.length} transactions)</span>
+        <button onclick="window._txPage=Math.min(${totalPages-1},(window._txPage||0)+1);filterHistoryInPlace()" style="background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:4px 8px;font-size:11px;font-family:system-ui"${page>=totalPages-1?' disabled style="opacity:0.3"':''}>Older →</button>
+      </div>`:'';
+  const txsToRender=pageTxs;
+  const txCount=txs.length;
   return`<div class="table-wrap"><table class="data-table"><thead><tr>
     <th>Date</th>${showAcct?'<th>Acct</th>':''}<th>Type</th><th>Bookie</th><th>Event</th><th>Result</th><th>P&L</th><th></th>
   </tr></thead><tbody>
@@ -2012,7 +2052,7 @@ function deleteTx(acct,id){
     localStorage.setItem('mbe_state',JSON.stringify(snap));
   }catch(e){}
   if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}
-  saveData('deleteTx');showToast('Transaction deleted & balances reversed');
+  invalidateTxCache();saveData('deleteTx');showToast('Transaction deleted & balances reversed');
   // Smart update: remove just that row
   const row=document.querySelector(`tr[data-txid="${id}"]`)||document.getElementById('pcard-'+id);
   if(row){
@@ -2566,6 +2606,8 @@ function getRiskAdvice(risk){
 // ── CASINO ───────────────────────────────────────────────────────────────────
 const CASINO_OFFER_TYPES=['Reload','Welcome','Free Spins','Cashback','Other'];
 let casinoFormAcct='me';
+let _txCache={}; // cached sorted transactions per profile
+let _txCacheKey={}; // cache invalidation keys
 let casinoView='log';
 let _casinoCache=null;
 let _casinoCacheKey='';
@@ -3085,7 +3127,10 @@ function switchTab(t){
 function switchTradeTab(i){
   tradeSubTab=i===1?'history':'log';
   currentTab='trade';
-  render();
+  const mc=document.getElementById('main-content');
+  if(mc)mc.innerHTML=renderTrade();
+  window._txPage=0;if(tradeSubTab==='log')setTimeout(bindFormEvents,50);
+  updateBadge();
 }
 
 function setAccountsTab(i){
