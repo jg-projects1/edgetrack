@@ -461,8 +461,19 @@ async function fetchFromServer(){
           });
           // Sort by date desc
           merged.sort((a,b)=>{const da=parseDate(a.date),db=parseDate(b.date);return db!==da?db-da:b.id-a.id;});
-          // Only use server bank if local is 0 (fresh load) — preserve local amendments
-          if((state[pr].bank||0)===0)state[pr].bank=saved[pr].bank;
+          // FIX: was "only take server bank if local is 0", which meant any
+          // device holding a stale non-zero cached bank would NEVER accept
+          // a corrected value from the server. Now merges on a timestamp,
+          // same principle already used for bookie balances below.
+          {
+            const localBankTs=state[pr].bankUpdatedAt||0;
+            const serverBankTs=saved[pr].bankUpdatedAt||0;
+            if(serverBankTs>=localBankTs){
+              state[pr].bank=saved[pr].bank;
+              state[pr].bankUpdatedAt=serverBankTs;
+            }
+            // else: local edit is newer, keep it — it'll be pushed on next save
+          }
           // Merge bookies — keep local balance if it differs from server
           // (local is more recent, server may be stale replica)
           const serverBk=saved[pr].bookies||{};
@@ -570,7 +581,7 @@ async function drainQueue(){
 function buildSavePayload(){
   const sports={exchanges:state.exchanges,_source:'queue',_serverState:lastServerState};
   PROFILES.forEach(pr=>{
-    sports[pr]={bank:state[pr]?.bank||0,bookies:state[pr]?.bookies||{},
+    sports[pr]={bank:state[pr]?.bank||0,bankUpdatedAt:state[pr]?.bankUpdatedAt||0,bookies:state[pr]?.bookies||{},
       transactions:state[pr]?.transactions||[],freeBets:state[pr]?.freeBets||[],
       casino:state[pr]?.casino||[],
       deletedIds:deletedTxIds[pr]||[],
@@ -597,6 +608,7 @@ async function saveData(source='unknown'){
     PROFILES.forEach(pr=>{
       sportsState[pr]={
         bank:state[pr]?.bank||0,
+        bankUpdatedAt:state[pr]?.bankUpdatedAt||0,
         bookies:state[pr]?.bookies||{},
         transactions:state[pr]?.transactions||[],
         freeBets:state[pr]?.freeBets||[],
@@ -731,7 +743,7 @@ const DEFAULT_BOOKIES=[
   'Virgin Bet','Virgin Games','William Hill'
 ];
 
-function makeProfile(){const b={};DEFAULT_BOOKIES.forEach(x=>b[x]={bal:0,status:'Not Signed Up',notes:''});return{bookies:b,bank:0,transactions:[],freeBets:[]};}
+function makeProfile(){const b={};DEFAULT_BOOKIES.forEach(x=>b[x]={bal:0,status:'Not Signed Up',notes:''});return{bookies:b,bank:0,bankUpdatedAt:0,transactions:[],freeBets:[]};}
 function freshState(){const ex={};EXCHANGES.forEach(x=>ex[x]=0);const st={exchanges:ex};PROFILES.forEach(pr=>st[pr]=makeProfile());return st;}
 const state=freshState();
 let casinoDeletedIds={me:[],wife:[],bp:[],rq:[]};
@@ -1436,7 +1448,7 @@ function settleBet(acct,id,result){
   // Immediately write to localStorage so refresh picks up settled state
   try{
     const snap={exchanges:state.exchanges,_deletedTxIds:deletedTxIds,_casinoDeletedIds:casinoDeletedIds};
-    PROFILES.forEach(pr=>{snap[pr]={bank:state[pr].bank,bookies:state[pr].bookies,transactions:state[pr].transactions,freeBets:state[pr].freeBets||[],casino:state[pr].casino||[]};});
+    PROFILES.forEach(pr=>{snap[pr]={bank:state[pr].bank,bankUpdatedAt:state[pr].bankUpdatedAt||0,bookies:state[pr].bookies,transactions:state[pr].transactions,freeBets:state[pr].freeBets||[],casino:state[pr].casino||[]};});
     localStorage.setItem('mbe_state',JSON.stringify(snap));
   }catch(e){}
   if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('settle');
@@ -1825,7 +1837,7 @@ function submitTx(){
     if(!newValStr){msg.textContent='Enter a new balance.';return;}
     const newVal=parseFloat(newValStr);if(isNaN(newVal))return;
     const p=state[formAccount];let oldVal,targetLabel;
-    if(target==='bank'){oldVal=p.bank;p.bank=newVal;targetLabel='Bank';}
+    if(target==='bank'){oldVal=p.bank;p.bank=newVal;p.bankUpdatedAt=Date.now();targetLabel='Bank';}
     else{const name=target.slice(7);oldVal=(p.bookies||{})[name]?.bal||0;p.bookies[name].bal=newVal;targetLabel=name;}
     const diff=newVal-oldVal;if(!p.transactions)p.transactions=[];
     p.transactions.push({id:Date.now(),date,type:'Balance Amendment',target:targetLabel,oldVal,newVal,diff,pnl:diff,notes:reason,result:'—',_acct:formAccount});
@@ -2048,7 +2060,7 @@ function deleteTx(acct,id){
   // Write to localStorage immediately so refresh doesn't restore deleted tx
   try{
     const snap={exchanges:state.exchanges,_deletedTxIds:deletedTxIds,_casinoDeletedIds:casinoDeletedIds};
-    PROFILES.forEach(pr=>{snap[pr]={bank:state[pr].bank,bookies:state[pr].bookies,transactions:state[pr].transactions,freeBets:state[pr].freeBets||[],casino:state[pr].casino||[]};});
+    PROFILES.forEach(pr=>{snap[pr]={bank:state[pr].bank,bankUpdatedAt:state[pr].bankUpdatedAt||0,bookies:state[pr].bookies,transactions:state[pr].transactions,freeBets:state[pr].freeBets||[],casino:state[pr].casino||[]};});
     localStorage.setItem('mbe_state',JSON.stringify(snap));
   }catch(e){}
   if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}
@@ -2361,7 +2373,7 @@ function showAmendModal(type,acct,name){
 function confirmAmend(type,acct,name){
   const newVal=parseFloat(document.getElementById('modal-val')?.value),reason=document.getElementById('modal-reason')?.value||'Manual amendment';if(isNaN(newVal))return;
   const p=state[acct];let oldVal,targetLabel;
-  if(type==='bank'){oldVal=p.bank;p.bank=newVal;targetLabel='Bank';}else{oldVal=p.bookies[name]?.bal||0;p.bookies[name].bal=newVal;targetLabel=name;}
+  if(type==='bank'){oldVal=p.bank;p.bank=newVal;p.bankUpdatedAt=Date.now();targetLabel='Bank';}else{oldVal=p.bookies[name]?.bal||0;p.bookies[name].bal=newVal;targetLabel=name;}
   const diff=newVal-oldVal;if(!p.transactions)p.transactions=[];
   p.transactions.push({id:Date.now(),date:todayStr(),type:'Balance Amendment',target:targetLabel,oldVal,newVal,diff,pnl:diff,notes:reason,result:'—',_acct:acct});
   if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}
