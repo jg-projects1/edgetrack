@@ -1,4 +1,4 @@
-// v4 - safe split KV with legacy fallback
+// v5 - safe split KV, robust legacy detection, timestamped bank merge
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -12,18 +12,18 @@ export default async function handler(req, res) {
     const incoming = req.body;
     const profiles = ['me', 'wife', 'bp', 'rq'];
 
+    // Throws on genuine fetch failure instead of swallowing it — a failed
+    // request must never be treated the same as "key doesn't exist".
     const kvGet = async (key) => {
-      try {
-        const r = await fetch(`${kvUrl}/get/${key}`, {
-          headers: { Authorization: `Bearer ${kvToken}` }
-        });
-        if (!r.ok) return null;
-        const d = await r.json();
-        if (!d.result) return null;
-        let parsed = JSON.parse(d.result);
-        if (typeof parsed === 'string') parsed = JSON.parse(parsed);
-        return parsed;
-      } catch(e) { return null; }
+      const r = await fetch(`${kvUrl}/get/${key}`, {
+        headers: { Authorization: `Bearer ${kvToken}` }
+      });
+      if (!r.ok) throw new Error(`KV fetch failed for ${key}: ${r.status}`);
+      const d = await r.json();
+      if (!d.result) return null;
+      let parsed = JSON.parse(d.result);
+      if (typeof parsed === 'string') parsed = JSON.parse(parsed);
+      return parsed;
     };
 
     const kvSet = async (key, value) => {
@@ -77,8 +77,8 @@ export default async function handler(req, res) {
     };
 
     const mergeCasino = (serverSessions, incomingSessions, deletedIds) => {
-      const serverMap = new Map((serverSessions||[]).map(s => [String(s.id), s]));
-      const incomingMap = new Map((incomingSessions||[]).map(s => [String(s.id), s]));
+      const serverMap = new Map((serverSessions || []).map(s => [String(s.id), s]));
+      const incomingMap = new Map((incomingSessions || []).map(s => [String(s.id), s]));
       const allIds = new Set([...serverMap.keys(), ...incomingMap.keys()]);
       const merged = [];
       allIds.forEach(id => {
@@ -88,23 +88,33 @@ export default async function handler(req, res) {
       return merged;
     };
 
-    // Check if split keys exist - if not, load from legacy
-    const testKey = await kvGet('edgetrack_me');
-    const useSplitKeys = testKey !== null && (testKey.transactions?.length > 0 || Object.keys(testKey.bookies||{}).length > 0);
+    // FIX: check ALL profiles for split-key data, not just 'me'. A single
+    // profile's fetch quirk should never decide the format for everyone.
+    // kvGet now throws on genuine failures, so if this Promise.all rejects
+    // we abort the whole save (see catch block) rather than silently
+    // falling back to legacy data.
+    const splitCheck = await Promise.all(
+      profiles.map(pr => kvGet(`edgetrack_${pr}`))
+    );
+    const useSplitKeys = splitCheck.some(
+      d => d !== null && ((d.transactions?.length || 0) > 0 || Object.keys(d.bookies || {}).length > 0)
+    );
+
+    // If NONE of the profiles have split data, only then consider legacy —
+    // and only as a one-time migration source, never as an ongoing fallback.
+    let legacyData = null;
+    if (!useSplitKeys) {
+      legacyData = await kvGet('edgetrack_main');
+    }
 
     const responseData = { exchanges: incoming.exchanges || {} };
 
-    await Promise.all(profiles.map(async pr => {
+    await Promise.all(profiles.map(async (pr, i) => {
       if (!incoming[pr]) return;
-      
-      let server;
-      if (useSplitKeys) {
-        server = await kvGet(`edgetrack_${pr}`) || { transactions: [], bank: 0, bookies: {}, freeBets: [], casino: [] };
-      } else {
-        // Legacy: load from edgetrack_main
-        const legacy = await kvGet('edgetrack_main');
-        server = legacy?.[pr] || { transactions: [], bank: 0, bookies: {}, freeBets: [], casino: [] };
-      }
+
+      const server = useSplitKeys
+        ? (splitCheck[i] || { transactions: [], bank: 0, bookies: {}, freeBets: [], casino: [] })
+        : (legacyData?.[pr] || { transactions: [], bank: 0, bookies: {}, freeBets: [], casino: [] });
 
       const deletedTxIds = new Set((incoming[pr].deletedIds || []).map(String));
       const deletedCasinoIds = new Set((incoming[pr].deletedCasinoIds || []).map(String));
@@ -118,15 +128,23 @@ export default async function handler(req, res) {
 
       const mergedBookies = mergeBookies(server.bookies || {}, incoming[pr].bookies || {});
 
+      // FIX: bank now merges on a timestamp, same principle as bookies,
+      // instead of unconditionally trusting whichever device saved last.
+      const incomingBankTs = incoming[pr].bankUpdatedAt || 0;
+      const serverBankTs = server.bankUpdatedAt || 0;
+      const incomingBankWins =
+        incoming[pr].bank !== undefined &&
+        (incomingBankTs === 0 || incomingBankTs >= serverBankTs); // no timestamp = trust explicit user edit
+
       const merged = {
-        bank: incoming[pr].bank !== undefined ? incoming[pr].bank : (server.bank || 0),
+        bank: incomingBankWins ? incoming[pr].bank : (server.bank || 0),
+        bankUpdatedAt: Math.max(incomingBankTs, serverBankTs) || Date.now(),
         bookies: mergedBookies,
         transactions: mergedTxs,
         freeBets: Array.from(fbMap.values()),
         casino: mergedCasinoSessions
       };
 
-      // Always save to split key
       await kvSet(`edgetrack_${pr}`, merged);
       responseData[pr] = merged;
     }));
