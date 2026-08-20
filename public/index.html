@@ -135,8 +135,8 @@ body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg-page);mi
 .profile-label{font-size:11px;color:var(--text-muted);flex-shrink:0}
 .profile-toggle{display:flex;gap:4px}
 .profile-btn{padding:5px 12px;border-radius:20px;cursor:pointer;font-size:12px;font-weight:500;color:var(--text-secondary);border:0.5px solid var(--border-col);background:transparent;transition:all .15s;white-space:nowrap}
-.profile-btn.active-me{background:#14B8A6;color:#fff;border-color:#14B8A6}
-.profile-btn.active-wife{background:#A78BFA;color:#fff;border-color:#A78BFA}
+.profile-btn.active-jg{background:#14B8A6;color:#fff;border-color:#14B8A6}
+.profile-btn.active-hg{background:#A78BFA;color:#fff;border-color:#A78BFA}
 .profile-btn.active-bp{background:#60A5FA;color:#fff;border-color:#60A5FA}
 .profile-btn.active-rq{background:#F87171;color:#fff;border-color:#F87171}
 .profile-btn.active-both{background:var(--bg-input);color:var(--text-primary);border-color:var(--text-muted)}
@@ -167,7 +167,7 @@ body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg-page);mi
 .acct-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
 .acct-name{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:500;color:var(--text-primary)}
 .acct-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
-.dot-me{background:#14B8A6}.dot-wife{background:#A78BFA}.dot-bp{background:#60A5FA}.dot-rq{background:#F87171}
+.dot-jg{background:#14B8A6}.dot-hg{background:#A78BFA}.dot-bp{background:#60A5FA}.dot-rq{background:#F87171}
 .acct-pnl{font-size:12px;font-weight:500}
 .acct-pnl.pos{color:var(--text-accent)}.acct-pnl.neg{color:#F87171}
 .acct-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-top:0.5px solid rgba(255,255,255,0.08)}
@@ -184,8 +184,8 @@ body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg-page);mi
 .list-row-right.pos{color:var(--text-accent)}.list-row-right.neg{color:#F87171}.list-row-right.warn{color:#BA7517}
 
 .pill{display:inline-flex;align-items:center;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:500;white-space:nowrap;border:0.5px solid transparent}
-.pill-me{background:#7A4F00;color:#F5C842;border-color:#185FA5}
-.pill-wife{background:#3C3489;color:#AFA9EC;border-color:#534AB7}
+.pill-jg{background:#7A4F00;color:#F5C842;border-color:#185FA5}
+.pill-hg{background:#3C3489;color:#AFA9EC;border-color:#534AB7}
 .pill-bp{background:#5C3800;color:#F0A500;border-color:#854F0B}
 .pill-rq{background:#14532D;color:#86EFAC;border-color:#3B6D11}
 .pill-qualifier{background:#7A4F00;color:#F5C842}
@@ -246,8 +246,8 @@ select option{background:var(--bg-input);color:var(--text-primary)}
 
 .acct-selector{display:flex;gap:5px;flex-wrap:wrap}
 .acct-sel-btn{flex:1;min-width:60px;padding:7px 5px;border-radius:8px;border:0.5px solid var(--border-col);background:var(--bg-input);color:var(--text-secondary);font-family:system-ui,-apple-system,sans-serif;font-size:12px;font-weight:500;cursor:pointer;text-align:center;transition:all .15s}
-.acct-sel-btn.active-me{background:#14B8A6;color:#fff;border-color:#14B8A6}
-.acct-sel-btn.active-wife{background:#A78BFA;color:#fff;border-color:#A78BFA}
+.acct-sel-btn.active-jg{background:#14B8A6;color:#fff;border-color:#14B8A6}
+.acct-sel-btn.active-hg{background:#A78BFA;color:#fff;border-color:#A78BFA}
 .acct-sel-btn.active-bp{background:#60A5FA;color:#fff;border-color:#60A5FA}
 .acct-sel-btn.active-rq{background:#F87171;color:#fff;border-color:#F87171}
 
@@ -337,8 +337,8 @@ select option{background:var(--bg-input);color:var(--text-primary)}
   <div class="profile-bar" id="profile-bar" style="display:none">
     <span class="profile-label">Viewing</span>
     <div class="profile-toggle">
-      <button class="profile-btn active-me" id="pbtn-me" onclick="switchProfile('me')">JG</button>
-      <button class="profile-btn" id="pbtn-wife" onclick="switchProfile('wife')">HG</button>
+      <button class="profile-btn active-jg" id="pbtn-jg" onclick="switchProfile('jg')">JG</button>
+      <button class="profile-btn" id="pbtn-hg" onclick="switchProfile('hg')">HG</button>
       <button class="profile-btn" id="pbtn-bp" onclick="switchProfile('bp')">BP</button>
       <button class="profile-btn" id="pbtn-rq" onclick="switchProfile('rq')">RQ</button>
       <button class="profile-btn" id="pbtn-both" onclick="switchProfile('both')">All</button>
@@ -382,8 +382,17 @@ async function loadData(){
     const cached=localStorage.getItem('mbe_state');
     if(cached){
       const parsed=JSON.parse(cached);
+      // ONE-TIME MIGRATION: older cached blobs use the pre-rename keys
+      // 'me'/'wife'. If the new keys aren't present but the old ones are,
+      // copy the data across under the new names. Old keys are left
+      // untouched in the parsed object (harmless — PROFILES.forEach below
+      // only reads the new key names), so nothing is lost either way.
+      const LEGACY_PROFILE_MAP={jg:'me',hg:'wife'};
+      Object.entries(LEGACY_PROFILE_MAP).forEach(([newKey,oldKey])=>{
+        if(!parsed[newKey]&&parsed[oldKey])parsed[newKey]=parsed[oldKey];
+      });
       // Sanity check: if cache has mostly Not Signed Up bookies, it's stale — discard
-      const meBookies=parsed['me']?.bookies||{};
+      const meBookies=parsed['jg']?.bookies||{};
       const activeCount=Object.values(meBookies).filter(b=>b&&b.status&&b.status!=='Not Signed Up').length;
       const totalCount=Object.keys(meBookies).length;
       const cacheIsValid=totalCount===0||(activeCount/totalCount)>0.05; // at least 5% non-default
@@ -720,9 +729,9 @@ async function saveData(source='unknown'){
 function debouncedSave(source='unknown'){if(syncTimeout)clearTimeout(syncTimeout);setSyncStatus('syncing');syncTimeout=setTimeout(()=>saveData(source),1500);}
 function save(source='unknown'){debouncedSave(source);}
 
-const PROFILES=['me','wife','bp','rq'];
-const PROFILE_LABELS={me:'JG',wife:'HG',bp:'BP',rq:'RQ'};
-const PROFILE_COLORS={me:'#F0A500',wife:'#7F77DD',bp:'#BA7517',rq:'#639922'};
+const PROFILES=['jg','hg','bp','rq'];
+const PROFILE_LABELS={jg:'JG',hg:'HG',bp:'BP',rq:'RQ'};
+const PROFILE_COLORS={jg:'#F0A500',hg:'#7F77DD',bp:'#BA7517',rq:'#639922'};
 const BET_TYPES=['Qualifier','Free Bet','Boost','Mug','Extra Place','2Up','MBAL','Cash Back','Cash Out','Arb','Deposit','Withdrawal','Exchange Deposit','Exchange Withdrawal','Balance Amendment'];
 const BOOKIE_TRANSFER=['Deposit','Withdrawal'];
 const EXCHANGE_TRANSFER=['Exchange Deposit','Exchange Withdrawal'];
@@ -752,8 +761,8 @@ const DEFAULT_BOOKIES=[
 function makeProfile(){const b={};DEFAULT_BOOKIES.forEach(x=>b[x]={bal:0,status:'Not Signed Up',notes:''});return{bookies:b,bank:0,bankUpdatedAt:0,transactions:[],freeBets:[]};}
 function freshState(){const ex={};EXCHANGES.forEach(x=>ex[x]=0);const st={exchanges:ex};PROFILES.forEach(pr=>st[pr]=makeProfile());return st;}
 const state=freshState();
-let casinoDeletedIds={me:[],wife:[],bp:[],rq:[]};
-let deletedTxIds={me:[],wife:[],bp:[],rq:[]};
+let casinoDeletedIds={jg:[],hg:[],bp:[],rq:[]};
+let deletedTxIds={jg:[],hg:[],bp:[],rq:[]};
 let lastServerState=null; // tracks last confirmed server state to avoid stale reads
 let saveInProgress=false;
 let pendingSave=null; // queues a save if one is already in progress
@@ -816,7 +825,7 @@ function migrateLegacy(){
   // Bookie migration save disabled — was overwriting correct balances
 }
 
-let currentProfile='me',currentTab='dashboard',tradeSubTab='log',formAccount='me',selectedBetType='',exchTransferBank='me',isUnderlay=false;
+let currentProfile='jg',currentTab='dashboard',tradeSubTab='log',formAccount='jg',selectedBetType='',exchTransferBank='jg',isUnderlay=false;
 let recentBookies=[]; // tracks last 8 used bookies
 let lastSavedTrade=null; // for quick duplicate after save
 let _duplicateMode=false; // true when form was opened via duplicate
@@ -1828,7 +1837,7 @@ function updateFlowPreview(){
 }
 function bindFormEvents(){const exchSel=document.getElementById('f-exchange');if(exchSel)exchSel.addEventListener('change',updateFlowPreview);}
 function resetForm(){
-  selectedBetType='';exchTransferBank='me';showMoreTypes=false;showComm=false;
+  selectedBetType='';exchTransferBank='jg';showMoreTypes=false;showComm=false;
   // Re-render the form completely for a clean slate
   const mc=document.getElementById('main-content');
   if(mc&&(currentTab==='add'||currentTab==='trade'))mc.innerHTML=renderTrade();
@@ -2151,7 +2160,7 @@ function renderReports(){
 
 
 function renderAccountsMain(){
-  const acct=currentProfile==='both'?'me':currentProfile,p=state[acct];
+  const acct=currentProfile==='both'?'jg':currentProfile,p=state[acct];
   return`
   <div style="margin-bottom:14px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
@@ -2626,7 +2635,7 @@ function getRiskAdvice(risk){
 
 // ── CASINO ───────────────────────────────────────────────────────────────────
 const CASINO_OFFER_TYPES=['Reload','Welcome','Free Spins','Cashback','Other'];
-let casinoFormAcct='me';
+let casinoFormAcct='jg';
 let _txCache={}; // cached sorted transactions per profile
 let _txCacheKey={}; // cache invalidation keys
 let casinoView='log';
@@ -3370,7 +3379,7 @@ async function loadApp(){
   _theme=savedTheme;
   document.documentElement.setAttribute('data-theme',savedTheme==='dark'?'':savedTheme); // restore any queued saves from last session
   // Version check — clear localStorage cache if bookie list version changed
-  const BOOKIE_VERSION='v8';
+  const BOOKIE_VERSION='v9';
   if(localStorage.getItem('mbe_bookie_ver')!==BOOKIE_VERSION){
     localStorage.removeItem('mbe_state');
     localStorage.setItem('mbe_bookie_ver',BOOKIE_VERSION);
@@ -3384,7 +3393,7 @@ async function loadApp(){
     window._appLoading=false;
   }
   const pb=document.getElementById('profile-bar');if(pb)pb.style.display='none';
-  switchProfile('me');
+  switchProfile('jg');
   render();
   checkAutoBackup();
   // Now drain any queued saves - app is fully loaded
