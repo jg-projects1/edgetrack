@@ -405,6 +405,12 @@ async function loadData(){
         }
         lastServerState=JSON.parse(JSON.stringify(parsed));
         setSyncStatus('synced');
+        // FIX: clean up bookie name variants (Gala->Gala Casino etc.) on the
+        // CACHED data too, not only after the server fetch completes below.
+        // Previously the first render used raw unmigrated cache data, so
+        // old/duplicate bookie names flashed on screen until the background
+        // fetchFromServer() finished and re-rendered.
+        migrateLegacy();
 
       // Still fetch from server in background to pick up changes from other devices
       fetchFromServer();
@@ -774,6 +780,9 @@ function migrateLegacy(){
       'Hot Streak Casino':'Hot Streak',
       'hot streak casino':'Hot Streak',
       'Gala':'Gala Casino',
+      'Bet St George':'BetStGeorge',
+      'bet st george':'BetStGeorge',
+      'Betstgeorge':'BetStGeorge',
     };
     Object.entries(renames).forEach(([oldName,newName])=>{
       if(bk[oldName]){
