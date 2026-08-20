@@ -1,4 +1,4 @@
-// v5 - safe split KV, robust legacy detection, timestamped bank merge
+// v6 - profile keys renamed (me->jg, wife->hg), robust legacy detection, timestamped bank merge
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -10,7 +10,11 @@ export default async function handler(req, res) {
     const kvUrl = process.env.KV_REST_API_URL;
     const kvToken = process.env.KV_REST_API_TOKEN;
     const incoming = req.body;
-    const profiles = ['me', 'wife', 'bp', 'rq'];
+    const profiles = ['jg', 'hg', 'bp', 'rq'];
+    // Old KV key suffix for each renamed profile — used ONLY as a
+    // one-time read fallback if the new key has never been written yet.
+    // bp/rq are unchanged so they don't need an entry.
+    const LEGACY_KEY_SUFFIX = { jg: 'me', hg: 'wife' };
 
     // Throws on genuine fetch failure instead of swallowing it — a failed
     // request must never be treated the same as "key doesn't exist".
@@ -88,11 +92,10 @@ export default async function handler(req, res) {
       return merged;
     };
 
-    // FIX: check ALL profiles for split-key data, not just 'me'. A single
-    // profile's fetch quirk should never decide the format for everyone.
-    // kvGet now throws on genuine failures, so if this Promise.all rejects
-    // we abort the whole save (see catch block) rather than silently
-    // falling back to legacy data.
+    // Check ALL profiles (new key names) for split-key data, not just one.
+    // kvGet throws on genuine failures, so if this Promise.all rejects we
+    // abort the whole save (see catch block) rather than silently falling
+    // back to legacy data.
     const splitCheck = await Promise.all(
       profiles.map(pr => kvGet(`edgetrack_${pr}`))
     );
@@ -100,11 +103,11 @@ export default async function handler(req, res) {
       d => d !== null && ((d.transactions?.length || 0) > 0 || Object.keys(d.bookies || {}).length > 0)
     );
 
-    // If NONE of the profiles have split data, only then consider legacy —
-    // and only as a one-time migration source, never as an ongoing fallback.
-    let legacyData = null;
+    // If NONE of the new-named profiles have split data, only then
+    // consider edgetrack_main as a one-time migration source.
+    let legacyMainData = null;
     if (!useSplitKeys) {
-      legacyData = await kvGet('edgetrack_main');
+      legacyMainData = await kvGet('edgetrack_main');
     }
 
     const responseData = { exchanges: incoming.exchanges || {} };
@@ -112,9 +115,22 @@ export default async function handler(req, res) {
     await Promise.all(profiles.map(async (pr, i) => {
       if (!incoming[pr]) return;
 
-      const server = useSplitKeys
-        ? (splitCheck[i] || { transactions: [], bank: 0, bookies: {}, freeBets: [], casino: [] })
-        : (legacyData?.[pr] || { transactions: [], bank: 0, bookies: {}, freeBets: [], casino: [] });
+      let server = splitCheck[i];
+
+      // ONE-TIME MIGRATION: if this profile's new key has never been
+      // written, but it's a renamed profile (jg/hg) with data still
+      // sitting under its old key (me/wife), use that as the merge
+      // baseline instead of starting from blank. This prevents the
+      // rename from silently discarding pre-rename history on first save.
+      if (!server && LEGACY_KEY_SUFFIX[pr]) {
+        server = await kvGet(`edgetrack_${LEGACY_KEY_SUFFIX[pr]}`);
+      }
+      if (!server && legacyMainData) {
+        server = legacyMainData[pr] || legacyMainData[LEGACY_KEY_SUFFIX[pr]] || null;
+      }
+      if (!server) {
+        server = { transactions: [], bank: 0, bankUpdatedAt: 0, bookies: {}, freeBets: [], casino: [] };
+      }
 
       const deletedTxIds = new Set((incoming[pr].deletedIds || []).map(String));
       const deletedCasinoIds = new Set((incoming[pr].deletedCasinoIds || []).map(String));
@@ -128,8 +144,8 @@ export default async function handler(req, res) {
 
       const mergedBookies = mergeBookies(server.bookies || {}, incoming[pr].bookies || {});
 
-      // FIX: bank now merges on a timestamp, same principle as bookies,
-      // instead of unconditionally trusting whichever device saved last.
+      // Bank merges on a timestamp instead of unconditionally trusting
+      // whichever device saved last.
       const incomingBankTs = incoming[pr].bankUpdatedAt || 0;
       const serverBankTs = server.bankUpdatedAt || 0;
       const incomingBankWins =
@@ -145,6 +161,9 @@ export default async function handler(req, res) {
         casino: mergedCasinoSessions
       };
 
+      // Always write to the NEW key name. Old keys (edgetrack_me,
+      // edgetrack_wife) are never written to again — they stay frozen as
+      // a safety-net snapshot of pre-rename data.
       await kvSet(`edgetrack_${pr}`, merged);
       responseData[pr] = merged;
     }));
