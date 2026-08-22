@@ -39,6 +39,52 @@ export default async function handler(req, res) {
       if (!r.ok) throw new Error(`KV set error on ${key}: ${r.status}`);
     };
 
+    // PERMANENT dedupe, run server-side on every save. Mirrors the
+    // client's migrateLegacy() renames, but unlike that function (which
+    // only cleans up the in-browser copy) this one actually removes the
+    // stale key from what gets written back to Upstash — otherwise a
+    // "cleaned up" duplicate just silently persists on the server forever
+    // and reappears on next load, and balance edits only ever touch the
+    // canonical key while the stale one keeps its own leftover balance.
+    const BOOKIE_RENAMES = {
+      'hot streak casino': 'Hot Streak',
+      'gala': 'Gala Casino',
+      'bet st george': 'BetStGeorge',
+      'betstgeorge': 'BetStGeorge', // lowercase form only; exact-case dupes handled below
+    };
+    const dedupeBookies = (bk) => {
+      if (!bk) return bk;
+      const out = { ...bk };
+      const mergeInto = (canonical, staleKey) => {
+        if (!out[staleKey] || staleKey === canonical) return;
+        if (!out[canonical]) out[canonical] = { bal: 0, status: 'Not Signed Up', notes: '' };
+        out[canonical] = {
+          ...out[canonical],
+          bal: (out[canonical].bal || 0) + (out[staleKey].bal || 0),
+          status: out[staleKey].status && out[staleKey].status !== 'Not Signed Up' ? out[staleKey].status : out[canonical].status,
+          notes: out[staleKey].notes || out[canonical].notes,
+          balUpdatedAt: Math.max(out[canonical].balUpdatedAt || 0, out[staleKey].balUpdatedAt || 0)
+        };
+        delete out[staleKey];
+      };
+      // Explicit rename list (handles differently-spelled/spaced variants)
+      Object.keys(out).forEach(k => {
+        const canonical = BOOKIE_RENAMES[k.toLowerCase()];
+        if (canonical && canonical !== k) mergeInto(canonical, k);
+      });
+      // Generic case-insensitive dedupe for anything else (e.g. 'betfred' vs 'Betfred')
+      const seenLower = {};
+      Object.keys(out).forEach(k => {
+        const lower = k.toLowerCase();
+        if (seenLower[lower] && seenLower[lower] !== k) {
+          mergeInto(seenLower[lower], k);
+        } else {
+          seenLower[lower] = k;
+        }
+      });
+      return out;
+    };
+
     const mergeBookies = (serverBk, incomingBk) => {
       const merged = { ...serverBk };
       Object.keys(incomingBk).forEach(k => {
@@ -142,7 +188,7 @@ export default async function handler(req, res) {
       (server.freeBets || []).forEach(fb => fbMap.set(String(fb.id), fb));
       (incoming[pr].freeBets || []).forEach(fb => fbMap.set(String(fb.id), fb));
 
-      const mergedBookies = mergeBookies(server.bookies || {}, incoming[pr].bookies || {});
+      const mergedBookies = dedupeBookies(mergeBookies(dedupeBookies(server.bookies || {}), incoming[pr].bookies || {}));
 
       // Bank merges on a timestamp instead of unconditionally trusting
       // whichever device saved last.
