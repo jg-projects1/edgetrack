@@ -35,6 +35,49 @@ export default async function handler(req, res) {
       if (!r.ok) throw new Error(`KV set error on ${key}: ${r.status}`);
     };
 
+    // Same permanent dedupe as save.js — applied on read too, so a
+    // duplicate that's still sitting in Upstash (e.g. from before this
+    // fix was deployed) gets cleaned up and written back on the very
+    // first load, not just hidden until the next save.
+    const BOOKIE_RENAMES = {
+      'hot streak casino': 'Hot Streak',
+      'gala': 'Gala Casino',
+      'bet st george': 'BetStGeorge',
+      'betstgeorge': 'BetStGeorge',
+    };
+    const dedupeBookies = (bk) => {
+      if (!bk) return { bookies: bk, changed: false };
+      const out = { ...bk };
+      let changed = false;
+      const mergeInto = (canonical, staleKey) => {
+        if (!out[staleKey] || staleKey === canonical) return;
+        if (!out[canonical]) out[canonical] = { bal: 0, status: 'Not Signed Up', notes: '' };
+        out[canonical] = {
+          ...out[canonical],
+          bal: (out[canonical].bal || 0) + (out[staleKey].bal || 0),
+          status: out[staleKey].status && out[staleKey].status !== 'Not Signed Up' ? out[staleKey].status : out[canonical].status,
+          notes: out[staleKey].notes || out[canonical].notes,
+          balUpdatedAt: Math.max(out[canonical].balUpdatedAt || 0, out[staleKey].balUpdatedAt || 0)
+        };
+        delete out[staleKey];
+        changed = true;
+      };
+      Object.keys(out).forEach(k => {
+        const canonical = BOOKIE_RENAMES[k.toLowerCase()];
+        if (canonical && canonical !== k) mergeInto(canonical, k);
+      });
+      const seenLower = {};
+      Object.keys(out).forEach(k => {
+        const lower = k.toLowerCase();
+        if (seenLower[lower] && seenLower[lower] !== k) {
+          mergeInto(seenLower[lower], k);
+        } else {
+          seenLower[lower] = k;
+        }
+      });
+      return { bookies: out, changed };
+    };
+
     // Load all profiles in parallel under their NEW key names first.
     const [profileData, exchanges] = await Promise.all([
       Promise.all(profiles.map(async pr => {
@@ -63,9 +106,20 @@ export default async function handler(req, res) {
     const hasSplitData = profileData.some(p => p.data !== null);
     if (hasSplitData) {
       const result = { exchanges: exchanges || {} };
-      profileData.forEach(({ pr, data }) => {
-        result[pr] = data || { transactions: [], bank: 0, bankUpdatedAt: 0, bookies: {}, freeBets: [], casino: [] };
-      });
+      await Promise.all(profileData.map(async ({ pr, data }) => {
+        if (!data) {
+          result[pr] = { transactions: [], bank: 0, bankUpdatedAt: 0, bookies: {}, freeBets: [], casino: [] };
+          return;
+        }
+        const { bookies, changed } = dedupeBookies(data.bookies || {});
+        const cleaned = { ...data, bookies };
+        result[pr] = cleaned;
+        if (changed) {
+          // Persist the cleanup so it's actually fixed in Upstash, not
+          // just cleaned up for this one response.
+          await kvSet(`edgetrack_${pr}`, cleaned);
+        }
+      }));
       return res.status(200).json({ ok: true, data: result });
     }
 
