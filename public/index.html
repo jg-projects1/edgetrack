@@ -1462,7 +1462,7 @@ function applyBalanceAtLog(tx,p){
 
 function settleBet(acct,id,result){
   const p=state[acct];const tx=(p.transactions||[]).find(t=>t.id===id);if(!tx||tx.result!=='Pending')return;
-  tx.result=result;applyBalanceOnSettle(tx,p,result);
+  tx.result=result;tx.txUpdatedAt=Date.now();applyBalanceOnSettle(tx,p,result);
   // Immediately write to localStorage so refresh picks up settled state
   try{
     const snap={exchanges:state.exchanges,_deletedTxIds:deletedTxIds,_casinoDeletedIds:casinoDeletedIds};
@@ -1514,7 +1514,7 @@ function editPnl(acct,id){
 function confirmPnlEdit(acct,id){
   const newPnl=parseFloat(document.getElementById('modal-pnl')?.value);if(isNaN(newPnl))return;
   const p=state[acct];const tx=p.transactions.find(t=>t.id===id);if(!tx)return;
-  const diff=newPnl-(tx.pnl||0);tx.pnl=newPnl;
+  const diff=newPnl-(tx.pnl||0);tx.pnl=newPnl;tx.txUpdatedAt=Date.now();
   // P&L edit only affects exchange (lay profit) not bookie balance
   // Bookie balance is set from odds×stake on settlement, not from P&L
   if(tx.result==='Lost'&&tx.exchange&&state.exchanges[tx.exchange]!==undefined)
@@ -1858,7 +1858,7 @@ function submitTx(){
     if(target==='bank'){oldVal=p.bank;p.bank=newVal;p.bankUpdatedAt=Date.now();targetLabel='Bank';}
     else{const name=target.slice(7);oldVal=(p.bookies||{})[name]?.bal||0;p.bookies[name].bal=newVal;targetLabel=name;}
     const diff=newVal-oldVal;if(!p.transactions)p.transactions=[];
-    p.transactions.push({id:Date.now(),date,type:'Balance Amendment',target:targetLabel,oldVal,newVal,diff,pnl:diff,notes:reason,result:'—',_acct:formAccount});
+    p.transactions.push({id:Date.now(),date,type:'Balance Amendment',target:targetLabel,oldVal,newVal,diff,pnl:diff,notes:reason,result:'—',_acct:formAccount,txUpdatedAt:Date.now()});
     if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('balanceAmend');showToast(`${targetLabel} → ${fmt(newVal)}`);msg.textContent='';resetForm();setTimeout(render,100);return;
   }
   const bookie=document.getElementById('f-bookie')?.value||(document.getElementById('f-bookie-search')?.value||''),exchange=document.getElementById('f-exchange')?.value,event=document.getElementById('f-event')?.value||'';
@@ -1872,7 +1872,7 @@ function submitTx(){
     if(selectedBetType==='Deposit'){p.bookies[bookie].bal=(p.bookies[bookie].bal||0)+amount;p.bookies[bookie].balUpdatedAt=Date.now();p.bank-=amount;}
     else{p.bookies[bookie].bal=(p.bookies[bookie].bal||0)-amount;p.bookies[bookie].balUpdatedAt=Date.now();p.bank+=amount;}
     if(!p.transactions)p.transactions=[];
-    p.transactions.push({id:Date.now(),date,type:selectedBetType,bookie,amount,pnl:0,notes,result:'—',_acct:formAccount});
+    p.transactions.push({id:Date.now(),date,type:selectedBetType,bookie,amount,pnl:0,notes,result:'—',_acct:formAccount,txUpdatedAt:Date.now()});
   }else if(isExchT){
     if(!exchange){msg.textContent='Select an exchange.';return;}
     if(!amount){msg.textContent='Enter an amount.';return;}
@@ -1880,7 +1880,7 @@ function submitTx(){
     if(selectedBetType==='Exchange Deposit'){state.exchanges[exchange]=(state.exchanges[exchange]||0)+amount;ba.bank-=amount;}
     else{state.exchanges[exchange]=(state.exchanges[exchange]||0)-amount;ba.bank+=amount;}
     if(!ba.transactions)ba.transactions=[];
-    ba.transactions.push({id:Date.now(),date,type:selectedBetType,exchange,amount,pnl:0,notes,result:'—',_acct:exchTransferBank});
+    ba.transactions.push({id:Date.now(),date,type:selectedBetType,exchange,amount,pnl:0,notes,result:'—',_acct:exchTransferBank,txUpdatedAt:Date.now()});
   }else if(isBet){
     if(!bookie){msg.textContent='Select a bookmaker.';return;}
     if(!bstake||!bodds){msg.textContent='Enter back stake and odds.';return;}
@@ -1890,7 +1890,7 @@ function submitTx(){
     // For pending bets, pnl=0 until settled. Store expected P&L separately for reference.
     const storedPnl=result==='Pending'?0:pnl;
     const lodds=parseFloat(document.getElementById('f-lodds')?.value)||0;
-    const tx={id:Date.now(),date,type:selectedBetType,bookie,exchange,event,bstake,bodds,lodds,comm,result,pnl:storedPnl,expectedPnl:pnl,notes,underlay:isUnderlay,_acct:formAccount};
+    const tx={id:Date.now(),date,type:selectedBetType,bookie,exchange,event,bstake,bodds,lodds,comm,result,pnl:storedPnl,expectedPnl:pnl,notes,underlay:isUnderlay,_acct:formAccount,txUpdatedAt:Date.now()};
     p.transactions.push(tx);applyBalanceAtLog(tx,p);
     if(selectedBetType==='Qualifier'){
       if(!p.freeBets)p.freeBets=[];
@@ -2223,7 +2223,7 @@ function verifyBookie(acct,name){
     // Log balance amendment
     const date=todayStr();
     p.transactions=p.transactions||[];
-    p.transactions.push({id:Date.now(),date,type:'Balance Amendment',target:name,oldVal:stored,newVal:entered,diff,pnl:diff,notes:'Balance verified',result:'—',_acct:acct});
+    p.transactions.push({id:Date.now(),date,type:'Balance Amendment',target:name,oldVal:stored,newVal:entered,diff,pnl:diff,notes:'Balance verified',result:'—',_acct:acct,txUpdatedAt:Date.now()});
     p.bookies[name].bal=entered;p.bookies[name].balUpdatedAt=Date.now();
     showToast(name+' updated by '+fmtS(diff));
   } else {
@@ -2365,7 +2365,7 @@ function confirmBookieEdit(acct,name){
   const bk=state[acct].bookies[name],oldBal=bk.bal||0;bk.status=newStatus;bk.notes=newNotes;
   // Stamp balUpdatedAt on any change so merge logic preserves this device's changes
   bk.balUpdatedAt=Date.now();
-  if(!isNaN(newBal)&&newBal!==oldBal){const diff=newBal-oldBal;bk.bal=newBal;if(!state[acct].transactions)state[acct].transactions=[];state[acct].transactions.push({id:Date.now(),date:todayStr(),type:'Balance Amendment',target:name,oldVal:oldBal,newVal:newBal,diff,pnl:diff,notes:reason,result:'—',_acct:acct});}
+  if(!isNaN(newBal)&&newBal!==oldBal){const diff=newBal-oldBal;bk.bal=newBal;if(!state[acct].transactions)state[acct].transactions=[];state[acct].transactions.push({id:Date.now(),date:todayStr(),type:'Balance Amendment',target:name,oldVal:oldBal,newVal:newBal,diff,pnl:diff,notes:reason,result:'—',_acct:acct,txUpdatedAt:Date.now()});}
   if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('bookieEdit');closeModal();showToast(`${name} updated`);render();
 }
 
@@ -2393,7 +2393,7 @@ function confirmAmend(type,acct,name){
   const p=state[acct];let oldVal,targetLabel;
   if(type==='bank'){oldVal=p.bank;p.bank=newVal;p.bankUpdatedAt=Date.now();targetLabel='Bank';}else{oldVal=p.bookies[name]?.bal||0;p.bookies[name].bal=newVal;targetLabel=name;}
   const diff=newVal-oldVal;if(!p.transactions)p.transactions=[];
-  p.transactions.push({id:Date.now(),date:todayStr(),type:'Balance Amendment',target:targetLabel,oldVal,newVal,diff,pnl:diff,notes:reason,result:'—',_acct:acct});
+  p.transactions.push({id:Date.now(),date:todayStr(),type:'Balance Amendment',target:targetLabel,oldVal,newVal,diff,pnl:diff,notes:reason,result:'—',_acct:acct,txUpdatedAt:Date.now()});
   if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}
   saveData();closeModal();showToast(`${targetLabel} → ${fmt(newVal)}`);render();
 }
@@ -3305,6 +3305,7 @@ function saveCasinoSession(){
     date:document.getElementById('c-date')?.value||todayStr(),
     casino,operator:casinoOperator,startBal,endBal,netProfit:net,
     notes:document.getElementById('c-notes')?.value||'',_acct:casinoFormAcct,
+    csUpdatedAt:Date.now(),
   });
   if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('casinoSession');
   invalidateCasinoCache();showToast('Casino session saved!');
