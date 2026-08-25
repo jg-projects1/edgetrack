@@ -1,6 +1,7 @@
 // Casino restore endpoint
 // POST /api/restore with casino session data
 // Merges uploaded sessions with existing KV data
+// v2 - profile keys renamed (me->jg, wife->hg) to match the main app
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -11,8 +12,8 @@ export default async function handler(req, res) {
   try {
     const kvUrl = process.env.KV_REST_API_URL;
     const kvToken = process.env.KV_REST_API_TOKEN;
-    const profiles = ['me', 'wife', 'bp', 'rq'];
-    const incoming = req.body; // { me: [...sessions], wife: [...], bp: [...], rq: [...] }
+    const profiles = ['jg', 'hg', 'bp', 'rq'];
+    const incoming = req.body; // { jg: [...sessions], hg: [...], bp: [...], rq: [...] }
 
     const kvGet = async (key) => {
       try {
