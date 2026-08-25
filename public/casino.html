@@ -192,7 +192,11 @@ function showToast(msg){
   t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);
 }
 
+let suppressTabSwitchUntil=0;
 function switchTab(t){
+  // Guards against a ghost/synthetic tap landing on the tab bar right
+  // after Save — see saveSession() for why this window exists.
+  if(Date.now()<suppressTabSwitchUntil)return;
   currentTab=t;
   document.querySelectorAll('.tab').forEach(el=>el.classList.remove('active'));
   document.getElementById('tab-'+t)?.classList.add('active');
@@ -297,6 +301,12 @@ function selectBookie(name){
 }
 
 function saveSession(){
+  // Blur any focused input right away so keyboard dismissal is tied
+  // predictably to this tap, not left to fire ambiguously afterward —
+  // that ambiguity is the likely source of the ghost-tap-onto-tab-bar
+  // issue on standalone/homescreen iOS apps.
+  document.activeElement?.blur?.();
+  suppressTabSwitchUntil=Date.now()+600;
   const msg=document.getElementById('c-msg');
   const casino=document.getElementById('c-casino')?.value||(document.getElementById('c-casino-search')?.value?.trim()||'');
   if(!casino){if(msg)msg.textContent='Select a casino / bookie.';return;}
@@ -323,6 +333,10 @@ function saveSession(){
   setSyncStatus('syncing');
   saveData();
   showToast('Session saved!');resetForm();
+  // Explicit final guard: stay on Log regardless of what else fires.
+  currentTab='log';
+  document.querySelectorAll('.tab').forEach(el=>el.classList.remove('active'));
+  document.getElementById('tab-log')?.classList.add('active');
 }
 
 function resetForm(){
