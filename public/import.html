@@ -83,13 +83,13 @@ textarea:focus{border-color:var(--border2)}
 
 <script>
 // ── CONFIG ────────────────────────────────────────────────────────────────────
-const PROFILES=['me','wife','bp','rq'];
-const PROFILE_LABELS={me:'JG',wife:'HG',bp:'BP',rq:'RQ'};
+const PROFILES=['jg','hg','bp','rq'];
+const PROFILE_LABELS={jg:'JG',hg:'HG',bp:'BP',rq:'RQ'};
 
 // Column → profile mapping
 const ACCT_COLS={
-  me:{bet:'John Bet',ret:'John Return'},
-  wife:{bet:'Harriet Bet',ret:'Harriet Return'},
+  jg:{bet:'John Bet',ret:'John Return'},
+  hg:{bet:'Harriet Bet',ret:'Harriet Return'},
   rq:{bet:'Rhen Bet',ret:'Rhen Return'},
   bp:{bet:'Ben Bet',ret:'Ben Return'},
 };
@@ -152,7 +152,7 @@ let step=1;
 let rawText='';
 let preview=[];
 let importResult=null;
-let casinoAccount='me';
+let casinoAccount='jg';
 let casinoOperator='JG';
 let casinoStep=1;
 let casinoRaw='';
@@ -288,7 +288,7 @@ function renderStep2(){
   <div class="card">
     <div class="card-title"><span class="step-num">2</span>Preview — check before importing</div>
     <div class="result-grid">
-      ${PROFILES.map(p=>`<div class="result-card"><div class="num" style="color:${p==='me'?'var(--blue)':p==='wife'?'var(--purple)':p==='bp'?'var(--orange)':'var(--lime)'}">${counts[p]||0}</div><div class="lbl">${PROFILE_LABELS[p]}</div></div>`).join('')}
+      ${PROFILES.map(p=>`<div class="result-card"><div class="num" style="color:${p==='jg'?'var(--blue)':p==='hg'?'var(--purple)':p==='bp'?'var(--orange)':'var(--lime)'}">${counts[p]||0}</div><div class="lbl">${PROFILE_LABELS[p]}</div></div>`).join('')}
       <div class="result-card"><div class="num" style="color:var(--green)">${won}</div><div class="lbl">Won</div></div>
       <div class="result-card"><div class="num" style="color:var(--red)">${lost}</div><div class="lbl">Lost</div></div>
       <div class="result-card"><div class="num" style="font-size:16px;color:${totalPnl>=0?'var(--green)':'var(--red)'}">${fmtS(totalPnl)}</div><div class="lbl">Total P&L</div></div>
@@ -348,7 +348,7 @@ async function doImport(){
     // Ensure all profiles exist
     const EXCHANGES=['Betfair','Smarkets','Matchbook','Betdaq'];
     if(!state.exchanges){state.exchanges={};EXCHANGES.forEach(e=>state.exchanges[e]=0);}
-    ['me','wife','bp','rq'].forEach(pr=>{
+    ['jg','hg','bp','rq'].forEach(pr=>{
       if(!state[pr])state[pr]={bookies:{},bank:0,transactions:[]};
       if(!state[pr].transactions)state[pr].transactions=[];
     });
@@ -408,7 +408,7 @@ function renderStep3(){
   <div class="success-box">✓ Import complete — ${importResult.imported} bets added to EdgeTrack</div>
   <div class="result-grid">
     <div class="result-card"><div class="num">${importResult.imported}</div><div class="lbl">Imported</div></div>
-    ${PROFILES.map(p=>`<div class="result-card"><div class="num" style="font-size:18px;color:${p==='me'?'var(--blue)':p==='wife'?'var(--purple)':p==='bp'?'var(--orange)':'var(--lime)'}">${importResult.counts[p]||0}</div><div class="lbl">${PROFILE_LABELS[p]}</div></div>`).join('')}
+    ${PROFILES.map(p=>`<div class="result-card"><div class="num" style="font-size:18px;color:${p==='jg'?'var(--blue)':p==='hg'?'var(--purple)':p==='bp'?'var(--orange)':'var(--lime)'}">${importResult.counts[p]||0}</div><div class="lbl">${PROFILE_LABELS[p]}</div></div>`).join('')}
   </div>
   <div class="card">
     <div class="card-title"><span class="step-num done">3</span>Done — what to do next</div>
@@ -439,7 +439,7 @@ function renderCasinoStep1(){
     <div style="margin-bottom:14px">
       <label>Default account (applied to all rows)</label>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
-        ${['me','wife','bp','rq'].map(p=>`<button onclick="casinoAccount='${p}';document.querySelectorAll('.cacct-btn').forEach(b=>b.style.background='var(--bg3)');this.style.background='var(--green)';this.style.color='#000'" class="cacct-btn" style="padding:7px 14px;border-radius:8px;border:none;font-family:'Syne',sans-serif;font-size:12px;font-weight:700;cursor:pointer;background:${casinoAccount===p?'var(--green)':'var(--bg3)'};color:${casinoAccount===p?'#000':'var(--text2)'}">${{me:'JG',wife:'HG',bp:'BP',rq:'RQ'}[p]}</button>`).join('')}
+        ${['jg','hg','bp','rq'].map(p=>`<button onclick="casinoAccount='${p}';document.querySelectorAll('.cacct-btn').forEach(b=>b.style.background='var(--bg3)');this.style.background='var(--green)';this.style.color='#000'" class="cacct-btn" style="padding:7px 14px;border-radius:8px;border:none;font-family:'Syne',sans-serif;font-size:12px;font-weight:700;cursor:pointer;background:${casinoAccount===p?'var(--green)':'var(--bg3)'};color:${casinoAccount===p?'#000':'var(--text2)'}">${{jg:'JG',hg:'HG',bp:'BP',rq:'RQ'}[p]}</button>`).join('')}
       </div>
     </div>
     <div style="margin-bottom:14px">
@@ -510,7 +510,7 @@ function processCasinoStep1(){
 
 function renderCasinoStep2(){
   const totalPnl=casinoPreview.reduce((a,s)=>a+(s.netProfit||0),0);
-  const acctLabel={me:'JG',wife:'HG',bp:'BP',rq:'RQ'}[casinoAccount]||casinoAccount;
+  const acctLabel={jg:'JG',hg:'HG',bp:'BP',rq:'RQ'}[casinoAccount]||casinoAccount;
   return`<div class="card">
     <div class="card-title"><span class="step-num done">1</span>Data parsed</div>
     <div style="font-size:12px;color:var(--green)">✓ ${casinoPreview.length} casino sessions ready</div>
@@ -562,7 +562,7 @@ async function doCasinoImport(){
     if(!loadRes.ok)throw new Error('Failed to load current data');
     const loadJson=await loadRes.json();
     let state=loadJson.data||{};
-    ['me','wife','bp','rq'].forEach(pr=>{
+    ['jg','hg','bp','rq'].forEach(pr=>{
       if(!state[pr])state[pr]={bookies:{},bank:0,transactions:[],casino:[]};
       if(!state[pr].casino)state[pr].casino=[];
     });
