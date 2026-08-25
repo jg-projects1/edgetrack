@@ -313,7 +313,16 @@ function saveSession(){
     notes:document.getElementById('c-notes')?.value||'',
     _acct:formAcct,
   });
-  save();showToast('Session saved!');resetForm();
+  // Saves immediately rather than through the debounced save() — same
+  // reasoning as deleteSession: a homescreen-installed app can be
+  // suspended by iOS the moment it's backgrounded (very likely right
+  // after logging a session and switching away), and a debounced save
+  // that never fires means the session silently never reaches the
+  // server at all.
+  if(syncTimeout)clearTimeout(syncTimeout);
+  setSyncStatus('syncing');
+  saveData();
+  showToast('Session saved!');resetForm();
 }
 
 function resetForm(){
@@ -383,7 +392,15 @@ function deleteSession(acct,id){
   fullState[acct].casino=(fullState[acct].casino||[]).filter(s=>s.id!==id);
   if(!deletedIds[acct])deletedIds[acct]=[];
   deletedIds[acct].push(id);
-  save();render();
+  render();
+  // Deletes save immediately rather than going through the debounced
+  // save() — a homescreen-installed app can be suspended by iOS the
+  // instant it's backgrounded, and if that happens before a debounce
+  // timer fires, the delete never reaches the server and silently
+  // reappears next time the app opens. Saving right away closes that gap.
+  if(syncTimeout)clearTimeout(syncTimeout);
+  setSyncStatus('syncing');
+  saveData();
 }
 
 function closeModal(){document.getElementById('modal-root').innerHTML='';}
