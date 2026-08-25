@@ -44,8 +44,8 @@ body{font-family:system-ui,-apple-system,sans-serif;background:#343A40;min-heigh
 .list-row-right{font-size:13px;font-weight:500;flex-shrink:0}
 .list-row-right.pos{color:#22C55E}.list-row-right.neg{color:#F87171}
 .pill{display:inline-flex;align-items:center;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:500;white-space:nowrap;background:#3D4349;color:#C8C5BF;border:0.5px solid transparent}
-.pill-me{background:#7A4F00;color:#F5C842;border-color:#185FA5}
-.pill-wife{background:#3C3489;color:#AFA9EC;border-color:#534AB7}
+.pill-jg{background:#7A4F00;color:#F5C842;border-color:#185FA5}
+.pill-hg{background:#3C3489;color:#AFA9EC;border-color:#534AB7}
 .pill-bp{background:#5C3800;color:#F0A500;border-color:#854F0B}
 .pill-rq{background:#14532D;color:#86EFAC;border-color:#3B6D11}
 .form-label{font-size:10px;font-weight:500;color:#9A9590;letter-spacing:.3px;text-transform:uppercase;display:block;margin-bottom:5px}
@@ -54,8 +54,8 @@ input:focus,select:focus{border-color:rgba(255,255,255,0.25);background:#575A65}
 select option{background:#3D4349}
 .acct-selector{display:flex;gap:5px;flex-wrap:wrap}
 .acct-sel-btn{flex:1;min-width:60px;padding:7px 5px;border-radius:8px;border:0.5px solid rgba(255,255,255,0.10);background:#3D4349;color:#C8C5BF;font-family:system-ui,-apple-system,sans-serif;font-size:12px;font-weight:500;cursor:pointer;text-align:center;transition:all .15s}
-.acct-sel-btn.active-me{background:#7A4F00;color:#F5C842;border-color:#185FA5}
-.acct-sel-btn.active-wife{background:#3C3489;color:#AFA9EC;border-color:#534AB7}
+.acct-sel-btn.active-jg{background:#7A4F00;color:#F5C842;border-color:#185FA5}
+.acct-sel-btn.active-hg{background:#3C3489;color:#AFA9EC;border-color:#534AB7}
 .acct-sel-btn.active-bp{background:#5C3800;color:#F0A500;border-color:#854F0B}
 .acct-sel-btn.active-rq{background:#14532D;color:#86EFAC;border-color:#3B6D11}
 .btn{padding:11px 20px;border-radius:8px;font-family:system-ui,-apple-system,sans-serif;font-size:14px;font-weight:500;cursor:pointer;border:0.5px solid rgba(255,255,255,0.09);background:#3D4349;color:#F0EDE8;transition:all .15s;display:inline-flex;align-items:center;justify-content:center;gap:6px}
@@ -108,19 +108,19 @@ select option{background:#3D4349}
 <div id="modal-root"></div>
 
 <script>
-const PROFILES=['me','wife','bp','rq'];
-const PROFILE_LABELS={me:'JG',wife:'HG',bp:'BP',rq:'RQ'};
-const PROFILE_COLORS={me:'#F0A500',wife:'#7F77DD',bp:'#BA7517',rq:'#639922'};
+const PROFILES=['jg','hg','bp','rq'];
+const PROFILE_LABELS={jg:'JG',hg:'HG',bp:'BP',rq:'RQ'};
+const PROFILE_COLORS={jg:'#F0A500',hg:'#7F77DD',bp:'#BA7517',rq:'#639922'};
 const CASINO_OFFER_TYPES=['Reload','Welcome','Free Spins','Cashback','Other'];
 
 let currentTab='log';
-let formAcct='me';
+let formAcct='jg';
 let casinoPending=false;
 let hasDeposit=false;
 let operator='JG';
 let syncTimeout=null;
-let fullState={me:{casino:[]},wife:{casino:[]},bp:{casino:[]},rq:{casino:[]}};
-let deletedIds={me:[],wife:[],bp:[],rq:[]};
+let fullState={jg:{casino:[]},hg:{casino:[]},bp:{casino:[]},rq:{casino:[]}};
+let deletedIds={jg:[],hg:[],bp:[],rq:[]};
 
 function setSyncStatus(s){
   const dot=document.getElementById('sync-dot'),label=document.getElementById('sync-label');
