@@ -44,8 +44,8 @@ body{font-family:system-ui,-apple-system,sans-serif;background:#0f1012;min-heigh
 .list-row-right{font-size:13px;font-weight:500;flex-shrink:0}
 .list-row-right.pos{color:#1D9E75}.list-row-right.neg{color:#E24B4A}
 .pill{display:inline-flex;align-items:center;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:500;white-space:nowrap;background:#252629;color:#888780;border:0.5px solid transparent}
-.pill-me{background:#0C447C;color:#85B7EB;border-color:#185FA5}
-.pill-wife{background:#3C3489;color:#AFA9EC;border-color:#534AB7}
+.pill-jg{background:#0C447C;color:#85B7EB;border-color:#185FA5}
+.pill-hg{background:#3C3489;color:#AFA9EC;border-color:#534AB7}
 .pill-bp{background:#633806;color:#EF9F27;border-color:#854F0B}
 .pill-rq{background:#27500A;color:#97C459;border-color:#3B6D11}
 .form-label{font-size:10px;font-weight:500;color:#5F5E5A;letter-spacing:.3px;text-transform:uppercase;display:block;margin-bottom:5px}
@@ -54,8 +54,8 @@ input:focus,select:focus{border-color:rgba(255,255,255,0.25);background:#2e2f33}
 select option{background:#252629}
 .acct-selector{display:flex;gap:5px;flex-wrap:wrap}
 .acct-sel-btn{flex:1;min-width:60px;padding:7px 5px;border-radius:8px;border:0.5px solid rgba(255,255,255,0.1);background:#252629;color:#888780;font-family:system-ui,-apple-system,sans-serif;font-size:12px;font-weight:500;cursor:pointer;text-align:center;transition:all .15s}
-.acct-sel-btn.active-me{background:#0C447C;color:#85B7EB;border-color:#185FA5}
-.acct-sel-btn.active-wife{background:#3C3489;color:#AFA9EC;border-color:#534AB7}
+.acct-sel-btn.active-jg{background:#0C447C;color:#85B7EB;border-color:#185FA5}
+.acct-sel-btn.active-hg{background:#3C3489;color:#AFA9EC;border-color:#534AB7}
 .acct-sel-btn.active-bp{background:#633806;color:#EF9F27;border-color:#854F0B}
 .acct-sel-btn.active-rq{background:#27500A;color:#97C459;border-color:#3B6D11}
 .btn{padding:11px 20px;border-radius:8px;font-family:system-ui,-apple-system,sans-serif;font-size:14px;font-weight:500;cursor:pointer;border:0.5px solid rgba(255,255,255,0.12);background:#252629;color:#e8e8e4;transition:all .15s;display:inline-flex;align-items:center;justify-content:center;gap:6px}
@@ -108,13 +108,13 @@ select option{background:#252629}
 <div id="modal-root"></div>
 
 <script>
-const PROFILES=['me','wife','bp','rq'];
-const PROFILE_LABELS={me:'JG',wife:'HG',bp:'BP',rq:'RQ'};
-const PROFILE_COLORS={me:'#378ADD',wife:'#7F77DD',bp:'#BA7517',rq:'#639922'};
+const PROFILES=['jg','hg','bp','rq'];
+const PROFILE_LABELS={jg:'JG',hg:'HG',bp:'BP',rq:'RQ'};
+const PROFILE_COLORS={jg:'#378ADD',hg:'#7F77DD',bp:'#BA7517',rq:'#639922'};
 const CASINO_OFFER_TYPES=['Reload','Welcome','Free Spins','Cashback','Other'];
 
 let currentTab='log';
-let formAcct='me';
+let formAcct='jg';
 let casinoPending=false;
 let hasDeposit=false;
 let operator='JG';
