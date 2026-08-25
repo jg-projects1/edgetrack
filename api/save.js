@@ -116,7 +116,18 @@ export default async function handler(req, res) {
         const srv = serverMap.get(id);
         const inc = incomingMap.get(id);
         if (inc && srv) {
-          merged.push(srv.result !== 'Pending' && inc.result === 'Pending' ? srv : inc);
+          // Timestamp-based merge: whichever version was actually edited
+          // more recently wins, instead of "whoever's save request arrives
+          // last" (which let a stale device silently undo a fresh edit —
+          // e.g. a settled bet reverting back to Pending).
+          const srvTs = srv.txUpdatedAt || 0;
+          const incTs = inc.txUpdatedAt || 0;
+          if (incTs > srvTs) merged.push(inc);
+          else if (srvTs > incTs) merged.push(srv);
+          // Equal/both-zero timestamps (old data predating this field):
+          // fall back to the original heuristic — prefer a settled result
+          // over a stale Pending one.
+          else merged.push(srv.result !== 'Pending' && inc.result === 'Pending' ? srv : inc);
         } else if (inc) {
           merged.push(inc);
         } else if (srv) {
@@ -133,7 +144,20 @@ export default async function handler(req, res) {
       const merged = [];
       allIds.forEach(id => {
         if (deletedIds.has(id)) return;
-        merged.push(incomingMap.get(id) || serverMap.get(id));
+        const srv = serverMap.get(id);
+        const inc = incomingMap.get(id);
+        if (inc && srv) {
+          // Same timestamp-based principle as transactions — a stale
+          // device's cached copy of a session must never silently
+          // overwrite a newer one.
+          const srvTs = srv.csUpdatedAt || 0;
+          const incTs = inc.csUpdatedAt || 0;
+          merged.push(incTs >= srvTs ? inc : srv);
+        } else if (inc) {
+          merged.push(inc);
+        } else if (srv) {
+          merged.push(srv);
+        }
       });
       return merged;
     };
@@ -181,8 +205,21 @@ export default async function handler(req, res) {
       const deletedTxIds = new Set((incoming[pr].deletedIds || []).map(String));
       const deletedCasinoIds = new Set((incoming[pr].deletedCasinoIds || []).map(String));
 
-      const mergedTxs = mergeTxs(server.transactions || [], incoming[pr].transactions || [], deletedTxIds);
-      const mergedCasinoSessions = mergeCasino(server.casino || [], incoming[pr].casino || [], deletedCasinoIds);
+      // PERSISTENT TOMBSTONES: deletedIds sent in a single save request only
+      // protects THAT request's own merge — it was never remembered
+      // afterwards. So a second device that never knew about the deletion
+      // (still has the item in its local cache) would resurrect it on its
+      // next save, since nothing server-side recorded the delete. Fix:
+      // keep a running, ever-growing tombstone list on the server profile
+      // itself, union today's deletions into it, and filter every merge
+      // against the FULL history — not just this request's list.
+      const persistedDeletedTxIds = new Set((server._deletedTxIds || []).map(String));
+      const persistedDeletedCasinoIds = new Set((server._deletedCasinoIds || []).map(String));
+      deletedTxIds.forEach(id => persistedDeletedTxIds.add(id));
+      deletedCasinoIds.forEach(id => persistedDeletedCasinoIds.add(id));
+
+      const mergedTxs = mergeTxs(server.transactions || [], incoming[pr].transactions || [], persistedDeletedTxIds);
+      const mergedCasinoSessions = mergeCasino(server.casino || [], incoming[pr].casino || [], persistedDeletedCasinoIds);
 
       const fbMap = new Map();
       (server.freeBets || []).forEach(fb => fbMap.set(String(fb.id), fb));
@@ -204,7 +241,11 @@ export default async function handler(req, res) {
         bookies: mergedBookies,
         transactions: mergedTxs,
         freeBets: Array.from(fbMap.values()),
-        casino: mergedCasinoSessions
+        casino: mergedCasinoSessions,
+        // Persisted so future saves — from ANY device — keep honouring
+        // deletions made here, even if that device never saw them happen.
+        _deletedTxIds: Array.from(persistedDeletedTxIds),
+        _deletedCasinoIds: Array.from(persistedDeletedCasinoIds)
       };
 
       // Always write to the NEW key name. Old keys (edgetrack_me,
