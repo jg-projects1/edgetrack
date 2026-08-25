@@ -3279,6 +3279,15 @@ function selectCasinoBook(name){
   if(s)s.value=name;
   if(h)h.value=name;
   if(dd)dd.style.display='none';
+  // Auto-fill starting balance from this bookie's currently tracked
+  // balance for the selected profile, since that's almost always what
+  // you're about to sit down with.
+  const startBalEl=document.getElementById('c-start-bal');
+  const bal=state[casinoFormAcct]?.bookies?.[name]?.bal;
+  if(startBalEl&&bal!==undefined){
+    startBalEl.value=Number(bal).toFixed(2);
+    updateCasinoNet();
+  }
 }
 
 function updateCasinoNet(){
