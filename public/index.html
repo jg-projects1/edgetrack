@@ -2745,6 +2745,40 @@ function renderCasinoMonthly(){
 }
 
 
+function renderDailyOffersTable(){
+  const allSessions=getCasinoSessions();
+  // Build the last 7 calendar days as DD/MM/YYYY strings, matching how
+  // session dates are stored, most recent first.
+  const days=[];
+  for(let i=0;i<7;i++){
+    const d=new Date();
+    d.setDate(d.getDate()-i);
+    const ds=[String(d.getDate()).padStart(2,'0'),String(d.getMonth()+1).padStart(2,'0'),d.getFullYear()].join('/');
+    days.push(ds);
+  }
+  const counts={};
+  days.forEach(ds=>{counts[ds]={jg:0,jp:0};});
+  allSessions.forEach(s=>{
+    if(!counts[s.date])return; // outside the 7-day window
+    const op=s.operator==='JP'?'jp':'jg'; // default to JG if unset
+    counts[s.date][op]++;
+  });
+  const rows=days.map((ds,i)=>{
+    const label=i===0?'Today':i===1?'Yesterday':ds;
+    const c=counts[ds];
+    return '<tr><td style="font-size:12px;color:var(--text-secondary)">'+label+'</td>'
+      +'<td style="text-align:center;font-size:13px;font-weight:500">'+c.jg+'</td>'
+      +'<td style="text-align:center;font-size:13px;font-weight:500">'+c.jp+'</td></tr>';
+  }).join('');
+  return '<div class="card" style="margin-bottom:12px">'
+    +'<div class="card-header"><span class="card-title">Offers Completed — Last 7 Days</span></div>'
+    +'<div style="padding:4px 14px 10px">'
+    +'<table class="data-table" style="width:100%">'
+    +'<thead><tr><th>Day</th><th style="text-align:center">JG</th><th style="text-align:center">JP</th></tr></thead>'
+    +'<tbody>'+rows+'</tbody>'
+    +'</table></div></div>';
+}
+
 function renderCasinoSummaryView(){
   const allSessions=getCasinoSessions();
   const sessionPnl=s=>(s.startBal!==undefined&&s.endBal!==undefined&&(s.startBal!==0||s.endBal!==0))?s.endBal-s.startBal:(s.netProfit||0);
@@ -2771,7 +2805,8 @@ function renderCasinoSummaryView(){
     +'<div class="list-row-right" style="color:'+(pnl>=0?'#22C55E':'#F87171')+';font-size:12px">'+fmtS(pnl)+'</div>'
     +'</div>').join('');
 
-  return '<div class="metric-card" style="margin-bottom:12px">'
+  return renderDailyOffersTable()
+    +'<div class="metric-card" style="margin-bottom:12px">'
     +'<div class="metric-label"><i class="ti ti-cards" aria-hidden="true"></i>Combined Casino Summary</div>'
     +'<div class="metric-value '+(totalPnl>=0?'pos':'neg')+'">'+fmtS(totalPnl)+'</div>'
     +'<div class="metric-sub">'+totalSessions+' total sessions</div>'
