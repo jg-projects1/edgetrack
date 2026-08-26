@@ -1996,16 +1996,16 @@ function renderTxTable(txs,showAcct){
   const totalPages=Math.ceil(txs.length/PAGE);
   const paginationHtml=totalPages>1
     ?`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-top:0.5px solid var(--border-col);font-size:11px;color:var(--text-muted)">
-        <button onclick="window._txPage=Math.max(0,(window._txPage||0)-1);filterHistoryInPlace()" style="background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:4px 8px;font-size:11px;font-family:system-ui"${page===0?' disabled style="opacity:0.3"':''}>← Newer</button>
+        <button onclick="window._txPage=Math.max(0,(window._txPage||0)-1);filterHistoryInPlace(false)" style="background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:4px 8px;font-size:11px;font-family:system-ui"${page===0?' disabled style="opacity:0.3"':''}>← Newer</button>
         <span>${page+1} of ${totalPages} (${txs.length} transactions)</span>
-        <button onclick="window._txPage=Math.min(${totalPages-1},(window._txPage||0)+1);filterHistoryInPlace()" style="background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:4px 8px;font-size:11px;font-family:system-ui"${page>=totalPages-1?' disabled style="opacity:0.3"':''}>Older →</button>
+        <button onclick="window._txPage=Math.min(${totalPages-1},(window._txPage||0)+1);filterHistoryInPlace(false)" style="background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:4px 8px;font-size:11px;font-family:system-ui"${page>=totalPages-1?' disabled style="opacity:0.3"':''}>Older →</button>
       </div>`:'';
   const txsToRender=pageTxs;
   const txCount=txs.length;
   return`<div class="table-wrap"><table class="data-table"><thead><tr>
     <th>Date</th>${showAcct?'<th>Acct</th>':''}<th>Type</th><th>Bookie</th><th>Event</th><th>Result</th><th>P&L</th><th></th>
   </tr></thead><tbody>
-  ${txs.map(t=>{
+  ${txsToRender.map(t=>{
     const isBookieT=BOOKIE_TRANSFER.includes(t.type),isExchT=EXCHANGE_TRANSFER.includes(t.type),isAmend=t.type==='Balance Amendment',isBet=BET_ONLY.includes(t.type);
     const pnlStr=t.result==='Pending'?`<span class="warn">pending</span>`:`<span class="${(t.pnl||0)>=0?'pos':'neg'}">${fmtS(t.pnl||0)}</span>`;
     const resStr=t.result==='Won'?'<span class="pos">Won</span>':t.result==='Lost'?'<span class="neg">Lost</span>':t.result==='—'?'<span class="muted">—</span>':'<span class="warn">pending</span>';
@@ -2022,7 +2022,7 @@ function renderTxTable(txs,showAcct){
         <button class="btn-sm btn-sm-danger" onclick="deleteTx('${t._acct}',${t.id})" style="padding:3px 7px;font-size:10px"><i class="ti ti-trash" aria-hidden="true"></i></button>
       </td>
     </tr>`;
-  }).join('')}</tbody></table></div>`;
+  }).join('')}</tbody></table></div>${paginationHtml}`;
 }
 
 function deleteTx(acct,id){
@@ -2794,10 +2794,28 @@ function renderCasinoSummaryView(){
 }
 
 
-function renderCasinoHistory(){
-  const sessions=getCasinoSessions();
-  if(!sessions.length)return '<div class="empty">No new casino sessions yet — log one above</div>';
-  // Cap at 200 most recent for performance - use search to find older
+let casinoHistProfileFilter='all';
+let casinoHistBookieFilter='';
+
+function setCasinoHistProfileFilter(pr){
+  casinoHistProfileFilter=pr;
+  window._casinoHistPage=0;
+  const mc=document.getElementById('main-content');
+  if(mc)mc.innerHTML=renderCasino();
+}
+
+function filterCasinoHistoryInPlace(q){
+  casinoHistBookieFilter=q||'';
+  window._casinoHistPage=0;
+  const wrap=document.getElementById('casino-hist-results');
+  if(wrap)wrap.outerHTML=renderCasinoHistoryResults();
+}
+
+function renderCasinoHistoryResults(){
+  let sessions=getCasinoSessions();
+  if(casinoHistProfileFilter!=='all')sessions=sessions.filter(s=>s._acct===casinoHistProfileFilter);
+  if(casinoHistBookieFilter)sessions=sessions.filter(s=>(s.casino||'').toLowerCase().includes(casinoHistBookieFilter.toLowerCase()));
+  if(!sessions.length)return '<div id="casino-hist-results"><div class="empty">No sessions match this filter</div></div>';
   const PAGE=200;
   const _histPage=window._casinoHistPage||0;
   const pageSessions=sessions.slice(_histPage*PAGE,(_histPage+1)*PAGE);
@@ -2819,13 +2837,12 @@ function renderCasinoHistory(){
   const totalPages=Math.ceil(sessions.length/PAGE);
   const pagination=totalPages>1
     ?'<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-top:0.5px solid var(--border-col);font-size:11px;color:var(--text-muted)">'
-      +'<button onclick="window._casinoHistPage=Math.max(0,(_casinoHistPage||0)-1);setCasinoView(1)" style="background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:4px 8px;font-size:11px;font-family:system-ui"'+((_histPage===0)?'disabled style="opacity:0.3;cursor:default"':'')+'>← Newer</button>'
+      +'<button onclick="window._casinoHistPage=Math.max(0,(_casinoHistPage||0)-1);document.getElementById(\'casino-hist-results\').outerHTML=renderCasinoHistoryResults()" style="background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:4px 8px;font-size:11px;font-family:system-ui"'+((_histPage===0)?'disabled style="opacity:0.3;cursor:default"':'')+'>← Newer</button>'
       +'<span>'+(_histPage+1)+' of '+totalPages+' ('+sessions.length+' sessions)</span>'
-      +'<button onclick="window._casinoHistPage=Math.min(totalPages-1,(_casinoHistPage||0)+1);setCasinoView(1)" style="background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:4px 8px;font-size:11px;font-family:system-ui"'+(_histPage>=totalPages-1?'disabled style="opacity:0.3;cursor:default"':'')+'>Older →</button>'
+      +'<button onclick="window._casinoHistPage=Math.min('+(totalPages-1)+',(_casinoHistPage||0)+1);document.getElementById(\'casino-hist-results\').outerHTML=renderCasinoHistoryResults()" style="background:none;border:none;cursor:pointer;color:var(--text-secondary);padding:4px 8px;font-size:11px;font-family:system-ui"'+(_histPage>=totalPages-1?'disabled style="opacity:0.3;cursor:default"':'')+'>Older →</button>'
       +'</div>'
     :'';
-  return '<div class="card"><div class="card-header"><span class="card-title">Casino History</span><span style="font-size:10px;color:var(--text-muted)">'+sessions.length+' sessions</span></div>'
-    +'<div style="overflow-x:auto">'
+  return '<div id="casino-hist-results"><div style="overflow-x:auto">'
     +'<table class="data-table" style="width:100%;min-width:500px">'
     +'<thead><tr>'
     +'<th>Date</th><th>Acct</th><th>Op</th><th>Casino</th>'
@@ -2834,6 +2851,20 @@ function renderCasinoHistory(){
     +'</tr></thead>'
     +'<tbody>'+rows+'</tbody>'
     +'</table></div>'+pagination+'</div>';
+}
+
+function renderCasinoHistory(){
+  const sessions=getCasinoSessions();
+  if(!sessions.length)return '<div class="empty">No new casino sessions yet — log one above</div>';
+  const profBar='<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px">'
+    +'<button onclick="setCasinoHistProfileFilter(\'all\')" class="profile-btn '+(casinoHistProfileFilter==='all'?'active-both':'')+'" style="font-size:11px;padding:4px 10px">All</button>'
+    +PROFILES.map(pr=>'<button onclick="setCasinoHistProfileFilter(\''+pr+'\')" class="profile-btn '+(casinoHistProfileFilter===pr?'active-'+pr:'')+'" style="font-size:11px;padding:4px 10px">'+profileLabel(pr)+'</button>').join('')
+    +'</div>';
+  const bookieSearch='<input type="text" placeholder="Filter by bookie..." value="'+casinoHistBookieFilter.replace(/"/g,'&quot;')+'" oninput="filterCasinoHistoryInPlace(this.value)" style="width:100%;padding:7px 10px;border-radius:8px;background:var(--bg-input);border:0.5px solid var(--border-col);color:var(--text-primary);font-size:12px;font-family:system-ui;margin-bottom:10px"/>';
+  return '<div class="card"><div class="card-header"><span class="card-title">Casino History</span><span style="font-size:10px;color:var(--text-muted)">'+sessions.length+' sessions</span></div>'
+    +'<div style="padding:10px 14px 0">'+profBar+bookieSearch+'</div>'
+    +renderCasinoHistoryResults()
+    +'</div>';
 }
 
 
@@ -3012,7 +3043,8 @@ function logFromCalc(){
   },50);
 }
 
-function filterHistoryInPlace(){
+function filterHistoryInPlace(resetPage){
+  if(resetPage!==false)window._txPage=0;
   const typeFilter=document.getElementById('hist-type-filter')?.value||'';
   const resultFilter=document.getElementById('hist-result-filter')?.value||'';
   let txs=profileTxs(currentProfile);
