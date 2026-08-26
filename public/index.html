@@ -2710,6 +2710,49 @@ function renderCasino(){
 }
 
 
+function renderDailyOffersTable(){
+  const allSessions=getCasinoSessions();
+  // Build the last 7 calendar days as DD/MM/YYYY strings, matching how
+  // session dates are stored, most recent first.
+  const days=[];
+  for(let i=0;i<7;i++){
+    const d=new Date();
+    d.setDate(d.getDate()-i);
+    const ds=[String(d.getDate()).padStart(2,'0'),String(d.getMonth()+1).padStart(2,'0'),d.getFullYear()].join('/');
+    days.push(ds);
+  }
+  const counts={};
+  days.forEach(ds=>{counts[ds]={jg:0,jp:0};});
+  allSessions.forEach(s=>{
+    if(!counts[s.date])return; // outside the 7-day window
+    const op=s.operator==='JP'?'jp':'jg'; // default to JG if unset
+    counts[s.date][op]++;
+  });
+  // Built as a CSS grid rather than the shared .data-table class — that
+  // class carries a min-width:460px meant for wider multi-column tables,
+  // which pushed the JP column off-screen on a phone with no way to
+  // scroll to it. A 3-column grid fits naturally at any width instead.
+  const headerRow='<div style="display:grid;grid-template-columns:1fr 60px 60px;gap:4px;padding:6px 0;border-bottom:0.5px solid var(--border-col)">'
+    +'<div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.3px">Day</div>'
+    +'<div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.3px;text-align:center">JG</div>'
+    +'<div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.3px;text-align:center">JP</div>'
+    +'</div>';
+  const rows=days.map((ds,i)=>{
+    const label=i===0?'Today':i===1?'Yesterday':ds;
+    const c=counts[ds];
+    return '<div style="display:grid;grid-template-columns:1fr 60px 60px;gap:4px;padding:7px 0;border-bottom:0.5px solid var(--border-col2)">'
+      +'<div style="font-size:12px;color:var(--text-secondary)">'+label+'</div>'
+      +'<div style="text-align:center;font-size:13px;font-weight:500">'+c.jg+'</div>'
+      +'<div style="text-align:center;font-size:13px;font-weight:500">'+c.jp+'</div>'
+      +'</div>';
+  }).join('');
+  return '<div class="card" style="margin-bottom:12px">'
+    +'<div class="card-header"><span class="card-title">Offers Completed — Last 7 Days</span></div>'
+    +'<div style="padding:4px 14px 6px">'
+    +headerRow+rows
+    +'</div></div>';
+}
+
 function renderCasinoMonthly(){
   const allSessions=getCasinoSessions();
   const monthlyMap={};
@@ -2735,48 +2778,14 @@ function renderCasinoMonthly(){
       +'<td style="text-align:right;font-size:12px;font-weight:500;color:'+(mo.total>=0?'#22C55E':'#F87171')+'">'+fmtS(mo.total)+'</td>'
       +'</tr>';
   }).join('');
-  return '<div class="card">'
+  return '<div class="card" style="margin-bottom:12px">'
     +'<div class="card-header"><span class="card-title">Monthly Casino P&L by Operator</span></div>'
     +'<div style="overflow-x:auto">'
     +'<table class="data-table" style="width:100%">'
     +'<thead><tr><th>Month</th><th style="text-align:right">JG (£)</th><th style="text-align:right">JP (£)</th><th style="text-align:right">Total (£)</th></tr></thead>'
     +'<tbody>'+rows+'</tbody>'
-    +'</table></div></div>';
-}
-
-
-function renderDailyOffersTable(){
-  const allSessions=getCasinoSessions();
-  // Build the last 7 calendar days as DD/MM/YYYY strings, matching how
-  // session dates are stored, most recent first.
-  const days=[];
-  for(let i=0;i<7;i++){
-    const d=new Date();
-    d.setDate(d.getDate()-i);
-    const ds=[String(d.getDate()).padStart(2,'0'),String(d.getMonth()+1).padStart(2,'0'),d.getFullYear()].join('/');
-    days.push(ds);
-  }
-  const counts={};
-  days.forEach(ds=>{counts[ds]={jg:0,jp:0};});
-  allSessions.forEach(s=>{
-    if(!counts[s.date])return; // outside the 7-day window
-    const op=s.operator==='JP'?'jp':'jg'; // default to JG if unset
-    counts[s.date][op]++;
-  });
-  const rows=days.map((ds,i)=>{
-    const label=i===0?'Today':i===1?'Yesterday':ds;
-    const c=counts[ds];
-    return '<tr><td style="font-size:12px;color:var(--text-secondary)">'+label+'</td>'
-      +'<td style="text-align:center;font-size:13px;font-weight:500">'+c.jg+'</td>'
-      +'<td style="text-align:center;font-size:13px;font-weight:500">'+c.jp+'</td></tr>';
-  }).join('');
-  return '<div class="card" style="margin-bottom:12px">'
-    +'<div class="card-header"><span class="card-title">Offers Completed — Last 7 Days</span></div>'
-    +'<div style="padding:4px 14px 10px">'
-    +'<table class="data-table" style="width:100%">'
-    +'<thead><tr><th>Day</th><th style="text-align:center">JG</th><th style="text-align:center">JP</th></tr></thead>'
-    +'<tbody>'+rows+'</tbody>'
-    +'</table></div></div>';
+    +'</table></div></div>'
+    +renderDailyOffersTable();
 }
 
 function renderCasinoSummaryView(){
@@ -2805,8 +2814,7 @@ function renderCasinoSummaryView(){
     +'<div class="list-row-right" style="color:'+(pnl>=0?'#22C55E':'#F87171')+';font-size:12px">'+fmtS(pnl)+'</div>'
     +'</div>').join('');
 
-  return renderDailyOffersTable()
-    +'<div class="metric-card" style="margin-bottom:12px">'
+  return '<div class="metric-card" style="margin-bottom:12px">'
     +'<div class="metric-label"><i class="ti ti-cards" aria-hidden="true"></i>Combined Casino Summary</div>'
     +'<div class="metric-value '+(totalPnl>=0?'pos':'neg')+'">'+fmtS(totalPnl)+'</div>'
     +'<div class="metric-sub">'+totalSessions+' total sessions</div>'
