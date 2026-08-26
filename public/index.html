@@ -2768,23 +2768,31 @@ function renderCasinoMonthly(){
   });
   const monthKeys=Object.keys(monthlyMap).sort().reverse();
   if(!monthKeys.length)return '<div class="empty">No casino sessions yet</div>';
+  // Built as a CSS grid rather than the shared .data-table class — same
+  // reasoning as the Daily Offers table below it: .data-table carries a
+  // min-width:460px meant for wider tables, which forced horizontal
+  // scrolling here for no good reason on a 4-column table.
+  const headerRow='<div style="display:grid;grid-template-columns:1fr 70px 70px 70px;gap:4px;padding:6px 0;border-bottom:0.5px solid var(--border-col)">'
+    +'<div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.3px">Month</div>'
+    +'<div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.3px;text-align:right">JG</div>'
+    +'<div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.3px;text-align:right">JP</div>'
+    +'<div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.3px;text-align:right">Total</div>'
+    +'</div>';
   const rows=monthKeys.map(k=>{
     const mo=monthlyMap[k];
     const label=k.slice(0,4)+'/'+k.slice(5);
-    return '<tr>'
-      +'<td style="font-size:12px">'+label+'</td>'
-      +'<td style="text-align:right;font-size:12px;color:'+(mo.JG>=0?'#22C55E':'#F87171')+'">'+fmtS(mo.JG)+'</td>'
-      +'<td style="text-align:right;font-size:12px;color:'+(mo.JP>=0?'#22C55E':'#F87171')+'">'+fmtS(mo.JP)+'</td>'
-      +'<td style="text-align:right;font-size:12px;font-weight:500;color:'+(mo.total>=0?'#22C55E':'#F87171')+'">'+fmtS(mo.total)+'</td>'
-      +'</tr>';
+    return '<div style="display:grid;grid-template-columns:1fr 70px 70px 70px;gap:4px;padding:7px 0;border-bottom:0.5px solid var(--border-col2)">'
+      +'<div style="font-size:12px">'+label+'</div>'
+      +'<div style="text-align:right;font-size:12px;color:'+(mo.JG>=0?'#22C55E':'#F87171')+'">'+fmtS(mo.JG)+'</div>'
+      +'<div style="text-align:right;font-size:12px;color:'+(mo.JP>=0?'#22C55E':'#F87171')+'">'+fmtS(mo.JP)+'</div>'
+      +'<div style="text-align:right;font-size:12px;font-weight:500;color:'+(mo.total>=0?'#22C55E':'#F87171')+'">'+fmtS(mo.total)+'</div>'
+      +'</div>';
   }).join('');
   return '<div class="card" style="margin-bottom:12px">'
     +'<div class="card-header"><span class="card-title">Monthly Casino P&L by Operator</span></div>'
-    +'<div style="overflow-x:auto">'
-    +'<table class="data-table" style="width:100%">'
-    +'<thead><tr><th>Month</th><th style="text-align:right">JG (£)</th><th style="text-align:right">JP (£)</th><th style="text-align:right">Total (£)</th></tr></thead>'
-    +'<tbody>'+rows+'</tbody>'
-    +'</table></div></div>'
+    +'<div style="padding:4px 14px 6px">'
+    +headerRow+rows
+    +'</div></div>'
     +renderDailyOffersTable();
 }
 
@@ -2839,9 +2847,17 @@ function renderCasinoSummaryView(){
 
 let casinoHistProfileFilter='all';
 let casinoHistBookieFilter='';
+let casinoHistOperatorFilter='all';
 
 function setCasinoHistProfileFilter(pr){
   casinoHistProfileFilter=pr;
+  window._casinoHistPage=0;
+  const mc=document.getElementById('main-content');
+  if(mc)mc.innerHTML=renderCasino();
+}
+
+function setCasinoHistOperatorFilter(op){
+  casinoHistOperatorFilter=op;
   window._casinoHistPage=0;
   const mc=document.getElementById('main-content');
   if(mc)mc.innerHTML=renderCasino();
@@ -2857,6 +2873,7 @@ function filterCasinoHistoryInPlace(q){
 function renderCasinoHistoryResults(){
   let sessions=getCasinoSessions();
   if(casinoHistProfileFilter!=='all')sessions=sessions.filter(s=>s._acct===casinoHistProfileFilter);
+  if(casinoHistOperatorFilter!=='all')sessions=sessions.filter(s=>(s.operator||'JG')===casinoHistOperatorFilter);
   if(casinoHistBookieFilter)sessions=sessions.filter(s=>(s.casino||'').toLowerCase().includes(casinoHistBookieFilter.toLowerCase()));
   if(!sessions.length)return '<div id="casino-hist-results"><div class="empty">No sessions match this filter</div></div>';
   const PAGE=200;
@@ -2903,9 +2920,14 @@ function renderCasinoHistory(){
     +'<button onclick="setCasinoHistProfileFilter(\'all\')" class="profile-btn '+(casinoHistProfileFilter==='all'?'active-both':'')+'" style="font-size:11px;padding:4px 10px">All</button>'
     +PROFILES.map(pr=>'<button onclick="setCasinoHistProfileFilter(\''+pr+'\')" class="profile-btn '+(casinoHistProfileFilter===pr?'active-'+pr:'')+'" style="font-size:11px;padding:4px 10px">'+profileLabel(pr)+'</button>').join('')
     +'</div>';
+  const opBar='<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px">'
+    +'<button onclick="setCasinoHistOperatorFilter(\'all\')" class="profile-btn '+(casinoHistOperatorFilter==='all'?'active-both':'')+'" style="font-size:11px;padding:4px 10px">All operators</button>'
+    +'<button onclick="setCasinoHistOperatorFilter(\'JG\')" class="profile-btn '+(casinoHistOperatorFilter==='JG'?'active-jg':'')+'" style="font-size:11px;padding:4px 10px">JG</button>'
+    +'<button onclick="setCasinoHistOperatorFilter(\'JP\')" class="profile-btn '+(casinoHistOperatorFilter==='JP'?'active-hg':'')+'" style="font-size:11px;padding:4px 10px">JP</button>'
+    +'</div>';
   const bookieSearch='<input type="text" placeholder="Filter by bookie..." value="'+casinoHistBookieFilter.replace(/"/g,'&quot;')+'" oninput="filterCasinoHistoryInPlace(this.value)" style="width:100%;padding:7px 10px;border-radius:8px;background:var(--bg-input);border:0.5px solid var(--border-col);color:var(--text-primary);font-size:12px;font-family:system-ui;margin-bottom:10px"/>';
   return '<div class="card"><div class="card-header"><span class="card-title">Casino History</span><span style="font-size:10px;color:var(--text-muted)">'+sessions.length+' sessions</span></div>'
-    +'<div style="padding:10px 14px 0">'+profBar+bookieSearch+'</div>'
+    +'<div style="padding:10px 14px 0">'+profBar+opBar+bookieSearch+'</div>'
     +renderCasinoHistoryResults()
     +'</div>';
 }
