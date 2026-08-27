@@ -349,24 +349,24 @@ function renderHistory(){
   const sessions=allSessions();
   if(!sessions.length)return`<div class="empty">No casino sessions yet</div>`;
   return`<div class="card"><div class="card-header"><span class="card-title">All sessions</span><span style="font-size:11px;color:#9A9590">${sessions.length} total</span></div>
-  ${sessions.map(s=>`<div class="list-row">
+  ${sessions.map(s=>{
+    const hasBalances=s.startBal!==undefined&&s.endBal!==undefined;
+    return`<div class="list-row">
     <div class="list-row-left">
-      <div class="list-row-title">${s.casino}${s.pending?` <span style="font-size:10px;color:#F0A500">⏳ pending</span>`:''}</div>
+      <div class="list-row-title">${s.casino}</div>
       <div class="list-row-meta">
-        <span class="pill" style="background:#3D4349;color:#C8C5BF">${s.offerType}</span>
         ${acctPill(s._acct)}
         <span style="font-size:10px;color:#9A9590">${s.date}</span>
-        ${s.operator?`<span style="font-size:10px;font-weight:600;color:${s.operator==='JG'?'#F5C842':'#86EFAC'}">${s.operator}</span>`:''}${s.wager?`<span style="font-size:10px;color:#9A9590">£${s.wager} wagered</span>`:''}
-        ${s.deposit?`<span style="font-size:10px;color:#F0A500">dep £${s.deposit}</span>`:''}
-        ${s.bonusWin?`<span style="font-size:10px;color:#9A9590">bonus £${s.bonusWin.toFixed(2)}</span>`:''}
+        ${s.operator?`<span style="font-size:10px;font-weight:600;color:${s.operator==='JG'?'#F5C842':'#86EFAC'}">${s.operator}</span>`:''}
+        ${hasBalances?`<span style="font-size:10px;color:#9A9590">Start ${fmt(s.startBal)}</span><span style="font-size:10px;color:#9A9590">End ${fmt(s.endBal)}</span>`:''}
       </div>
     </div>
     <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
       <div class="list-row-right ${s.netProfit>=0?'pos':'neg'}">${fmtS(s.netProfit)}</div>
-      ${s.pending?`<button class="btn-sm btn-sm-edit" onclick="addBonus('${s._acct}',${s.id})">Add bonus</button>`:''}
       <button class="btn-sm btn-sm-danger" onclick="deleteSession('${s._acct}',${s.id})" style="padding:3px 7px"><i class="ti ti-trash"></i></button>
     </div>
-  </div>`).join('')}</div>`;
+  </div>`;
+  }).join('')}</div>`;
 }
 
 function addBonus(acct,id){
