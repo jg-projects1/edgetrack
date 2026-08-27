@@ -348,25 +348,35 @@ function resetForm(){
 function renderHistory(){
   const sessions=allSessions();
   if(!sessions.length)return`<div class="empty">No casino sessions yet</div>`;
-  return`<div class="card"><div class="card-header"><span class="card-title">All sessions</span><span style="font-size:11px;color:#9A9590">${sessions.length} total</span></div>
-  ${sessions.map(s=>{
+  const rows=sessions.map(s=>{
     const hasBalances=s.startBal!==undefined&&s.endBal!==undefined;
-    return`<div class="list-row">
-    <div class="list-row-left">
-      <div class="list-row-title">${s.casino}</div>
-      <div class="list-row-meta">
-        ${acctPill(s._acct)}
-        <span style="font-size:10px;color:#9A9590">${s.date}</span>
-        ${s.operator?`<span style="font-size:10px;font-weight:600;color:${s.operator==='JG'?'#F5C842':'#86EFAC'}">${s.operator}</span>`:''}
-        ${hasBalances?`<span style="font-size:10px;color:#9A9590">Start ${fmt(s.startBal)}</span><span style="font-size:10px;color:#9A9590">End ${fmt(s.endBal)}</span>`:''}
-      </div>
-    </div>
-    <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
-      <div class="list-row-right ${s.netProfit>=0?'pos':'neg'}">${fmtS(s.netProfit)}</div>
-      <button class="btn-sm btn-sm-danger" onclick="deleteSession('${s._acct}',${s.id})" style="padding:3px 7px"><i class="ti ti-trash"></i></button>
-    </div>
-  </div>`;
-  }).join('')}</div>`;
+    return`<tr>
+      <td style="padding:10px 12px;font-size:12px;color:#C8C5BF;white-space:nowrap">${s.date}</td>
+      <td style="padding:10px 12px;white-space:nowrap"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${profileColor(s._acct)};margin-right:5px"></span><span style="font-size:12px;color:#F0EDE8">${profileLabel(s._acct)}</span></td>
+      <td style="padding:10px 12px;font-size:12px;color:${s.operator==='JP'?'#86EFAC':'#F5C842'};font-weight:600">${s.operator||'JG'}</td>
+      <td style="padding:10px 12px;font-size:12px;color:#F0EDE8;white-space:nowrap">${s.casino}</td>
+      <td style="padding:10px 12px;font-size:12px;color:#C8C5BF;text-align:right;white-space:nowrap">${hasBalances?fmt(s.startBal):'—'}</td>
+      <td style="padding:10px 12px;font-size:12px;color:#C8C5BF;text-align:right;white-space:nowrap">${hasBalances?fmt(s.endBal):'—'}</td>
+      <td style="padding:10px 12px;font-size:12px;font-weight:500;text-align:right;white-space:nowrap" class="${s.netProfit>=0?'pos':'neg'}">${fmtS(s.netProfit)}</td>
+      <td style="padding:10px 12px;text-align:center"><button class="btn-sm btn-sm-danger" onclick="deleteSession('${s._acct}',${s.id})" style="padding:3px 7px"><i class="ti ti-trash"></i></button></td>
+    </tr>`;
+  }).join('');
+  return`<div class="card"><div class="card-header"><span class="card-title">All sessions</span><span style="font-size:11px;color:#9A9590">${sessions.length} total</span></div>
+  <div style="overflow-x:auto">
+  <table style="width:100%;border-collapse:collapse;min-width:640px">
+    <thead><tr style="border-bottom:0.5px solid rgba(255,255,255,0.09)">
+      <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:500;color:#9A9590;text-transform:uppercase;letter-spacing:.3px">Date</th>
+      <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:500;color:#9A9590;text-transform:uppercase;letter-spacing:.3px">Acct</th>
+      <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:500;color:#9A9590;text-transform:uppercase;letter-spacing:.3px">Op</th>
+      <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:500;color:#9A9590;text-transform:uppercase;letter-spacing:.3px">Casino</th>
+      <th style="padding:8px 12px;text-align:right;font-size:10px;font-weight:500;color:#9A9590;text-transform:uppercase;letter-spacing:.3px">Start (£)</th>
+      <th style="padding:8px 12px;text-align:right;font-size:10px;font-weight:500;color:#9A9590;text-transform:uppercase;letter-spacing:.3px">End (£)</th>
+      <th style="padding:8px 12px;text-align:right;font-size:10px;font-weight:500;color:#9A9590;text-transform:uppercase;letter-spacing:.3px">P&L (£)</th>
+      <th></th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+  </div></div>`;
 }
 
 function addBonus(acct,id){
