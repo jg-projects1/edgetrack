@@ -828,6 +828,41 @@ function migrateLegacy(){
 }
 
 let currentProfile='jg',currentTab='dashboard',tradeSubTab='log',formAccount='jg',selectedBetType='',exchTransferBank='jg',isUnderlay=false;
+// PREP FOR LAZY-LOADING CASINO DATA (see load-sports.js): starts true
+// so nothing changes while /api/load is still the endpoint in use — it
+// always includes casino data, so this flag is already true the moment
+// loadData() finishes and every branch below that checks it just passes
+// straight through. It only starts actually mattering once index.html
+// is switched over to load-sports.js (which omits casino), at which
+// point this flips to false until ensureCasinoLoaded() fills it in.
+let casinoDataLoaded=true;
+function ensureCasinoLoaded(onReady){
+  if(casinoDataLoaded){onReady();return;}
+  fetch('/api/load-casino').then(r=>{
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    return r.json();
+  }).then(json=>{
+    if(json.ok&&json.data){
+      PROFILES.forEach(pr=>{
+        state[pr].casino=json.data[pr]?.casino||[];
+      });
+    }else{
+      // Response came back but with nothing usable — still unblock the
+      // UI with empty arrays rather than leaving it stuck loading.
+      PROFILES.forEach(pr=>{if(!state[pr].casino)state[pr].casino=[];});
+    }
+    casinoDataLoaded=true;
+    if(typeof invalidateCasinoCache==='function')invalidateCasinoCache();
+    onReady();
+  }).catch(e=>{
+    console.error('Casino lazy-load failed:',e);
+    // Don't set casinoDataLoaded=true on failure — leave it false so
+    // the next attempt (next tab open, next dashboard render) retries
+    // rather than silently treating a failed fetch as "loaded, empty".
+    PROFILES.forEach(pr=>{if(!state[pr].casino)state[pr].casino=[];});
+    onReady();
+  });
+}
 let recentBookies=[]; // tracks last 8 used bookies
 let lastSavedTrade=null; // for quick duplicate after save
 let _duplicateMode=false; // true when form was opened via duplicate
@@ -1214,14 +1249,14 @@ function renderDashboard(){
     <div class="metric-card" style="grid-column:span 2">
       <div class="metric-label" style="display:flex;align-items:center;justify-content:space-between">
         <span>Combined P&L
-        ${!_serverLoaded?'<span style="font-size:9px;color:var(--text-warn);background:rgba(186,117,23,0.15);padding:2px 7px;border-radius:10px;margin-left:6px">Updating...</span>':''}</span>
+        ${(!_serverLoaded||!casinoDataLoaded)?'<span style="font-size:9px;color:var(--text-warn);background:rgba(186,117,23,0.15);padding:2px 7px;border-radius:10px;margin-left:6px">Updating...</span>':''}</span>
         <button onclick="toggleDashVisibility()" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:2px 4px" title="${_dashHidden?'Show figures':'Hide figures'}"><i id="dash-vis-icon" class="ti ${_dashHidden?'ti-eye':'ti-eye-off'}"></i></button>
       </div>
-      <div class="metric-value ${combinedPnl>=0?'pos':'neg'}" data-sensitive="${fmtS(combinedPnl)}">${_dashHidden?'••••••':fmtS(combinedPnl)}</div>
+      <div class="metric-value ${combinedPnl>=0?'pos':'neg'}" data-sensitive="${fmtS(combinedPnl)}">${_dashHidden?'••••••':(casinoDataLoaded?fmtS(combinedPnl):fmtS(combinedSports)+'…')}</div>
       <div class="metric-sub" style="display:flex;gap:10px;flex-wrap:wrap">
         <span>All accounts · ${totalTrades} trades</span>
         <span>Sports: <span style="color:${combinedSports>=0?'#22C55E':'#F87171'}" data-sensitive="${fmtS(combinedSports)}">${_dashHidden?'••••':fmtS(combinedSports)}</span></span>
-        <span>Casino: <span style="color:${combinedCasino>=0?'#22C55E':'#F87171'}" data-sensitive="${fmtS(combinedCasino)}">${_dashHidden?'••••':fmtS(combinedCasino)}</span></span>
+        <span>Casino: ${casinoDataLoaded?`<span style="color:${combinedCasino>=0?'#22C55E':'#F87171'}" data-sensitive="${fmtS(combinedCasino)}">${_dashHidden?'••••':fmtS(combinedCasino)}</span>`:'<span style="color:var(--text-muted)">loading…</span>'}</span>
       </div>
     </div>
     <div class="metric-card" style="grid-column:span 2">
@@ -2095,6 +2130,11 @@ function deleteTx(acct,id){
 
 
 function exportCasinoCSV(){
+  if(!casinoDataLoaded){
+    showToast('Preparing casino export…');
+    ensureCasinoLoaded(()=>exportCasinoCSV());
+    return;
+  }
   const sessions=PROFILES.flatMap(p=>(state[p].casino||[]).map(s=>({...s,_acct:p}))).sort((a,b)=>parseDate(a.date)-parseDate(b.date));
   if(!sessions.length){showToast('No casino sessions to export','error');return;}
   const headers=['Date','Account','Operator','Casino/Bookie','Starting Balance','Ending Balance','P&L','Notes'];
@@ -3231,6 +3271,13 @@ function render(){
       const ql=document.getElementById('qc-lodds');if(ql&&_l)ql.value=_l;
       if(_s&&_b&&_l)calcQuick();
       setTimeout(initMonthlyChart,80);
+      // Casino portion of Combined P&L shows a loading state until this
+      // resolves (see the metric-card markup above) — this only ever
+      // actually fetches once casinoDataLoaded starts as false, i.e.
+      // once load-sports.js is wired in; today it's a same-tick no-op.
+      if(!casinoDataLoaded){
+        ensureCasinoLoaded(()=>{ if(currentTab==='dashboard')render(); });
+      }
     }catch(e){
       el.innerHTML='<div style="padding:20px;color:#F87171;font-size:13px">Error: '+e.message+'</div>';
     }
@@ -3241,7 +3288,14 @@ function render(){
     if(tradeSubTab==='log')setTimeout(bindFormEvents,50);
   }
   else if(currentTab==='accounts')el.innerHTML=renderAccounts();
-  else if(currentTab==='casino')el.innerHTML=renderCasino();
+  else if(currentTab==='casino'){
+    if(casinoDataLoaded){
+      el.innerHTML=renderCasino();
+    }else{
+      el.innerHTML='<div class="loading" style="padding:60px 20px;text-align:center;color:var(--text-muted)"><div class="spinner"></div><div style="margin-top:10px;font-size:13px">Loading casino data…</div></div>';
+      ensureCasinoLoaded(()=>{ if(currentTab==='casino')render(); });
+    }
+  }
   else el.innerHTML=renderDashboard();
   updateBadge();
 }
