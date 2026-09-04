@@ -404,10 +404,23 @@ async function loadData(){
               // Filter locally deleted sessions from cache
               const deletedSet=new Set((casinoDeletedIds[pr]||[]).map(String));
               state[pr].casino=state[pr].casino.filter(s=>!deletedSet.has(String(s.id)));
-            } else {state[pr].casino=[];}
+            }
+            // else: leave state[pr].casino undefined — this cached
+            // snapshot predates casino ever being cached (or it was
+            // cleared), so casinoDataLoaded below correctly stays
+            // false and ensureCasinoLoaded() fetches it fresh when
+            // actually needed, instead of silently treating "never
+            // cached" as "loaded, empty".
             if(!state[pr].freeBets)state[pr].freeBets=[];
           }
         });
+        // If every profile's cached snapshot already had real casino
+        // data, treat it as already loaded — a returning user with a
+        // good local cache shouldn't see a loading spinner for data
+        // that's already sitting right here in memory.
+        if(PROFILES.every(pr=>Array.isArray(state[pr]?.casino))){
+          casinoDataLoaded=true;
+        }
         if(parsed.exchanges)state.exchanges=JSON.parse(JSON.stringify(parsed.exchanges));
         if(parsed._deletedTxIds){
           PROFILES.forEach(pr=>{if(parsed._deletedTxIds[pr])deletedTxIds[pr]=parsed._deletedTxIds[pr];});
@@ -436,8 +449,7 @@ async function loadData(){
 
 async function fetchFromServer(){
   try{
-    const sportsRes = await fetch('/api/load?t='+Date.now());
-    const casinoRes = null;
+    const sportsRes = await fetch('/api/load-sports?t='+Date.now());
     if(!sportsRes.ok)throw new Error('HTTP '+sportsRes.status);
     const sportsJson=await sportsRes.json();
     if(sportsJson.ok&&sportsJson.data){
@@ -519,9 +531,13 @@ async function fetchFromServer(){
           state[pr].bookies=mergedBk;
           state[pr].transactions=merged;
           state[pr].freeBets=saved[pr].freeBets||state[pr].freeBets||[];
-          // Casino data now comes from split key via /api/load
-          if(saved[pr].casino)state[pr].casino=JSON.parse(JSON.stringify(saved[pr].casino));
-          else if(!state[pr].casino)state[pr].casino=[];
+          // Casino no longer comes from this endpoint — load-sports.js
+          // omits it entirely (see ensureCasinoLoaded()). Deliberately
+          // NOT touching state[pr].casino here at all: the previous
+          // logic's fallback (`else if(!state[pr].casino)...=[]`) would
+          // have silently turned "not loaded yet" into "loaded, empty"
+          // on every background sync, defeating the whole point of the
+          // casinoDataLoaded flag. Leave it exactly as-is.
         });
         if(saved.exchanges)state.exchanges=JSON.parse(JSON.stringify(saved.exchanges));
         lastServerState=JSON.parse(JSON.stringify(saved));
@@ -747,7 +763,8 @@ const DEFAULT_BOOKIES=[
   'Bwin','Casumo','Casushi','Copybet','Coral','Dabble','Dazn','Double Bubble',
   'Dragonbet','Dream Vegas','Fabulous Bingo','Fabulous Vegas','Fairplay','Fanteam','Fitzbet','Fitzdares',
   'Foxy','Fruit Kings','Gala Casino','Geoff Banks','Grand Ivy','Grosvenor','GRP','Heart Bingo',
-  'Highbet','Hollywoodbets','Hot Streak','Jackpot Joy','Jackpot Mobile','Ken Howells','Kitty Bingo','Kwiff','Ladbet','Ladbrokes','Leovegas','Livescorebet','LottoGo','Lottoland','Lottomart','Lucky Pants','Luckymate',
+  'Highbet','Hollywoodbets','Hot Streak','Jackpot Joy','Jackpot Mobile','Ken Howells','Kitty Bingo','Kwiff',
+  'Ladbrokes','Leovegas','Livescorebet','LottoGo','Lottoland','Lottomart','Lucky Pants','Luckymate',
   'Magical Vegas','Mecca Bingo','Mecca Games','Mega Riches','Meta Betting','Midnite','Monopoly','MrBen','MrQ',
   'MrVegas','Netbet','Octobet','Paddy Power','Parimatch','Party Casino','Peachy Games','Pink Casino',
   'Planet Sport Bet','Play Bingo','PlayOjo','Priced Up','Puntit','Quick Bet','Quinnbet',
@@ -822,19 +839,21 @@ function migrateLegacy(){
   });
   if(!state.exchanges){state.exchanges={};EXCHANGES.forEach(e=>state.exchanges[e]=0);}
   EXCHANGES.forEach(e=>{if(state.exchanges[e]===undefined)state.exchanges[e]=0;});
-  PROFILES.forEach(pr=>{if(!state[pr].casino)state[pr].casino=[];});
+  // Casino is lazy-loaded now (see ensureCasinoLoaded()) — deliberately
+  // NOT touching state[pr].casino here. migrateLegacy() runs on every
+  // single load, so a line here forcing it to [] would silently undo
+  // the "not loaded" vs "loaded, empty" distinction on every page load.
   // Bookie migration save disabled — was overwriting correct balances
 }
 
 let currentProfile='jg',currentTab='dashboard',tradeSubTab='log',formAccount='jg',selectedBetType='',exchTransferBank='jg',isUnderlay=false;
-// PREP FOR LAZY-LOADING CASINO DATA (see load-sports.js): starts true
-// so nothing changes while /api/load is still the endpoint in use — it
-// always includes casino data, so this flag is already true the moment
-// loadData() finishes and every branch below that checks it just passes
-// straight through. It only starts actually mattering once index.html
-// is switched over to load-sports.js (which omits casino), at which
-// point this flips to false until ensureCasinoLoaded() fills it in.
-let casinoDataLoaded=true;
+// LAZY-LOADING CASINO DATA: index.html now calls load-sports.js (which
+// omits casino) instead of load.js, so casino genuinely isn't loaded
+// upfront anymore. Starts false — ensureCasinoLoaded() fetches it the
+// first time it's actually needed (Casino tab opened, Dashboard's
+// background refresh, or CSV export). See load-sports.js for the
+// matching server-side change.
+let casinoDataLoaded=false;
 function ensureCasinoLoaded(onReady){
   if(casinoDataLoaded){onReady();return;}
   fetch('/api/load-casino').then(r=>{
@@ -1502,7 +1521,7 @@ function settleBet(acct,id,result){
   // Immediately write to localStorage so refresh picks up settled state
   try{
     const snap={exchanges:state.exchanges,_deletedTxIds:deletedTxIds,_casinoDeletedIds:casinoDeletedIds};
-    PROFILES.forEach(pr=>{snap[pr]={bank:state[pr].bank,bankUpdatedAt:state[pr].bankUpdatedAt||0,bookies:state[pr].bookies,transactions:state[pr].transactions,freeBets:state[pr].freeBets||[],casino:state[pr].casino||[]};});
+    PROFILES.forEach(pr=>{snap[pr]={bank:state[pr].bank,bankUpdatedAt:state[pr].bankUpdatedAt||0,bookies:state[pr].bookies,transactions:state[pr].transactions,freeBets:state[pr].freeBets||[]};if(Array.isArray(state[pr].casino))snap[pr].casino=state[pr].casino;});
     localStorage.setItem('mbe_state',JSON.stringify(snap));
   }catch(e){}
   if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('settle');
@@ -2114,7 +2133,7 @@ function deleteTx(acct,id){
   // Write to localStorage immediately so refresh doesn't restore deleted tx
   try{
     const snap={exchanges:state.exchanges,_deletedTxIds:deletedTxIds,_casinoDeletedIds:casinoDeletedIds};
-    PROFILES.forEach(pr=>{snap[pr]={bank:state[pr].bank,bankUpdatedAt:state[pr].bankUpdatedAt||0,bookies:state[pr].bookies,transactions:state[pr].transactions,freeBets:state[pr].freeBets||[],casino:state[pr].casino||[]};});
+    PROFILES.forEach(pr=>{snap[pr]={bank:state[pr].bank,bankUpdatedAt:state[pr].bankUpdatedAt||0,bookies:state[pr].bookies,transactions:state[pr].transactions,freeBets:state[pr].freeBets||[]};if(Array.isArray(state[pr].casino))snap[pr].casino=state[pr].casino;});
     localStorage.setItem('mbe_state',JSON.stringify(snap));
   }catch(e){}
   if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}
