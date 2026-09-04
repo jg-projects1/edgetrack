@@ -591,7 +591,7 @@ async function drainQueue(){
   setSyncStatus('syncing');
   const entry=_saveQueue[0]; // try oldest first
   try{
-    const sportsRes=await fetch('/api/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(entry.state.sports)});
+    const sportsRes=await fetch('/api/save-sports',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(entry.state.sports)});
     if(!sportsRes.ok)throw new Error('Retry save failed: '+sportsRes.status);
     _saveQueue.shift(); // remove successfully sent item
     persistQueue();
@@ -610,17 +610,43 @@ async function drainQueue(){
 }
 
 function buildSavePayload(){
+  // Sports-only — casino saves are handled immediately by
+  // saveCasinoOnly(), not queued through this retry mechanism. The
+  // `casino` object this used to build here was dead code anyway: it
+  // was captured into every queued entry but drainQueue() never
+  // actually sent it anywhere.
   const sports={exchanges:state.exchanges,_source:'queue',_serverState:lastServerState};
   PROFILES.forEach(pr=>{
     sports[pr]={bank:state[pr]?.bank||0,bankUpdatedAt:state[pr]?.bankUpdatedAt||0,bookies:state[pr]?.bookies||{},
       transactions:state[pr]?.transactions||[],freeBets:state[pr]?.freeBets||[],
-      casino:state[pr]?.casino||[],
-      deletedIds:deletedTxIds[pr]||[],
-      deletedCasinoIds:casinoDeletedIds[pr]||[]};
+      deletedIds:deletedTxIds[pr]||[]};
   });
-  const casino={};
-  PROFILES.forEach(pr=>{casino[pr]={casino:state[pr]?.casino||[],deletedIds:casinoDeletedIds[pr]||[]};});
-  return{sports,casino};
+  return{sports};
+}
+
+// Casino session create/delete route through the dedicated casino
+// endpoint (same one casino.html uses) rather than the generic sports
+// save. This is the correct fix for a real bug found while auditing:
+// the generic saveData() never sent deletedCasinoIds, so deleting a
+// casino session via the main app could silently fail to persist and
+// reappear on a future sync. save-casino.js already handles casino
+// tombstones properly AND independently recomputes the bookie balance
+// delta from session diffing server-side — so this function only needs
+// to send casino + deletedIds, not bookies.
+async function saveCasinoOnly(source='casino'){
+  setSyncStatus('syncing');
+  try{
+    const casinoState={};
+    PROFILES.forEach(pr=>{casinoState[pr]={casino:state[pr]?.casino||[],deletedIds:casinoDeletedIds[pr]||[]};});
+    const res=await fetch('/api/save-casino',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(casinoState)});
+    if(!res.ok)throw new Error('Casino save failed: '+res.status);
+    PROFILES.forEach(pr=>{casinoDeletedIds[pr]=[];});
+    setSyncStatus('synced');
+  }catch(e){
+    console.error('Casino save error:',e);
+    setSyncStatus('error');
+    showToast('⚠ Casino save failed — check connection and try again','error');
+  }
 }
 
 async function saveData(source='unknown'){
@@ -634,7 +660,8 @@ async function saveData(source='unknown'){
   setSyncStatus('syncing');
   window._lastSaveSource=source;
   try{
-    // Build sports-only state (no casino sessions)
+    // Sports-only payload — casino is now handled entirely by
+    // saveCasinoOnly() via /api/save-casino, and never sent here.
     const sportsState={exchanges:state.exchanges,_source:source,_serverState:lastServerState};
     PROFILES.forEach(pr=>{
       sportsState[pr]={
@@ -643,13 +670,10 @@ async function saveData(source='unknown'){
         bookies:state[pr]?.bookies||{},
         transactions:state[pr]?.transactions||[],
         freeBets:state[pr]?.freeBets||[],
-        casino:state[pr]?.casino||[],
         deletedIds:deletedTxIds[pr]||[]
       };
     });
-    // Casino included in sportsState payload
-    // Single save — casino now included in sports payload
-    const sportsRes=await fetch('/api/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(sportsState)});
+    const sportsRes=await fetch('/api/save-sports',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(sportsState)});
     if(!sportsRes.ok){
       let errBody='';
       try{const j=await sportsRes.json();errBody=j.error||'';}catch(_){}
@@ -699,13 +723,12 @@ async function saveData(source='unknown'){
           });
           mergedTxs.sort((a,b)=>{const da=parseDate(a.date),db=parseDate(b.date);return db!==da?db-da:b.id-a.id;});
           state[pr].transactions=mergedTxs;
-          // Casino data from server - filter out locally deleted sessions
-          if(sportsJson.data[pr].casino){
-            const deletedSet=new Set((casinoDeletedIds[pr]||[]).map(String));
-            state[pr].casino=JSON.parse(JSON.stringify(
-              sportsJson.data[pr].casino.filter(s=>!deletedSet.has(String(s.id)))
-            ));
-          } else if(!state[pr].casino){state[pr].casino=[];}
+          // Casino no longer comes back in this response at all —
+          // save-sports.js is deliberately casino-blind (see
+          // saveCasinoOnly() for how casino actually persists).
+          // Deliberately NOT touching state[pr].casino here — same
+          // reasoning as fetchFromServer() and migrateLegacy(): doing so
+          // would silently convert "not loaded" into "loaded, empty".
           if(!state[pr].freeBets)state[pr].freeBets=[];
         }
       });
@@ -716,14 +739,26 @@ async function saveData(source='unknown'){
       try{
         const _sd=JSON.parse(JSON.stringify(sportsJson.data));
         _sd._deletedTxIds=deletedTxIds;
-        // Ensure casino is included in localStorage snapshot
+        // Only include casino in the cache if it's genuinely loaded —
+        // omitting the key (rather than defaulting to []) preserves the
+        // "not loaded" signal for next session's cache-restore. This is
+        // the third, differently-shaped instance of a bug already fixed
+        // twice elsewhere (fetchFromServer's snap[pr] builders) — found
+        // here because it uses `_sd`, not `snap`, so the earlier
+        // pattern-search for `snap[pr]=` didn't catch it.
         PROFILES.forEach(pr=>{
-          if(_sd[pr]&&!_sd[pr].casino)_sd[pr].casino=state[pr].casino||[];
+          if(_sd[pr]&&Array.isArray(state[pr].casino))_sd[pr].casino=state[pr].casino;
         });
         localStorage.setItem('mbe_state',JSON.stringify(_sd));
       }catch(e){}
     }
-    PROFILES.forEach(pr=>{casinoDeletedIds[pr]=[];deletedTxIds[pr]=[];});
+    // Only clear tx deletion tracking here — casino deletion tracking is
+    // saveCasinoOnly()'s exclusive responsibility now. Clearing it here
+    // too would risk a race: if a casino delete is still in flight (or
+    // retrying after a failure) when an unrelated sports save completes,
+    // this would prematurely wipe the tombstone tracking before the
+    // casino delete ever actually persisted.
+    PROFILES.forEach(pr=>{deletedTxIds[pr]=[];});
     // Clear save queue on successful save
     _saveQueue=[];
     persistQueue();
@@ -3487,7 +3522,7 @@ function saveCasinoSession(){
     notes:document.getElementById('c-notes')?.value||'',_acct:casinoFormAcct,
     csUpdatedAt:Date.now(),
   });
-  if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('casinoSession');
+  if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveCasinoOnly('casinoSession');
   invalidateCasinoCache();showToast('Casino session saved!');
   // Smart update: only re-render casino tab content
   if(currentTab==='casino'){
@@ -3532,7 +3567,7 @@ function deleteCasinoSession(acct,id){
     if(!casinoDeletedIds[pr])casinoDeletedIds[pr]=[];
     casinoDeletedIds[pr].push(id);
   });
-  if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('deleteCasino');
+  if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveCasinoOnly('deleteCasino');
   invalidateCasinoCache();showToast('Session deleted');
   // Smart update: remove just that row
   const casinoRow=document.querySelector('tr[data-csid="'+id+'"]');
