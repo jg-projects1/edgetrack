@@ -82,6 +82,21 @@ export default async function handler(req, res) {
       report.split_keys[pr] = analyseSessions(sessions);
     });
 
+    // By operator (JG vs JP) within the LIVE split keys — this is the
+    // piece the plain per-profile counts above can't show. Sessions
+    // with no operator field at all default to JG (matches how the
+    // rest of the app treats missing operator data).
+    report.by_operator = {};
+    profiles.forEach((pr, i) => {
+      const sessions = splitKeys[i]?.casino || [];
+      const jgSessions = sessions.filter(s => !s.operator || s.operator === 'JG');
+      const jpSessions = sessions.filter(s => s.operator === 'JP');
+      report.by_operator[pr] = {
+        JG: analyseSessions(jgSessions),
+        JP: analyseSessions(jpSessions)
+      };
+    });
+
     // Sample first session from each source for JG
     const sampleCasino = casinoKey?.me?.casino?.[0];
     const sampleSplit = splitKeys[0]?.casino?.[0];
