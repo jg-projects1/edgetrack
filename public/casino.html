@@ -502,7 +502,7 @@ function renderMyProgress(){
     <div class="card-body">
       <div class="metric-label">Last 14 days</div>
       <div class="metric-value ${windowTotal>=0?'pos':'neg'}">${fmtS(windowTotal)}</div>
-      <div class="metric-sub">${windowSessions.length} sessions</div>
+      <div class="metric-sub">${windowSessions.length} sessions${windowSessions.length?` · avg ${fmtS(windowTotal/windowSessions.length)}/session`:''}</div>
       ${days.length?`<div class="month-wrap" style="margin-top:14px">${bars}</div>`:`<div style="font-size:12px;color:#9A9590;margin-top:10px">No sessions logged in the last 30 days</div>`}
     </div>
   </div>`;
@@ -532,9 +532,11 @@ function renderSummary(){
   const byCasino={};
   sessions.filter(s=>(s.operator||'JG')===byCasinoOpFilter).forEach(s=>{
     if(!s.casino)return;
-    byCasino[s.casino]=(byCasino[s.casino]||0)+sessionPnl(s);
+    if(!byCasino[s.casino])byCasino[s.casino]={pnl:0,count:0};
+    byCasino[s.casino].pnl+=sessionPnl(s);
+    byCasino[s.casino].count+=1;
   });
-  const topCasinos=Object.entries(byCasino).sort((a,b)=>b[1]-a[1]);
+  const topCasinos=Object.entries(byCasino).sort((a,b)=>b[1].pnl-a[1].pnl);
 
   // By casino, rolling last 30 days — same operator filter, but this
   // catches a bookie that's gone cold (or heated up) recently, which
@@ -546,9 +548,12 @@ function renderSummary(){
     if(!s.casino)return;
     const d=parseDMY30(s.date);
     if(!d||d<cutoff30)return;
-    byCasino30[s.casino]=(byCasino30[s.casino]||0)+sessionPnl(s);
+    if(!byCasino30[s.casino])byCasino30[s.casino]={pnl:0,count:0};
+    byCasino30[s.casino].pnl+=sessionPnl(s);
+    byCasino30[s.casino].count+=1;
   });
-  const topCasinos30=Object.entries(byCasino30).sort((a,b)=>b[1]-a[1]);
+  const topCasinos30=Object.entries(byCasino30).sort((a,b)=>b[1].pnl-a[1].pnl);
+
 
   const monthRows=months.map(k=>{
     const mo=monthly[k];
@@ -592,7 +597,7 @@ function renderSummary(){
         <button onclick="byCasinoOpFilter='JP';render()" style="padding:4px 10px;border-radius:6px;border:0.5px solid rgba(255,255,255,0.09);background:${byCasinoOpFilter==='JP'?'#14532D':'#3D4349'};color:${byCasinoOpFilter==='JP'?'#86EFAC':'#C8C5BF'};font-family:system-ui;font-size:11px;font-weight:500;cursor:pointer">JP</button>
       </div>
     </div>
-    ${topCasinos30.length?topCasinos30.map(([name,pnl])=>`<div class="list-row"><div class="list-row-left"><div class="list-row-title">${name}</div></div><div class="list-row-right ${pnl>=0?'pos':'neg'}">${fmtS(pnl)}</div></div>`).join(''):`<div class="empty">No ${byCasinoOpFilter} sessions in the last 14 days</div>`}
+    ${topCasinos30.length?topCasinos30.map(([name,d])=>`<div class="list-row"><div class="list-row-left"><div class="list-row-title">${name}</div><div style="font-size:10px;color:#9A9590">${d.count} session${d.count===1?'':'s'}</div></div><div class="list-row-right ${d.pnl>=0?'pos':'neg'}">${fmtS(d.pnl)}</div></div>`).join(''):`<div class="empty">No ${byCasinoOpFilter} sessions in the last 14 days</div>`}
   </div>
   <div class="card" style="margin-bottom:10px">
     <div class="card-header">
@@ -602,7 +607,7 @@ function renderSummary(){
         <button onclick="byCasinoOpFilter='JP';render()" style="padding:4px 10px;border-radius:6px;border:0.5px solid rgba(255,255,255,0.09);background:${byCasinoOpFilter==='JP'?'#14532D':'#3D4349'};color:${byCasinoOpFilter==='JP'?'#86EFAC':'#C8C5BF'};font-family:system-ui;font-size:11px;font-weight:500;cursor:pointer">JP</button>
       </div>
     </div>
-    ${topCasinos.length?topCasinos.map(([name,pnl])=>`<div class="list-row"><div class="list-row-left"><div class="list-row-title">${name}</div></div><div class="list-row-right ${pnl>=0?'pos':'neg'}">${fmtS(pnl)}</div></div>`).join(''):`<div class="empty">No ${byCasinoOpFilter} sessions yet</div>`}
+    ${topCasinos.length?topCasinos.map(([name,d])=>`<div class="list-row"><div class="list-row-left"><div class="list-row-title">${name}</div><div style="font-size:10px;color:#9A9590">${d.count} session${d.count===1?'':'s'}</div></div><div class="list-row-right ${d.pnl>=0?'pos':'neg'}">${fmtS(d.pnl)}</div></div>`).join(''):`<div class="empty">No ${byCasinoOpFilter} sessions yet</div>`}
   </div>
   <div class="card">
     <div class="card-header"><span class="card-title">By Account</span></div>
