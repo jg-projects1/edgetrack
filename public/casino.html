@@ -524,7 +524,7 @@ function renderSummary(){
     if(!monthly[k])monthly[k]={JG:0,JP:0};
     monthly[k][s.operator||'JG']+=sessionPnl(s);
   });
-  const months=Object.keys(monthly).sort();
+  const months=Object.keys(monthly).sort().reverse(); // most recent first
 
   // By casino — filtered to the selected operator
   const byCasino={};
@@ -533,6 +533,20 @@ function renderSummary(){
     byCasino[s.casino]=(byCasino[s.casino]||0)+sessionPnl(s);
   });
   const topCasinos=Object.entries(byCasino).sort((a,b)=>b[1]-a[1]);
+
+  // By casino, rolling last 30 days — same operator filter, but this
+  // catches a bookie that's gone cold (or heated up) recently, which
+  // the all-time view above can hide behind a big historical total.
+  const parseDMY30=d=>{const p=(d||'').split('/');return p.length===3?new Date(+p[2],+p[1]-1,+p[0]):null;};
+  const cutoff30=new Date();cutoff30.setHours(0,0,0,0);cutoff30.setDate(cutoff30.getDate()-29);
+  const byCasino30={};
+  sessions.filter(s=>(s.operator||'JG')===byCasinoOpFilter).forEach(s=>{
+    if(!s.casino)return;
+    const d=parseDMY30(s.date);
+    if(!d||d<cutoff30)return;
+    byCasino30[s.casino]=(byCasino30[s.casino]||0)+sessionPnl(s);
+  });
+  const topCasinos30=Object.entries(byCasino30).sort((a,b)=>b[1]-a[1]);
 
   const monthRows=months.map(k=>{
     const mo=monthly[k];
@@ -577,6 +591,16 @@ function renderSummary(){
       </div>
     </div>
     ${topCasinos.length?topCasinos.map(([name,pnl])=>`<div class="list-row"><div class="list-row-left"><div class="list-row-title">${name}</div></div><div class="list-row-right ${pnl>=0?'pos':'neg'}">${fmtS(pnl)}</div></div>`).join(''):`<div class="empty">No ${byCasinoOpFilter} sessions yet</div>`}
+  </div>
+  <div class="card" style="margin-bottom:10px">
+    <div class="card-header">
+      <span class="card-title">By Casino — Last 30 Days</span>
+      <div style="display:flex;gap:5px">
+        <button onclick="byCasinoOpFilter='JG';render()" style="padding:4px 10px;border-radius:6px;border:0.5px solid rgba(255,255,255,0.09);background:${byCasinoOpFilter==='JG'?'#7A4F00':'#3D4349'};color:${byCasinoOpFilter==='JG'?'#F5C842':'#C8C5BF'};font-family:system-ui;font-size:11px;font-weight:500;cursor:pointer">JG</button>
+        <button onclick="byCasinoOpFilter='JP';render()" style="padding:4px 10px;border-radius:6px;border:0.5px solid rgba(255,255,255,0.09);background:${byCasinoOpFilter==='JP'?'#14532D':'#3D4349'};color:${byCasinoOpFilter==='JP'?'#86EFAC':'#C8C5BF'};font-family:system-ui;font-size:11px;font-weight:500;cursor:pointer">JP</button>
+      </div>
+    </div>
+    ${topCasinos30.length?topCasinos30.map(([name,pnl])=>`<div class="list-row"><div class="list-row-left"><div class="list-row-title">${name}</div></div><div class="list-row-right ${pnl>=0?'pos':'neg'}">${fmtS(pnl)}</div></div>`).join(''):`<div class="empty">No ${byCasinoOpFilter} sessions in the last 30 days</div>`}
   </div>
   <div class="card">
     <div class="card-header"><span class="card-title">By Account</span></div>
