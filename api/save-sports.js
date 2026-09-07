@@ -59,6 +59,8 @@ export default async function handler(req, res) {
       'gala': 'Gala Casino',
       'bet st george': 'BetStGeorge',
       'betstgeorge': 'BetStGeorge',
+      'grosvenor casinos': 'Grosvenor',
+      'planet sports': 'Planet Sport Bet',
     };
     const dedupeBookies = (bk) => {
       if (!bk) return bk;
