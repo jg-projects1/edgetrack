@@ -472,7 +472,9 @@ function renderMyProgress(){
     daily[s.date].count+=1;
     daily[s.date].pnl+=sessionPnl(s);
   });
-  const days=Object.keys(daily).sort((a,b)=>daily[a].sortDate-daily[b].sortDate);
+  // Most recent day first (left), oldest last (right) — so "today" is
+  // immediately visible without needing to scroll the row.
+  const days=Object.keys(daily).sort((a,b)=>daily[b].sortDate-daily[a].sortDate);
   const maxAbs=Math.max(1,...days.map(d=>Math.abs(daily[d].pnl)));
 
   const bars=days.map(d=>{
