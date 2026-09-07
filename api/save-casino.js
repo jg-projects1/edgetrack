@@ -38,11 +38,31 @@ export default async function handler(req, res) {
       if (!r.ok) throw new Error(`KV set error on ${key}: ${r.status}`);
     };
 
+    // Same rename map used for bookie balances elsewhere, applied here to
+    // the `casino` field stored on each session record — so a session
+    // logged/synced with a stale name (e.g. "Grosvenor Casinos") gets
+    // normalized to the canonical name before it's ever merged in,
+    // rather than sitting there as a permanent separate entry.
+    const CASINO_NAME_RENAMES = {
+      'hot streak casino': 'Hot Streak',
+      'gala': 'Gala Casino',
+      'bet st george': 'BetStGeorge',
+      'betstgeorge': 'BetStGeorge',
+      'grosvenor casinos': 'Grosvenor',
+      'planet sports': 'Planet Sport Bet',
+    };
+    const normalizeCasinoField = (s) => {
+      if (!s.casino) return s;
+      const canonical = CASINO_NAME_RENAMES[s.casino.toLowerCase()];
+      return canonical && canonical !== s.casino ? { ...s, casino: canonical } : s;
+    };
+
     await Promise.all(profiles.map(async pr => {
       if (!incoming[pr]) return;
 
       const sportKey = `edgetrack_${pr}`;
       let sportsData = await kvGet(sportKey) || { bank: 0, bookies: {}, transactions: [], freeBets: [], casino: [] };
+      if (sportsData.casino) sportsData.casino = sportsData.casino.map(normalizeCasinoField);
 
       // SAFETY NET: fold in any stray sessions still sitting under the old
       // key (edgetrack_me/edgetrack_wife) that load-casino.js hasn't
@@ -52,7 +72,7 @@ export default async function handler(req, res) {
         const legacyData = await kvGet(`edgetrack_${legacySuffix}`);
         const legacyCasino = legacyData?.casino || [];
         const knownIds = new Set((sportsData.casino || []).map(s => String(s.id)));
-        const strayFromLegacy = legacyCasino.filter(s => !knownIds.has(String(s.id)));
+        const strayFromLegacy = legacyCasino.filter(s => !knownIds.has(String(s.id))).map(normalizeCasinoField);
         if (strayFromLegacy.length > 0) {
           sportsData.casino = [...(sportsData.casino || []), ...strayFromLegacy];
           if (!sportsData.bookies) sportsData.bookies = {};
@@ -68,7 +88,7 @@ export default async function handler(req, res) {
       }
 
       const serverSessions = sportsData.casino || [];
-      const incomingSessions = incoming[pr]?.casino || [];
+      const incomingSessions = (incoming[pr]?.casino || []).map(normalizeCasinoField);
       const requestDeletedIds = new Set((incoming[pr]?.deletedIds || []).map(String));
 
       // PERSISTENT TOMBSTONE: same principle as the main app's save.js —
