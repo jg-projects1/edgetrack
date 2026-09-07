@@ -798,7 +798,7 @@ const DEFAULT_BOOKIES=[
   'Bwin','Casumo','Casushi','Copybet','Coral','Dabble','Dazn','Double Bubble',
   'Dragonbet','Dream Vegas','Fabulous Bingo','Fabulous Vegas','Fairplay','Fanteam','Fitzbet','Fitzdares',
   'Foxy','Fruit Kings','Gala Casino','Geoff Banks','Grand Ivy','Grosvenor','GRP','Heart Bingo',
-  'Highbet','Hollywoodbets','Hot Streak','Jackpot Joy','Jackpot Mobile','Ken Howells','Kitty Bingo','Kwiff','Ladbet',
+  'Highbet','Hollywoodbets','Hot Streak','Jackpot Joy','Jackpot Mobile','Ken Howells','Kitty Bingo','Kwiff',
   'Ladbrokes','Leovegas','Livescorebet','LottoGo','Lottoland','Lottomart','Lucky Pants','Luckymate',
   'Magical Vegas','Mecca Bingo','Mecca Games','Mega Riches','Meta Betting','Midnite','Monopoly','MrBen','MrQ',
   'MrVegas','Netbet','Octobet','Paddy Power','Parimatch','Party Casino','Peachy Games','Pink Casino',
@@ -3595,7 +3595,7 @@ async function loadApp(){
   _theme=savedTheme;
   document.documentElement.setAttribute('data-theme',savedTheme==='dark'?'':savedTheme); // restore any queued saves from last session
   // Version check — clear localStorage cache if bookie list version changed
-  const BOOKIE_VERSION='v9';
+  const BOOKIE_VERSION='v10';
   if(localStorage.getItem('mbe_bookie_ver')!==BOOKIE_VERSION){
     localStorage.removeItem('mbe_state');
     localStorage.setItem('mbe_bookie_ver',BOOKIE_VERSION);
