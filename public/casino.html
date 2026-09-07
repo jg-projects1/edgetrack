@@ -117,7 +117,7 @@ let currentTab='log';
 let formAcct='jg';
 let casinoPending=false;
 let hasDeposit=false;
-let operator='JG';
+let operator='JP';
 let progressOp='JP'; // which operator's "My Progress" is being viewed on Summary — defaults to JP
 let syncTimeout=null;
 let fullState={jg:{casino:[]},hg:{casino:[]},bp:{casino:[]},rq:{casino:[]}};
@@ -346,7 +346,8 @@ function resetForm(){
   const dd=document.getElementById('c-dropdown');if(dd)dd.style.display='none';
   const net=document.getElementById('c-net');if(net){net.textContent='£0.00';net.style.color='#22C55E';}
 }
-let historyOpFilter='all'; // 'all' | 'JG' | 'JP'
+let historyOpFilter='JP'; // 'all' | 'JG' | 'JP'
+let byCasinoOpFilter='JP'; // 'JG' | 'JP' — which operator's "By Casino" breakdown is shown
 function setHistoryOpFilter(op){
   historyOpFilter=op;
   const mc=document.getElementById('main-content');
@@ -525,9 +526,9 @@ function renderSummary(){
   });
   const months=Object.keys(monthly).sort();
 
-  // By casino
+  // By casino — filtered to the selected operator
   const byCasino={};
-  sessions.forEach(s=>{
+  sessions.filter(s=>(s.operator||'JG')===byCasinoOpFilter).forEach(s=>{
     if(!s.casino)return;
     byCasino[s.casino]=(byCasino[s.casino]||0)+sessionPnl(s);
   });
@@ -567,10 +568,16 @@ function renderSummary(){
     <div class="card-header"><span class="card-title">Monthly P&L by Operator</span></div>
     ${monthRows}
   </div>`:''}
-  ${topCasinos.length?`<div class="card" style="margin-bottom:10px">
-    <div class="card-header"><span class="card-title">By Casino — Highest Wins</span></div>
-    ${topCasinos.map(([name,pnl])=>`<div class="list-row"><div class="list-row-left"><div class="list-row-title">${name}</div></div><div class="list-row-right ${pnl>=0?'pos':'neg'}">${fmtS(pnl)}</div></div>`).join('')}
-  </div>`:''}
+  <div class="card" style="margin-bottom:10px">
+    <div class="card-header">
+      <span class="card-title">By Casino — Highest Wins</span>
+      <div style="display:flex;gap:5px">
+        <button onclick="byCasinoOpFilter='JG';render()" style="padding:4px 10px;border-radius:6px;border:0.5px solid rgba(255,255,255,0.09);background:${byCasinoOpFilter==='JG'?'#7A4F00':'#3D4349'};color:${byCasinoOpFilter==='JG'?'#F5C842':'#C8C5BF'};font-family:system-ui;font-size:11px;font-weight:500;cursor:pointer">JG</button>
+        <button onclick="byCasinoOpFilter='JP';render()" style="padding:4px 10px;border-radius:6px;border:0.5px solid rgba(255,255,255,0.09);background:${byCasinoOpFilter==='JP'?'#14532D':'#3D4349'};color:${byCasinoOpFilter==='JP'?'#86EFAC':'#C8C5BF'};font-family:system-ui;font-size:11px;font-weight:500;cursor:pointer">JP</button>
+      </div>
+    </div>
+    ${topCasinos.length?topCasinos.map(([name,pnl])=>`<div class="list-row"><div class="list-row-left"><div class="list-row-title">${name}</div></div><div class="list-row-right ${pnl>=0?'pos':'neg'}">${fmtS(pnl)}</div></div>`).join(''):`<div class="empty">No ${byCasinoOpFilter} sessions yet</div>`}
+  </div>
   <div class="card">
     <div class="card-header"><span class="card-title">By Account</span></div>
     ${PROFILES.map(p=>{const pnl=casinoPnl(p);return`<div class="list-row"><div class="list-row-left"><div class="list-row-title" style="display:flex;align-items:center;gap:8px"><div style="width:7px;height:7px;border-radius:50%;background:${profileColor(p)}"></div>${profileLabel(p)}</div></div><div class="list-row-right ${pnl>=0?'pos':'neg'}">${fmtS(pnl)}</div></div>`;}).join('')}
