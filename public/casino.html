@@ -502,7 +502,7 @@ function renderMyProgress(){
     <div class="card-body">
       <div class="metric-label">Last 14 days</div>
       <div class="metric-value ${windowTotal>=0?'pos':'neg'}">${fmtS(windowTotal)}</div>
-      <div class="metric-sub">${windowSessions.length} sessions${windowSessions.length?` · avg ${fmtS(windowTotal/windowSessions.length)}/session`:''}</div>
+      <div class="metric-sub">${windowSessions.length} sessions</div>
       ${days.length?`<div class="month-wrap" style="margin-top:14px">${bars}</div>`:`<div style="font-size:12px;color:#9A9590;margin-top:10px">No sessions logged in the last 30 days</div>`}
     </div>
   </div>`;
