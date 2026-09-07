@@ -38,14 +38,48 @@ export default async function handler(req, res) {
       if (!r.ok) throw new Error(`KV set error on ${key}: ${r.status}`);
     };
 
+    // Same rename map used for bookie balances elsewhere — but here it's
+    // applied to the `casino` field stored directly on each SESSION
+    // record. Merging bookie balances alone (done elsewhere) never
+    // touched these individual session strings, so "Grosvenor" and
+    // "Grosvenor Casinos" kept showing as separate lines in any
+    // breakdown that groups by session.casino, even after the bookie
+    // balances themselves were correctly merged.
+    const CASINO_NAME_RENAMES = {
+      'hot streak casino': 'Hot Streak',
+      'gala': 'Gala Casino',
+      'bet st george': 'BetStGeorge',
+      'betstgeorge': 'BetStGeorge',
+      'grosvenor casinos': 'Grosvenor',
+      'planet sports': 'Planet Sport Bet',
+    };
+    const normalizeSessionNames = (sessions) => {
+      let changed = false;
+      const out = sessions.map(s => {
+        if (!s.casino) return s;
+        const canonical = CASINO_NAME_RENAMES[s.casino.toLowerCase()];
+        if (canonical && canonical !== s.casino) {
+          changed = true;
+          return { ...s, casino: canonical };
+        }
+        return s;
+      });
+      return { sessions: out, changed };
+    };
+
     const profileData = await Promise.all(
       profiles.map(async pr => {
         const data = await kvGet(`edgetrack_${pr}`);
         const legacySuffix = LEGACY_KEY_SUFFIX[pr];
 
         if (!legacySuffix) {
-          // bp/rq — no legacy key, nothing to reconcile
-          return { pr, casino: data?.casino || [] };
+          // bp/rq — no legacy key, still needs session-name normalization
+          const sessions = data?.casino || [];
+          const { sessions: normalized, changed } = normalizeSessionNames(sessions);
+          if (changed) {
+            await kvSet(`edgetrack_${pr}`, { ...(data || { bank: 0, bookies: {}, transactions: [], freeBets: [] }), casino: normalized });
+          }
+          return { pr, casino: normalized };
         }
 
         const legacyData = await kvGet(`edgetrack_${legacySuffix}`);
@@ -56,8 +90,12 @@ export default async function handler(req, res) {
         const strayFromLegacy = legacyCasino.filter(s => !newIds.has(String(s.id)));
 
         if (strayFromLegacy.length === 0) {
-          // Already fully reconciled — nothing stray sitting in the old key
-          return { pr, casino: newCasino };
+          // Already fully reconciled — still check for stale session names
+          const { sessions: normalized, changed } = normalizeSessionNames(newCasino);
+          if (changed) {
+            await kvSet(`edgetrack_${pr}`, { ...data, casino: normalized });
+          }
+          return { pr, casino: normalized };
         }
 
         // Found sessions that only exist under the old key (logged via this
@@ -66,19 +104,24 @@ export default async function handler(req, res) {
         // since that balance update only ever landed on the OLD key's
         // bookies object and the new key never saw it.
         const reconciled = [...newCasino, ...strayFromLegacy];
-        const updatedProfile = { ...(data || { bank: 0, bookies: {}, transactions: [], freeBets: [] }), casino: reconciled };
+        const { sessions: normalizedReconciled, changed: namesChanged } = normalizeSessionNames(reconciled);
+        const updatedProfile = { ...(data || { bank: 0, bookies: {}, transactions: [], freeBets: [] }), casino: normalizedReconciled };
         if (!updatedProfile.bookies) updatedProfile.bookies = {};
         strayFromLegacy.forEach(s => {
           const net = (s.startBal !== undefined && s.endBal !== undefined)
             ? (s.endBal - s.startBal)
             : (s.netProfit || 0);
-          if (!updatedProfile.bookies[s.casino]) updatedProfile.bookies[s.casino] = { bal: 0, status: 'Active', notes: '' };
-          updatedProfile.bookies[s.casino].bal = (updatedProfile.bookies[s.casino].bal || 0) + net;
-          updatedProfile.bookies[s.casino].balUpdatedAt = Date.now();
+          // Use the (possibly renamed) canonical name for the bookie
+          // balance key too, so a stray Grosvenor Casinos session doesn't
+          // create a fresh, separate balance entry under the old name.
+          const bookieKey = CASINO_NAME_RENAMES[(s.casino || '').toLowerCase()] || s.casino;
+          if (!updatedProfile.bookies[bookieKey]) updatedProfile.bookies[bookieKey] = { bal: 0, status: 'Active', notes: '' };
+          updatedProfile.bookies[bookieKey].bal = (updatedProfile.bookies[bookieKey].bal || 0) + net;
+          updatedProfile.bookies[bookieKey].balUpdatedAt = Date.now();
         });
         await kvSet(`edgetrack_${pr}`, updatedProfile);
 
-        return { pr, casino: reconciled };
+        return { pr, casino: normalizedReconciled };
       })
     );
 
