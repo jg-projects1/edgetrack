@@ -97,6 +97,40 @@ export default async function handler(req, res) {
       };
     });
 
+    // Daily breakdown by operator, LIVE split keys only — reads jg/hg
+    // directly rather than the frozen edgetrack_me/edgetrack_wife keys,
+    // so this is accurate for all four profiles, not just bp/rq.
+    // Filterable by month via ?month=09&year=2026 (defaults to current
+    // month if not specified).
+    const now = new Date();
+    const targetMonth = String(req.query?.month || (now.getMonth() + 1)).padStart(2, '0');
+    const targetYear = String(req.query?.year || now.getFullYear());
+    report.daily_by_operator = {};
+    profiles.forEach((pr, i) => {
+      const sessions = splitKeys[i]?.casino || [];
+      const daily = {};
+      sessions.forEach(s => {
+        const parts = (s.date || '').split('/');
+        if (parts.length !== 3) return;
+        const [dd, mm, yyyy] = parts;
+        if (mm !== targetMonth || yyyy !== targetYear) return;
+        const op = s.operator === 'JP' ? 'JP' : 'JG';
+        if (!daily[s.date]) daily[s.date] = { JG: { count: 0, pnl: 0 }, JP: { count: 0, pnl: 0 } };
+        daily[s.date][op].count += 1;
+        daily[s.date][op].pnl += sessionPnl(s);
+      });
+      // Round and sort chronologically by day-of-month
+      const sortedDays = Object.keys(daily).sort((a, b) => parseInt(a.split('/')[0]) - parseInt(b.split('/')[0]));
+      const dailyRounded = {};
+      sortedDays.forEach(d => {
+        dailyRounded[d] = {
+          JG: { count: daily[d].JG.count, pnl: Math.round(daily[d].JG.pnl * 100) / 100 },
+          JP: { count: daily[d].JP.count, pnl: Math.round(daily[d].JP.pnl * 100) / 100 }
+        };
+      });
+      report.daily_by_operator[pr] = dailyRounded;
+    });
+
     // Sample first session from each source for JG
     const sampleCasino = casinoKey?.me?.casino?.[0];
     const sampleSplit = splitKeys[0]?.casino?.[0];
