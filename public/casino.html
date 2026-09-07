@@ -118,6 +118,7 @@ let formAcct='jg';
 let casinoPending=false;
 let hasDeposit=false;
 let operator='JG';
+let progressOp='JP'; // which operator's "My Progress" is being viewed on Summary — defaults to JP
 let syncTimeout=null;
 let fullState={jg:{casino:[]},hg:{casino:[]},bp:{casino:[]},rq:{casino:[]}};
 let deletedIds={jg:[],hg:[],bp:[],rq:[]};
@@ -429,6 +430,65 @@ function deleteSession(acct,id){
 
 function closeModal(){document.getElementById('modal-root').innerHTML='';}
 
+function renderMyProgress(){
+  const sessionPnl=s=>(s.startBal!==undefined&&s.endBal!==undefined)?s.endBal-s.startBal:(s.netProfit||0);
+  const sessions=allSessions().filter(s=>(s.operator||'JG')===progressOp);
+
+  // Rolling 30 days, not calendar month — so this never resets to empty
+  // on the 1st and always reflects a consistent recent window.
+  const parseDMY=d=>{
+    const p=(d||'').split('/');
+    if(p.length!==3)return null;
+    return new Date(+p[2],+p[1]-1,+p[0]);
+  };
+  const cutoff=new Date();
+  cutoff.setHours(0,0,0,0);
+  cutoff.setDate(cutoff.getDate()-29); // today + previous 29 days = 30 total
+
+  const windowSessions=sessions.filter(s=>{
+    const d=parseDMY(s.date);
+    return d&&d>=cutoff;
+  });
+  const windowTotal=windowSessions.reduce((a,s)=>a+sessionPnl(s),0);
+
+  // Daily breakdown across the window, chronological
+  const daily={};
+  windowSessions.forEach(s=>{
+    if(!daily[s.date])daily[s.date]={count:0,pnl:0,sortDate:parseDMY(s.date)};
+    daily[s.date].count+=1;
+    daily[s.date].pnl+=sessionPnl(s);
+  });
+  const days=Object.keys(daily).sort((a,b)=>daily[a].sortDate-daily[b].sortDate);
+  const maxAbs=Math.max(1,...days.map(d=>Math.abs(daily[d].pnl)));
+
+  const bars=days.map(d=>{
+    const v=daily[d].pnl;
+    const h=Math.max(3,Math.round(Math.abs(v)/maxAbs*44));
+    const dayNum=d.split('/')[0];
+    return`<div class="month-col">
+      <div class="month-val ${v>=0?'pos':'neg'}">${v>=0?'+':''}${Math.round(v)}</div>
+      <div class="month-bar ${v>=0?'pos':'neg'}" style="height:${h}px"></div>
+      <div class="month-lbl">${dayNum}</div>
+    </div>`;
+  }).join('');
+
+  return`<div class="card" style="margin-bottom:12px">
+    <div class="card-header">
+      <span class="card-title">My Progress</span>
+      <div style="display:flex;gap:5px">
+        <button onclick="progressOp='JG';render()" style="padding:4px 10px;border-radius:6px;border:0.5px solid rgba(255,255,255,0.09);background:${progressOp==='JG'?'#7A4F00':'#3D4349'};color:${progressOp==='JG'?'#F5C842':'#C8C5BF'};font-family:system-ui;font-size:11px;font-weight:500;cursor:pointer">JG</button>
+        <button onclick="progressOp='JP';render()" style="padding:4px 10px;border-radius:6px;border:0.5px solid rgba(255,255,255,0.09);background:${progressOp==='JP'?'#14532D':'#3D4349'};color:${progressOp==='JP'?'#86EFAC':'#C8C5BF'};font-family:system-ui;font-size:11px;font-weight:500;cursor:pointer">JP</button>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="metric-label">Last 30 days</div>
+      <div class="metric-value ${windowTotal>=0?'pos':'neg'}">${fmtS(windowTotal)}</div>
+      <div class="metric-sub">${windowSessions.length} sessions</div>
+      ${days.length?`<div class="month-wrap" style="margin-top:14px">${bars}</div>`:`<div style="font-size:12px;color:#9A9590;margin-top:10px">No sessions logged in the last 30 days</div>`}
+    </div>
+  </div>`;
+}
+
 function renderSummary(){
   const sessions=allSessions();
   const total=PROFILES.reduce((a,p)=>a+casinoPnl(p),0);
@@ -473,6 +533,7 @@ function renderSummary(){
   }).join('');
 
   return`
+  ${renderMyProgress()}
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
     <div class="metric-card" style="grid-column:span 2">
       <div class="metric-label"><i class="ti ti-cards"></i>Total casino P&L</div>
