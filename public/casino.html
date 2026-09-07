@@ -480,12 +480,14 @@ function renderMyProgress(){
 
   const bars=days.map(d=>{
     const v=daily[d].pnl;
+    const c=daily[d].count;
     const h=Math.max(3,Math.round(Math.abs(v)/maxAbs*44));
     const dayNum=d.split('/')[0];
     return`<div class="month-col">
       <div class="month-val ${v>=0?'pos':'neg'}">${v>=0?'+':''}${Math.round(v)}</div>
       <div class="month-bar ${v>=0?'pos':'neg'}" style="height:${h}px"></div>
       <div class="month-lbl">${dayNum}</div>
+      <div style="font-size:8px;color:#6B7280;font-weight:500">${c}×</div>
     </div>`;
   }).join('');
 
