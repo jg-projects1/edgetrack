@@ -884,15 +884,26 @@ function migrateLegacy(){
 }
 
 let currentProfile='jg',currentTab='dashboard',tradeSubTab='log',formAccount='jg',selectedBetType='',exchTransferBank='jg',isUnderlay=false;
-// LAZY-LOADING CASINO DATA: index.html now calls load-sports.js (which
-// omits casino) instead of load.js, so casino genuinely isn't loaded
-// upfront anymore. Starts false — ensureCasinoLoaded() fetches it the
-// first time it's actually needed (Casino tab opened, Dashboard's
-// background refresh, or CSV export). See load-sports.js for the
-// matching server-side change.
+// LAZY-LOADING CASINO DATA: index.html calls load-sports.js (which omits
+// casino) instead of load.js, so casino genuinely isn't loaded upfront.
+// ensureCasinoLoaded() fetches it the first time it's actually needed.
+//
+// This used to be a one-time-ever flag: once loaded, it was NEVER
+// re-fetched again for the rest of the session, no matter how long the
+// app stayed open or how much new activity happened elsewhere (e.g.
+// Operator A logging sessions via /casino). That's a real gap found
+// after a "close and reopen didn't fix it" report — some browsers
+// suspend/resume a page rather than truly reloading it, so even a
+// genuine close-and-reopen might just resume the same stale JS state
+// without ever re-running this fetch. Converted to a staleness check
+// instead: data older than CASINO_STALE_MS gets silently refreshed in
+// the background whenever the Casino tab or Dashboard is visited again,
+// so it self-corrects without needing a true full reload at all.
 let casinoDataLoaded=false;
+let casinoLastFetchedAt=0;
+const CASINO_STALE_MS=2*60*1000; // 2 minutes
+
 function ensureCasinoLoaded(onReady){
-  if(casinoDataLoaded){onReady();return;}
   fetch('/api/load-casino').then(r=>{
     if(!r.ok)throw new Error('HTTP '+r.status);
     return r.json();
@@ -907,16 +918,35 @@ function ensureCasinoLoaded(onReady){
       PROFILES.forEach(pr=>{if(!state[pr].casino)state[pr].casino=[];});
     }
     casinoDataLoaded=true;
+    casinoLastFetchedAt=Date.now();
     if(typeof invalidateCasinoCache==='function')invalidateCasinoCache();
     onReady();
   }).catch(e=>{
     console.error('Casino lazy-load failed:',e);
-    // Don't set casinoDataLoaded=true on failure — leave it false so
-    // the next attempt (next tab open, next dashboard render) retries
-    // rather than silently treating a failed fetch as "loaded, empty".
+    // Don't update casinoLastFetchedAt on failure — leave it due for an
+    // immediate retry next time, rather than silently treating a failed
+    // fetch as "successfully checked, fresh for the next 2 minutes".
     PROFILES.forEach(pr=>{if(!state[pr].casino)state[pr].casino=[];});
     onReady();
   });
+}
+
+// Called on every Casino tab / Dashboard render. If data's never been
+// loaded, blocks and shows a spinner (via the existing casinoDataLoaded
+// check in render()) — same as before. If data's already loaded but
+// stale, refreshes quietly in the background and re-renders once done,
+// with nothing shown on screen changing until the update actually lands.
+function refreshCasinoIfStale(onUpdate){
+  if(!casinoDataLoaded)return; // first load handled by ensureCasinoLoaded()'s own blocking path
+  if((Date.now()-casinoLastFetchedAt)<=CASINO_STALE_MS)return; // still fresh, nothing to do
+  fetch('/api/load-casino').then(r=>r.ok?r.json():null).then(json=>{
+    if(json&&json.ok&&json.data){
+      PROFILES.forEach(pr=>{state[pr].casino=json.data[pr]?.casino||[];});
+      casinoLastFetchedAt=Date.now();
+      if(typeof invalidateCasinoCache==='function')invalidateCasinoCache();
+      onUpdate();
+    }
+  }).catch(e=>console.error('Casino background refresh failed:',e));
 }
 let recentBookies=[]; // tracks last 8 used bookies
 let lastSavedTrade=null; // for quick duplicate after save
@@ -3326,12 +3356,16 @@ function render(){
       const ql=document.getElementById('qc-lodds');if(ql&&_l)ql.value=_l;
       if(_s&&_b&&_l)calcQuick();
       setTimeout(initMonthlyChart,80);
-      // Casino portion of Combined P&L shows a loading state until this
-      // resolves (see the metric-card markup above) — this only ever
-      // actually fetches once casinoDataLoaded starts as false, i.e.
-      // once load-sports.js is wired in; today it's a same-tick no-op.
+      // Casino portion of Combined P&L: blocks on first-ever load (see
+      // ensureCasinoLoaded), then silently refreshes in the background
+      // on later visits if the cached data's gone stale — so a long-
+      // running session (or a browser that suspends/resumes rather than
+      // truly reloading) doesn't get permanently stuck on data from
+      // whenever it first loaded.
       if(!casinoDataLoaded){
         ensureCasinoLoaded(()=>{ if(currentTab==='dashboard')render(); });
+      }else{
+        refreshCasinoIfStale(()=>{ if(currentTab==='dashboard')render(); });
       }
     }catch(e){
       el.innerHTML='<div style="padding:20px;color:#F87171;font-size:13px">Error: '+e.message+'</div>';
@@ -3346,6 +3380,10 @@ function render(){
   else if(currentTab==='casino'){
     if(casinoDataLoaded){
       el.innerHTML=renderCasino();
+      // Render instantly from whatever's cached, then quietly check for
+      // anything newer in the background — no spinner, just a silent
+      // re-render if something actually changed.
+      refreshCasinoIfStale(()=>{ if(currentTab==='casino')render(); });
     }else{
       el.innerHTML='<div class="loading" style="padding:60px 20px;text-align:center;color:var(--text-muted)"><div class="spinner"></div><div style="margin-top:10px;font-size:13px">Loading casino data…</div></div>';
       ensureCasinoLoaded(()=>{ if(currentTab==='casino')render(); });
@@ -3678,6 +3716,18 @@ window.addEventListener('online',function(){
 window.addEventListener('offline',function(){
   setSyncStatus('error');
   showToast('⚠ You are offline — saves will queue','error');
+});
+
+// Covers the case where the browser suspends/resumes the page (bfcache)
+// rather than truly reloading it — e.g. some mobile browsers on "close
+// and reopen" — where no other code would run at all, so nothing would
+// ever get the chance to check whether casino data has gone stale. A
+// resumed page runs no code on its own; this is what gives it that
+// chance without requiring a genuine full reload.
+window.addEventListener('pageshow',function(e){
+  if(e.persisted){
+    if(currentTab==='casino'||currentTab==='dashboard')render();
+  }
 });
 
 if('serviceWorker' in navigator){
