@@ -120,6 +120,7 @@ let hasDeposit=false;
 let operator='JG';
 let syncTimeout=null;
 let fullState={};
+let casinoDeletedIds={jg:[],hg:[],bp:[],rq:[]}; // was completely missing — this is what caused deletions to silently not persist
 
 function setSyncStatus(s){
   const dot=document.getElementById('sync-dot'),label=document.getElementById('sync-label');
@@ -144,8 +145,17 @@ async function loadData(){
 async function saveData(){
   setSyncStatus('syncing');
   try{
+    // The real bug: deletedCasinoIds was never included in this payload
+    // at all, so save.js's server-side merge never knew a session had
+    // been deleted — and since the merge unions server + incoming by ID,
+    // an untracked deletion would just get resurrected from the server's
+    // copy on the very next save. This is what actually sends it now.
+    PROFILES.forEach(pr=>{
+      if(fullState[pr])fullState[pr].deletedCasinoIds=casinoDeletedIds[pr]||[];
+    });
     const res=await fetch('/api/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(fullState)});
     if(!res.ok)throw new Error();
+    PROFILES.forEach(pr=>{casinoDeletedIds[pr]=[];});
     setSyncStatus('synced');
   }catch(e){setSyncStatus('error');}
 }
@@ -165,7 +175,12 @@ function showToast(msg){
   t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);
 }
 
+let suppressTabSwitchUntil=0;
 function switchTab(t){
+  // Guards against a ghost/synthetic tap landing on the tab bar right
+  // after Save — see saveSession() for why this window exists (same
+  // fix already made in casino.html).
+  if(Date.now()<suppressTabSwitchUntil)return;
   currentTab=t;
   document.querySelectorAll('.tab').forEach(el=>el.classList.remove('active'));
   document.getElementById('tab-'+t)?.classList.add('active');
@@ -291,6 +306,11 @@ function selectBookie(name){
 }
 
 function saveSession(){
+  // Blur any focused input right away so keyboard dismissal is tied
+  // predictably to this tap, not left to fire ambiguously afterward —
+  // same fix already made in casino.html.
+  document.activeElement?.blur?.();
+  suppressTabSwitchUntil=Date.now()+600;
   const msg=document.getElementById('c-msg');
   const casino=document.getElementById('c-casino')?.value||(document.getElementById('c-casino-search')?.value?.trim()||'');
   if(!casino){if(msg)msg.textContent='Select a casino / bookie.';return;}
@@ -313,7 +333,16 @@ function saveSession(){
     notes:document.getElementById('c-notes')?.value||'',
     _acct:formAcct,
   });
-  save();showToast('Session saved!');resetForm();
+  // Saves immediately rather than through the debounced save() — same
+  // reasoning as deleteSession above.
+  if(syncTimeout)clearTimeout(syncTimeout);
+  setSyncStatus('syncing');
+  saveData();
+  showToast('Session saved!');resetForm();
+  // Explicit final guard: stay on Log regardless of what else fires.
+  currentTab='log';
+  document.querySelectorAll('.tab').forEach(el=>el.classList.remove('active'));
+  document.getElementById('tab-log')?.classList.add('active');
 }
 
 function resetForm(){
@@ -376,13 +405,27 @@ function confirmBonus(acct,id){
   const p=fullState[acct];
   if(session.casino&&p.bookies?.[session.casino])
     p.bookies[session.casino].bal=(p.bookies[session.casino].bal||0)+win;
-  save();closeModal();showToast('Bonus win added!');render();
+  // Saves immediately — same reasoning as saveSession/deleteSession above.
+  if(syncTimeout)clearTimeout(syncTimeout);
+  setSyncStatus('syncing');
+  saveData();
+  closeModal();showToast('Bonus win added!');render();
 }
 
 function deleteSession(acct,id){
   if(!confirm('Delete session?'))return;
   fullState[acct].casino=(fullState[acct].casino||[]).filter(s=>s.id!==id);
-  save();render();
+  if(!casinoDeletedIds[acct])casinoDeletedIds[acct]=[];
+  casinoDeletedIds[acct].push(id);
+  render();
+  // Saves immediately rather than through the debounced save() — a
+  // homescreen-installed app can be suspended by iOS the instant it's
+  // backgrounded, and a debounced save that never fires means the
+  // delete silently never reaches the server at all (this is the same
+  // fix already made in casino.html).
+  if(syncTimeout)clearTimeout(syncTimeout);
+  setSyncStatus('syncing');
+  saveData();
 }
 
 function closeModal(){document.getElementById('modal-root').innerHTML='';}
