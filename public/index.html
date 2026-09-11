@@ -2931,6 +2931,52 @@ function renderCasinoMonthly(){
     +renderDailyOffersTable();
 }
 
+let indexCasinoSummaryOp='JP'; // shared toggle for the rolling progress + rolling by-casino cards below
+
+function renderCasinoRollingProgress(){
+  const sessionPnl=s=>(s.startBal!==undefined&&s.endBal!==undefined&&(s.startBal!==0||s.endBal!==0))?s.endBal-s.startBal:(s.netProfit||0);
+  const sessions=getCasinoSessions().filter(s=>(s.operator||'JG')===indexCasinoSummaryOp);
+  const parseDMY=d=>{const p=(d||'').split('/');return p.length===3?new Date(+p[2],+p[1]-1,+p[0]):null;};
+  const cutoff=new Date();cutoff.setHours(0,0,0,0);cutoff.setDate(cutoff.getDate()-13); // today + previous 13 = 14 total
+
+  const windowSessions=sessions.filter(s=>{const d=parseDMY(s.date);return d&&d>=cutoff;});
+  const windowTotal=windowSessions.reduce((a,s)=>a+sessionPnl(s),0);
+
+  const daily={};
+  windowSessions.forEach(s=>{
+    if(!daily[s.date])daily[s.date]={count:0,pnl:0,sortDate:parseDMY(s.date)};
+    daily[s.date].count+=1;
+    daily[s.date].pnl+=sessionPnl(s);
+  });
+  const days=Object.keys(daily).sort((a,b)=>daily[b].sortDate-daily[a].sortDate); // most recent first (left)
+  const maxAbs=Math.max(1,...days.map(d=>Math.abs(daily[d].pnl)));
+
+  const bars=days.map(d=>{
+    const v=daily[d].pnl;
+    const h=Math.max(3,Math.round(Math.abs(v)/maxAbs*44));
+    const dayNum=d.split('/')[0];
+    return'<div class="month-col">'
+      +'<div class="month-val '+(v>=0?'pos':'neg')+'">'+(v>=0?'+':'')+Math.round(v)+'</div>'
+      +'<div class="month-bar '+(v>=0?'pos':'neg')+'" style="height:'+h+'px"></div>'
+      +'<div class="month-lbl">'+dayNum+'</div>'
+      +'<div style="font-size:8px;color:var(--text-muted);font-weight:500">'+daily[d].count+'×</div>'
+      +'</div>';
+  }).join('');
+
+  const toggle='<div style="display:flex;gap:5px">'
+    +'<button onclick="indexCasinoSummaryOp=\'JG\';document.getElementById(\'main-content\').innerHTML=renderCasino()" class="profile-btn '+(indexCasinoSummaryOp==='JG'?'active-jg':'')+'" style="font-size:11px;padding:4px 10px">JG</button>'
+    +'<button onclick="indexCasinoSummaryOp=\'JP\';document.getElementById(\'main-content\').innerHTML=renderCasino()" class="profile-btn '+(indexCasinoSummaryOp==='JP'?'active-hg':'')+'" style="font-size:11px;padding:4px 10px">JP</button>'
+    +'</div>';
+
+  return '<div class="card" style="margin-bottom:12px">'
+    +'<div class="card-header"><span class="card-title">Progress — Last 14 Days</span>'+toggle+'</div>'
+    +'<div style="padding:10px 14px">'
+    +'<div class="metric-value '+(windowTotal>=0?'pos':'neg')+'">'+fmtS(windowTotal)+'</div>'
+    +'<div class="metric-sub">'+windowSessions.length+' sessions</div>'
+    +(days.length?'<div class="month-wrap" style="margin-top:14px">'+bars+'</div>':'<div style="font-size:12px;color:var(--text-muted);margin-top:10px">No sessions in the last 14 days</div>')
+    +'</div></div>';
+}
+
 function renderCasinoSummaryView(){
   const allSessions=getCasinoSessions();
   const sessionPnl=s=>(s.startBal!==undefined&&s.endBal!==undefined&&(s.startBal!==0||s.endBal!==0))?s.endBal-s.startBal:(s.netProfit||0);
@@ -2943,7 +2989,21 @@ function renderCasinoSummaryView(){
   const totalPnl=jgPnl+jpPnl;
   const totalSessions=allSessions.length;
 
-  // By casino
+  // By casino, rolling last 14 days — filtered to the shared toggle
+  const parseDMY2=d=>{const p=(d||'').split('/');return p.length===3?new Date(+p[2],+p[1]-1,+p[0]):null;};
+  const cutoff14=new Date();cutoff14.setHours(0,0,0,0);cutoff14.setDate(cutoff14.getDate()-13);
+  const casinoMap14={};
+  allSessions.filter(s=>(s.operator||'JG')===indexCasinoSummaryOp).forEach(s=>{
+    if(!s.casino)return;
+    const d=parseDMY2(s.date);
+    if(!d||d<cutoff14)return;
+    if(!casinoMap14[s.casino])casinoMap14[s.casino]={pnl:0,count:0};
+    casinoMap14[s.casino].pnl+=sessionPnl(s);
+    casinoMap14[s.casino].count+=1;
+  });
+  const entries14=Object.entries(casinoMap14).sort((a,b)=>b[1].pnl-a[1].pnl);
+
+  // By casino, all-time (unfiltered by operator, matches existing behaviour)
   const casinoMap={};
   allSessions.forEach(s=>{
     if(!s.casino)return;
@@ -2957,7 +3017,20 @@ function renderCasinoSummaryView(){
     +'<div class="list-row-right" style="color:'+(pnl>=0?'#22C55E':'#F87171')+';font-size:12px">'+fmtS(pnl)+'</div>'
     +'</div>').join('');
 
-  return '<div class="metric-card" style="margin-bottom:12px">'
+  const toggle14='<div style="display:flex;gap:5px">'
+    +'<button onclick="indexCasinoSummaryOp=\'JG\';document.getElementById(\'main-content\').innerHTML=renderCasino()" class="profile-btn '+(indexCasinoSummaryOp==='JG'?'active-jg':'')+'" style="font-size:11px;padding:4px 10px">JG</button>'
+    +'<button onclick="indexCasinoSummaryOp=\'JP\';document.getElementById(\'main-content\').innerHTML=renderCasino()" class="profile-btn '+(indexCasinoSummaryOp==='JP'?'active-hg':'')+'" style="font-size:11px;padding:4px 10px">JP</button>'
+    +'</div>';
+  const rows14=entries14.length
+    ?entries14.map(([casino,d])=>'<div class="list-row">'
+      +'<div class="list-row-left"><div class="list-row-title" style="font-size:12px">'+(casino||'Unknown')+'</div>'
+      +'<div style="font-size:10px;color:var(--text-muted)">'+d.count+' session'+(d.count===1?'':'s')+'</div></div>'
+      +'<div class="list-row-right" style="color:'+(d.pnl>=0?'#22C55E':'#F87171')+';font-size:12px">'+fmtS(d.pnl)+'</div>'
+      +'</div>').join('')
+    :'<div class="empty">No '+indexCasinoSummaryOp+' sessions in the last 14 days</div>';
+
+  return renderCasinoRollingProgress()
+    +'<div class="metric-card" style="margin-bottom:12px">'
     +'<div class="metric-label"><i class="ti ti-cards" aria-hidden="true"></i>Combined Casino Summary</div>'
     +'<div class="metric-value '+(totalPnl>=0?'pos':'neg')+'">'+fmtS(totalPnl)+'</div>'
     +'<div class="metric-sub">'+totalSessions+' total sessions</div>'
@@ -2973,8 +3046,12 @@ function renderCasinoSummaryView(){
     +'<div style="font-size:11px;color:var(--text-muted);margin-top:2px">'+jpSessions.length+' sessions</div>'
     +'</div>'
     +'</div></div>'
+    +'<div class="card" style="margin-bottom:12px">'
+    +'<div class="card-header"><span class="card-title">By Casino — Last 14 Days</span>'+toggle14+'</div>'
+    +rows14
+    +'</div>'
     +'<div class="card">'
-    +'<div class="card-header"><span class="card-title">P&L by Casino</span></div>'
+    +'<div class="card-header"><span class="card-title">By Casino — All Time</span></div>'
     +rows
     +'</div>';
 }
