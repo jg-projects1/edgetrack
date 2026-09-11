@@ -1356,11 +1356,21 @@ function renderDashboard(){
   </div>
   <div class="acct-grid">
     ${PROFILES.map(p=>{
-      const pnl=totalPnl(p);
+      const sPnl=sportsPnl(p);
+      const cPnl=casinoPnl(p);
+      const pnl=sPnl+cPnl;
       return`<div class="acct-card">
         <div class="acct-top">
           <div class="acct-name"><div class="acct-dot dot-${p}"></div>${profileLabel(p)}</div>
-          <div class="acct-pnl ${pnl>=0?'pos':'neg'}">${_dashHidden?'••••':fmtS(pnl)}</div>
+          <div class="acct-pnl ${pnl>=0?'pos':'neg'}">${_dashHidden?'••••':(casinoDataLoaded?fmtS(pnl):fmtS(sPnl)+'…')}</div>
+        </div>
+        <div class="acct-row">
+          <span class="acct-row-label"><i class="ti ti-chart-line" aria-hidden="true"></i>Sports</span>
+          <span class="acct-row-val" style="color:${sPnl>=0?'#22C55E':'#F87171'}">${_dashHidden?'••••':fmtS(sPnl)}</span>
+        </div>
+        <div class="acct-row">
+          <span class="acct-row-label"><i class="ti ti-cards" aria-hidden="true"></i>Casino</span>
+          <span class="acct-row-val" style="color:${casinoDataLoaded?(cPnl>=0?'#22C55E':'#F87171'):'var(--text-muted)'}">${_dashHidden?'••••':(casinoDataLoaded?fmtS(cPnl):'loading…')}</span>
         </div>
         <div class="acct-row">
           <span class="acct-row-label"><i class="ti ti-building-bank" aria-hidden="true"></i>Bank</span>
