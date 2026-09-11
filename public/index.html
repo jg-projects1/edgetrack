@@ -1116,7 +1116,7 @@ function monthlyPnl(txs){
 }
 
 function renderMonthBars(map,height=90){
-  const keys=Object.keys(map).sort();if(!keys.length)return`<div class="empty">No data yet</div>`;
+  const keys=Object.keys(map).sort().reverse();if(!keys.length)return`<div class="empty">No data yet</div>`;
   const vals=keys.map(k=>map[k]);const maxAbs=Math.max(...vals.map(Math.abs),0.01);
   const barH=height-40;
   return`<div class="month-wrap" style="height:${height}px;align-items:flex-end;gap:4px">
