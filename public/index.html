@@ -783,10 +783,10 @@ function save(source='unknown'){debouncedSave(source);}
 const PROFILES=['jg','hg','bp','rq'];
 const PROFILE_LABELS={jg:'JG',hg:'HG',bp:'BP',rq:'RQ'};
 const PROFILE_COLORS={jg:'#F0A500',hg:'#7F77DD',bp:'#BA7517',rq:'#639922'};
-const BET_TYPES=['Qualifier','Free Bet','Boost','Mug','Extra Place','2Up','MBAL','Cash Back','Cash Out','Arb','Deposit','Withdrawal','Exchange Deposit','Exchange Withdrawal','Balance Amendment'];
+const BET_TYPES=['Qualifier','Free Bet','Boost','Mug','Extra Place','2Up','MBAL','Cash Back','Arb','Deposit','Withdrawal','Exchange Deposit','Exchange Withdrawal','Balance Amendment'];
 const BOOKIE_TRANSFER=['Deposit','Withdrawal'];
 const EXCHANGE_TRANSFER=['Exchange Deposit','Exchange Withdrawal'];
-const BET_ONLY=['Qualifier','Free Bet','Boost','Mug','Extra Place','2Up','MBAL','Cash Back','Cash Out','Arb'];
+const BET_ONLY=['Qualifier','Free Bet','Boost','Mug','Extra Place','2Up','MBAL','Cash Back','Arb'];
 const FREE_BET_TYPES=['Free Bet'];
 const EXCHANGES=['Betfair','Smarkets','Matchbook','Betdaq'];
 const BOOKIE_STATUSES=['Not Signed Up','Active','Restricted','Gubbed','Closed'];
@@ -1015,7 +1015,7 @@ function getTypeColor(t){
   return getCssVar('--bg-input')||'#3D4349';
 }
 function getTypeTextColor(t){
-  const map={Boost:'#60A5FA','Free Bet':'#34D399',Qualifier:'#FBBF24',Mug:'#9A9590','Extra Place':'#C084FC','2Up':'#F87171',MBAL:'#FB923C','Cash Back':'#A78BFA','Cash Out':'#94A3B8',Arb:'#F472B6'};
+  const map={Boost:'#60A5FA','Free Bet':'#34D399',Qualifier:'#FBBF24',Mug:'#9A9590','Extra Place':'#C084FC','2Up':'#F87171',MBAL:'#FB923C','Cash Back':'#A78BFA',Arb:'#F472B6'};
   return map[t]||'#9A9590';
 }
 function toggleMoreTypes(){
@@ -1782,7 +1782,7 @@ function renderAdd(prefill){
   const p=state[formAccount];const pf=prefill||{};
   const exchOpts=EXCHANGES.map(e=>`<option${(pf.exchange||lastExchange)===e?' selected':''}>${e}</option>`).join('');
   const topTypes=['Boost','Qualifier','Free Bet'];
-  const moreTypes=['Mug','Extra Place','2Up','MBAL','Cash Back','Cash Out','Arb'];
+  const moreTypes=['Mug','Extra Place','2Up','MBAL','Cash Back','Arb'];
   const isMoreSel=moreTypes.includes(selectedBetType);
   return`
   ${lastSavedTrade&&!prefill?`<div style="background:var(--bg-card);border:0.5px solid var(--border-col);border-radius:12px;padding:12px 16px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:10px">
