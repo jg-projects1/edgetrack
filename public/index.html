@@ -1533,6 +1533,7 @@ function renderPending(){
         <button class="btn-won" onclick="settleBet('${t._acct}',${t.id},'Won')" style="padding:14px;font-size:15px;border-radius:10px"><i class="ti ti-check" aria-hidden="true"></i> Won</button>
         <button class="btn-lost" onclick="settleBet('${t._acct}',${t.id},'Lost')" style="padding:14px;font-size:15px;border-radius:10px"><i class="ti ti-x" aria-hidden="true"></i> Lost</button>
       </div>
+      ${t.type==='Cash Back'?`<button onclick="settleBet('${t._acct}',${t.id},'Lost',true)" style="width:100%;margin-top:8px;padding:10px;font-size:13px;border-radius:10px;border:0.5px solid var(--text-accent);background:rgba(34,197,94,0.08);color:var(--text-accent)"><i class="ti ti-rotate" aria-hidden="true"></i> Lost, but trigger hit — stake refunded</button>`:''}
     </div>`;
   }).join('')}`;
 }
@@ -1668,6 +1669,18 @@ function applyBalanceOnSettle(tx,p,result){
         state.exchanges[exchange]=(state.exchanges[exchange]||0)+tx.pnl;
     }
   }
+
+  // Cash Back: a promo where losing the bet still refunds your stake if
+  // a separate trigger condition fires (e.g. a specific player scores
+  // first; a horse places 2nd/3rd). This layers on top of whatever the
+  // normal branches above already computed — the stake was deducted at
+  // log time same as any bet, and gets credited back here since it was
+  // never actually lost. Net effect: the qualifying loss and the refund
+  // exactly cancel, leaving just the lay winnings as pure profit.
+  if(tx.type==='Cash Back'&&result==='Lost'&&tx.cashBackTriggered){
+    tx.pnl=Math.round(((tx.pnl||0)+bs)*100)/100;
+    if(bk){bk.bal=(bk.bal||0)+bs;bk.balUpdatedAt=Date.now();}
+  }
 }
 
 function applyBalanceAtLog(tx,p){
@@ -1685,9 +1698,11 @@ function applyBalanceAtLog(tx,p){
   }
 }
 
-function settleBet(acct,id,result){
+function settleBet(acct,id,result,cashBackTriggered){
   const p=state[acct];const tx=(p.transactions||[]).find(t=>t.id===id);if(!tx||tx.result!=='Pending')return;
-  tx.result=result;tx.txUpdatedAt=Date.now();applyBalanceOnSettle(tx,p,result);
+  tx.result=result;tx.txUpdatedAt=Date.now();
+  if(cashBackTriggered)tx.cashBackTriggered=true;
+  applyBalanceOnSettle(tx,p,result);
   // If this bet had a pre-settlement P&L override (edited via the Settle
   // tab before clicking Won/Lost — see confirmPnlEdit), apply it now as
   // the real final figure. This is a pure reporting correction — bookie
@@ -2319,7 +2334,7 @@ function renderTxTable(txs,showAcct){
     const isBookieT=BOOKIE_TRANSFER.includes(t.type),isExchT=EXCHANGE_TRANSFER.includes(t.type),isAmend=t.type==='Balance Amendment',isBet=BET_ONLY.includes(t.type);
     const pnlStr=t.result==='Pending'?`<span class="warn">pending</span>`:`<span class="${(t.pnl||0)>=0?'pos':'neg'}">${fmtS(t.pnl||0)}</span>`;
     const pairTotal=(t.type==='MBAL'||t.linkedMbalId)?getMbalPairTotal(t):null;
-    const resStr=t.result==='Won'?'<span class="pos">Won</span>':t.result==='Lost'?'<span class="neg">Lost</span>':t.result==='—'?'<span class="muted">—</span>':'<span class="warn">pending</span>';
+    const resStr=t.result==='Won'?'<span class="pos">Won</span>':t.result==='Lost'?(t.cashBackTriggered?'<span class="pos">Lost · refunded</span>':'<span class="neg">Lost</span>'):t.result==='—'?'<span class="muted">—</span>':'<span class="warn">pending</span>';
     return`<tr data-txid="${t.id}">
       <td style="white-space:nowrap;font-size:11px;color:var(--text-secondary)">${t.date}</td>
       ${showAcct?`<td>${acctPill(t._acct)}</td>`:''}
