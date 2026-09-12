@@ -1487,25 +1487,16 @@ function markFreeBetUsed(pr,id){
 }
 
 // ── PENDING ──────────────────────────────────────────────────────────────────
-function renderPending(){
-  const pending=pendingAll();
-  if(!pending.length)return`<div style="text-align:center;padding:60px 20px"><i class="ti ti-circle-check" style="font-size:48px;color:#22C55E" aria-hidden="true"></i><div style="font-size:15px;font-weight:500;margin-top:12px;color:var(--text-primary)">All settled</div></div>`;
-  return`
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
-    <div class="metric-card"><div class="metric-label">Pending</div><div class="metric-value warn">${pending.length}</div></div>
-    <div class="metric-card"><div class="metric-label">Expected P&L</div><div class="metric-value pos" style="font-size:20px">${fmtS(pending.reduce((a,t)=>a+(t.expectedPnl||0),0))}</div></div>
-  </div>
-  ${pending.map(t=>{
-    const isFB=isFreeBet(t.type);
-    return`<div class="pending-card" id="pcard-${t.id}">
+function renderPendingCard(t){
+  const isFB=isFreeBet(t.type);
+  return`<div class="pending-card" id="pcard-${t.id}">
       <div class="pending-event">${t.event||'Unnamed event'}</div>
       <div class="pending-meta">
         <span class="${pillClass(t.type)}">${t.type}</span>${acctPill(t._acct)}
         <span style="font-size:11px;color:var(--text-secondary)">${t.date}</span>
-        <span style="font-size:11px;color:var(--text-secondary)">${t.bookie||'—'}</span>
         ${t.exchange?`<span style="font-size:11px;color:var(--text-muted);background:var(--border-col2);padding:2px 6px;border-radius:4px">${t.exchange}</span>`:''}
         ${isFB?'<span class="badge" style="background:rgba(34,197,94,0.1);color:var(--text-accent)">SNR</span>':''}
-        ${t.underlay?'<span class="badge" style="background:rgba(34,197,94,0.1);color:var(--text-accent);border:0.5px solid rgba(93,202,165,0.3)">U</span>':''}
+        ${t.underlay?'<span class="badge" style="background:rgba(34,197,94,0.1);color:var(--text-accent);border:0.5px solid rgba(93,202,165,0.3)">UL</span>':''}
       </div>
       <div class="pending-info">
         ${t.bstake?`<div class="pinfo-item"><span class="pinfo-label">Back</span><span class="pinfo-val">£${t.bstake} @ ${t.bodds}</span></div>`:''}
@@ -1535,7 +1526,45 @@ function renderPending(){
       </div>
       ${t.type==='Cash Back'?`<button onclick="settleBet('${t._acct}',${t.id},'Lost',true)" style="width:100%;margin-top:8px;padding:10px;font-size:13px;border-radius:10px;border:0.5px solid var(--text-accent);background:rgba(34,197,94,0.08);color:var(--text-accent)"><i class="ti ti-rotate" aria-hidden="true"></i> Lost, but trigger hit — stake refunded</button>`:''}
     </div>`;
-  }).join('')}`;
+}
+
+function renderPending(){
+  const pending=pendingAll();
+  if(!pending.length)return`<div style="text-align:center;padding:60px 20px"><i class="ti ti-circle-check" style="font-size:48px;color:#22C55E" aria-hidden="true"></i><div style="font-size:15px;font-weight:500;margin-top:12px;color:var(--text-primary)">All settled</div></div>`;
+
+  // Grouped by bookie — matches how you actually settle (logging into
+  // one bookie at a time, clearing everything there, moving to the
+  // next), rather than a flat list mixing every bookie together. Groups
+  // are ordered by whichever has the oldest pending bet, and bets within
+  // a group are oldest-first — so the thing that's been sitting longest
+  // always surfaces at the top, both at the group level and within it.
+  // Bookie itself is dropped from each card's badge row since it's now
+  // the group header instead.
+  const groups={};
+  pending.forEach(t=>{
+    const key=t.bookie||'No bookie';
+    if(!groups[key])groups[key]=[];
+    groups[key].push(t);
+  });
+  Object.values(groups).forEach(arr=>arr.sort((a,b)=>a.id-b.id));
+  const bookieOrder=Object.keys(groups).sort((a,b)=>{
+    const oldestA=Math.min(...groups[a].map(t=>t.id));
+    const oldestB=Math.min(...groups[b].map(t=>t.id));
+    return oldestA-oldestB;
+  });
+
+  return`
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+    <div class="metric-card"><div class="metric-label">Pending</div><div class="metric-value warn">${pending.length}</div></div>
+    <div class="metric-card"><div class="metric-label">Expected P&L</div><div class="metric-value pos" style="font-size:20px">${fmtS(pending.reduce((a,t)=>a+(t.expectedPnl||0),0))}</div></div>
+  </div>
+  ${bookieOrder.map(bookie=>`
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:0 2px 8px">
+    <span style="font-size:14px;font-weight:500;color:var(--text-primary)">${bookie}</span>
+    <span style="font-size:12px;color:var(--text-muted)">${groups[bookie].length} pending</span>
+  </div>
+  ${groups[bookie].map(t=>renderPendingCard(t)).join('')}
+  `).join('')}`;
 }
 
 function applyBalanceOnSettle(tx,p,result){
