@@ -1418,10 +1418,10 @@ function renderFreeBetsPanel(){
       ${pending.map(fb=>`
       <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:0.5px solid var(--border-col)">
         <div>
-          <div style="font-size:13px;color:var(--text-primary)">${fb.bookie}</div>
+          <div style="font-size:13px;color:var(--text-primary)">${fb.bookie}${fb.amount?` <span style="color:var(--text-accent)">· £${fb.amount.toFixed(2)}</span>`:''}</div>
           <div style="font-size:11px;color:var(--text-muted)">${profileLabel(fb._pr)} · ${fb.date}</div>
         </div>
-        <button onclick="markFreeBetUsed('${fb._pr}','${fb.id}')" style="font-size:11px;padding:4px 10px;border-radius:6px;border:0.5px solid rgba(255,255,255,0.2);background:var(--bg-input);color:var(--text-primary);cursor:pointer">Mark used</button>
+        <button onclick="${fb.sourceMbalId?`logFreeBetFromMbal('${fb._pr}','${fb.id}')`:`markFreeBetUsed('${fb._pr}','${fb.id}')`}" style="font-size:11px;padding:4px 10px;border-radius:6px;border:0.5px solid rgba(255,255,255,0.2);background:var(--bg-input);color:var(--text-primary);cursor:pointer">${fb.sourceMbalId?'Log this free bet':'Mark used'}</button>
       </div>`).join('')}
     </div>`:''}
     ${used.length>0?`
@@ -1439,6 +1439,40 @@ function renderFreeBetsPanel(){
       </div>
     </details>`:''}
   </div>`;
+}
+
+// Free bets that came from an MBAL loss are linked back to that bet, so
+// the combined real total can be shown once both settle — see
+// submitTx() for where the link actually gets attached, and
+// renderTxTable() for where the combined badge gets displayed.
+// Qualifier-sourced free bets have no sourceMbalId and keep the plain
+// markFreeBetUsed() flow below, unchanged.
+let _pendingMbalLink=null;
+function logFreeBetFromMbal(pr,fbId){
+  const fb=(state[pr].freeBets||[]).find(f=>String(f.id)===String(fbId));
+  if(!fb)return;
+  _pendingMbalLink={mbalId:fb.sourceMbalId,freeBetEntryId:fb.id,acct:pr};
+  _duplicateMode=true;
+  formAccount=pr;
+  selectedBetType='Free Bet';
+  isUnderlay=false;
+  currentTab='trade';tradeSubTab='log';
+  document.querySelectorAll('.tab').forEach(el=>el.classList.remove('active'));
+  document.getElementById('tab-trade')?.classList.add('active');
+  const pb=document.getElementById('profile-bar');if(pb)pb.style.display='none';
+  document.getElementById('main-content').innerHTML=renderAdd();
+  updateBadge();bindFormEvents();updateFormFields();
+  document.querySelectorAll('.type-pill').forEach(el=>{
+    el.className='type-pill';
+    if(el.dataset.type==='Free Bet')el.classList.add('sel','sel-freebet');
+  });
+  setTimeout(function(){
+    const fbEl=document.getElementById('f-bookie');if(fbEl)fbEl.value=fb.bookie;
+    const fbs=document.getElementById('f-bookie-search');if(fbs)fbs.value=fb.bookie;
+    setStrategy('lockin');
+  },50);
+  showToast('Log the free bet\u2019s real result \u2014 it\u2019ll link back to the original MBAL bet');
+  window.scrollTo(0,0);
 }
 
 function markFreeBetUsed(pr,id){
@@ -1513,6 +1547,62 @@ function applyBalanceOnSettle(tx,p,result){
   // 0 — commission only ever changes a branch where the LAY side wins,
   // since a losing lay is never charged commission.
   const c=(tx.comm||0)/100;
+
+  if(tx.type==='MBAL'){
+    // Bonus lock-in: a real (non-free-bet) qualifying bet where the
+    // bookie pays a bonus (usually a free bet) ONLY if it loses, nothing
+    // extra if it wins. The lay stake itself is calculated to fold that
+    // bonus's retained value in — see autoCalcUnderlay() for the same
+    // formulas and the worked examples they were verified against.
+    // Zero commission assumed throughout, matching how this bet type is
+    // actually used in practice.
+    const bonus=tx.mbalBonus||0;
+    const retention=(tx.mbalRetention||0)/100;
+    if(!tx.underlay){
+      const li_ls=lo>0?(bs*bo-bonus*retention)/lo:0;
+      if(result==='Won'){
+        tx.pnl=Math.round((bs*(bo-1)-li_ls*(lo-1))*100)/100;
+        if(bk){bk.bal=(bk.bal||0)+(bo*bs);bk.balUpdatedAt=Date.now();}
+        if(exchange&&state.exchanges[exchange]!==undefined)
+          state.exchanges[exchange]=(state.exchanges[exchange]||0)-li_ls*(lo-1);
+      }else{
+        // Standalone loss only — deliberately does NOT include the
+        // bonus value. The bonus becomes a real free bet you'll log and
+        // settle as its own separate transaction later; folding an
+        // estimate of it in here too would double-count it once that
+        // second transaction's own real P&L comes in.
+        tx.pnl=Math.round((li_ls-bs)*100)/100;
+        if(exchange&&state.exchanges[exchange]!==undefined)
+          state.exchanges[exchange]=(state.exchanges[exchange]||0)+tx.pnl;
+      }
+    }else{
+      // Underlay variant — lay stake deliberately calibrated so the
+      // "lost" outcome nets to £0, same as the non-MBAL normal underlay
+      // below, so it doesn't touch the exchange balance either — that
+      // pattern only applies to lock-in bets in this codebase.
+      const ul_ls=bs-bonus*retention;
+      if(result==='Won'){
+        tx.pnl=Math.round((bs*(bo-1)-ul_ls*(lo-1))*100)/100;
+        if(bk){bk.bal=(bk.bal||0)+(bo*bs);bk.balUpdatedAt=Date.now();}
+      }else{
+        // Same principle — standalone loss only, no bonus folded in.
+        // This is the full loss the underlay was deliberately accepting
+        // in exchange for bigger upside on a Win; the separately-logged
+        // free bet is what's meant to offset it, not an assumption here.
+        tx.pnl=Math.round((ul_ls-bs)*100)/100;
+      }
+    }
+    // A free bet becomes available specifically when the bet is LOST —
+    // record it the same way a Qualifier's free bet is tracked, so it
+    // shows up in the existing Free Bets panel on Dashboard rather than
+    // relying on memory to go redeem it.
+    if(result==='Lost'&&bonus>0&&tx.bookie){
+      if(!p.freeBets)p.freeBets=[];
+      p.freeBets.push({id:Date.now()+Math.random(),date:tx.date,bookie:tx.bookie,acct:tx._acct,status:'Pending',amount:bonus,sourceMbalId:tx.id});
+      showToast('Free bet available at '+tx.bookie+' (£'+bonus.toFixed(2)+') — check Dashboard','success');
+    }
+    return;
+  }
 
   if(tx.underlay){
     if(!isFB){
@@ -1598,6 +1688,16 @@ function applyBalanceAtLog(tx,p){
 function settleBet(acct,id,result){
   const p=state[acct];const tx=(p.transactions||[]).find(t=>t.id===id);if(!tx||tx.result!=='Pending')return;
   tx.result=result;tx.txUpdatedAt=Date.now();applyBalanceOnSettle(tx,p,result);
+  // If this bet had a pre-settlement P&L override (edited via the Settle
+  // tab before clicking Won/Lost — see confirmPnlEdit), apply it now as
+  // the real final figure. This is a pure reporting correction — bookie
+  // and exchange balances are derived purely from the back stake/odds
+  // and lay odds actually entered, and stay exactly as the formula just
+  // computed them; only the stored P&L figure itself changes.
+  if(tx.pnlOverride!==undefined){
+    tx.pnl=tx.pnlOverride;
+    delete tx.pnlOverride;
+  }
   // Immediately write to localStorage so refresh picks up settled state
   try{
     const snap={exchanges:state.exchanges,_deletedTxIds:deletedTxIds,_casinoDeletedIds:casinoDeletedIds};
@@ -1623,19 +1723,24 @@ function settleBet(acct,id,result){
 
 function editPnl(acct,id){
   const tx=state[acct].transactions.find(t=>t.id===id);if(!tx)return;
+  // For a pending bet, tx.pnl is always 0 (nothing's settled) and isn't
+  // even what's shown on the card — expectedPnl (or a prior override) is
+  // the actual "current" figure to display and start editing from.
+  const currentVal=tx.result==='Pending'?(tx.pnlOverride!==undefined?tx.pnlOverride:(tx.expectedPnl||0)):(tx.pnl||0);
   document.getElementById('modal-root').innerHTML=`
   <div class="modal-bg" onclick="if(event.target===this)closeModal()">
     <div class="modal">
       <div class="modal-handle"></div>
       <div class="modal-title">Edit P&L</div>
       <div class="modal-sub">${tx.event||tx.bookie||'Transaction'} · ${tx.date}</div>
+      ${tx.result==='Pending'?`<div style="font-size:11px;color:var(--text-accent);background:rgba(34,197,94,0.1);border-radius:8px;padding:8px 10px;margin-bottom:12px">This bet hasn't settled yet — your figure will become the final P&L once you mark it Won or Lost.</div>`:''}
       <div style="margin-bottom:12px">
-        <div class="form-label">Current P&L</div>
-        <div style="font-size:24px;font-weight:500;color:${(tx.pnl||0)>=0?'#22C55E':'#F87171'}">${fmtS(tx.pnl||0)}</div>
+        <div class="form-label">${tx.result==='Pending'?'Current expected P&L':'Current P&L'}</div>
+        <div style="font-size:24px;font-weight:500;color:${(currentVal)>=0?'#22C55E':'#F87171'}">${fmtS(currentVal)}</div>
       </div>
       <div style="margin-bottom:4px">
         <div class="form-label">New P&L (£)</div>
-        <input type="number" id="modal-pnl" step="0.01" value="${(tx.pnl||0).toFixed(2)}" inputmode="decimal" style="font-size:20px;font-weight:500;border-color:var(--text-accent);background:var(--bg-input)"/>
+        <input type="number" id="modal-pnl" step="0.01" value="${currentVal.toFixed(2)}" inputmode="decimal" style="font-size:20px;font-weight:500;border-color:var(--text-accent);background:var(--bg-input)"/>
       </div>
       <div class="modal-actions">
         <button class="btn btn-primary" style="flex:1" onclick="confirmPnlEdit('${acct}',${id})">Save</button>
@@ -1646,14 +1751,25 @@ function editPnl(acct,id){
   setTimeout(()=>document.getElementById('modal-pnl')?.focus(),50);
 }
 
+// Editing P&L is a pure reporting correction — bookie and exchange
+// balances are derived entirely from the back stake/odds and lay odds
+// actually entered, and are never touched by a P&L edit, whether it's
+// made before settlement (an override, applied automatically once the
+// bet is actually marked Won/Lost — see settleBet) or after (a direct
+// correction to an already-settled bet's stored figure).
 function confirmPnlEdit(acct,id){
   const newPnl=parseFloat(document.getElementById('modal-pnl')?.value);if(isNaN(newPnl))return;
   const p=state[acct];const tx=p.transactions.find(t=>t.id===id);if(!tx)return;
-  const diff=newPnl-(tx.pnl||0);tx.pnl=newPnl;tx.txUpdatedAt=Date.now();
-  // P&L edit only affects exchange (lay profit) not bookie balance
-  // Bookie balance is set from odds×stake on settlement, not from P&L
-  if(tx.result==='Lost'&&tx.exchange&&state.exchanges[tx.exchange]!==undefined)
-    state.exchanges[tx.exchange]=(state.exchanges[tx.exchange]||0)+diff;
+  if(tx.result==='Pending'){
+    // Pre-settlement: store as an override to apply automatically once
+    // the bet is actually marked Won/Lost — see settleBet(). Also update
+    // expectedPnl so the pending card and the Dashboard's "Expected P&L"
+    // total reflect the correction immediately, before settlement.
+    tx.pnlOverride=newPnl;tx.expectedPnl=newPnl;tx.txUpdatedAt=Date.now();
+    if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('editPnl');closeModal();showToast(`Will apply ${fmtS(newPnl)} once settled`);render();
+    return;
+  }
+  tx.pnl=newPnl;tx.txUpdatedAt=Date.now();
   if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('editPnl');closeModal();showToast(`P&L updated to ${fmtS(newPnl)}`);render();
 }
 
@@ -1751,6 +1867,12 @@ function renderAdd(prefill){
           </div>
         </div>
 
+        <div id="fg-mbal-bonus" style="display:none;margin-bottom:8px">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div class="form-group"><div class="form-label">Maximum bonus (£)</div><input type="number" id="f-mbal-bonus" placeholder="0.00" step="0.01" inputmode="decimal" value="${pf.mbalBonus||''}" oninput="autoCalcUnderlay()"/></div>
+            <div class="form-group"><div class="form-label">Bonus retention (%)</div><input type="number" id="f-mbal-retention" placeholder="70" step="1" inputmode="decimal" value="${pf.mbalRetention!==undefined?pf.mbalRetention:70}" oninput="autoCalcUnderlay()"/></div>
+          </div>
+        </div>
         <div style="margin-bottom:8px" id="fg-comm-toggle">
           ${showComm?`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:end">
             <div class="form-group"><div class="form-label">Commission (%)</div><input type="number" id="f-comm" placeholder="0" step="0.1" inputmode="decimal" value="${pf.comm||0}"/></div>
@@ -1812,6 +1934,7 @@ function autoCalcUnderlay(){
   const lo=parseFloat(document.getElementById('f-lodds')?.value)||0;
   const partial=Math.min(100,Math.max(1,parseFloat(document.getElementById('f-partial')?.value)||100))/100;
   const isFB=isFreeBet(selectedBetType);
+  const isMBAL=selectedBetType==='MBAL';
 
   const calc=document.getElementById('underlay-calc');
   const pnlEl=document.getElementById('f-pnl');
@@ -1833,7 +1956,27 @@ function autoCalcUnderlay(){
 
   let total_win, total_lose, total_lay_stake;
 
-  if(!isUnderlay){
+  if(isMBAL){
+    // Bonus lock-in: a bookie promo that pays a free bet ONLY if the
+    // qualifying bet loses, nothing extra if it wins. The maths here
+    // fold that bonus's retained value directly into the lay stake so
+    // both outcomes are genuinely equal (lock-in) or the loss side nets
+    // to exactly £0 (underlay) — verified against real worked examples,
+    // zero commission assumed throughout (see Bonus Retention field).
+    // Partial-underlay isn't supported in combination with a bonus —
+    // this always treats it as a pure 100% lock-in or 100% underlay.
+    const bonus=parseFloat(document.getElementById('f-mbal-bonus')?.value)||0;
+    const retention=(parseFloat(document.getElementById('f-mbal-retention')?.value)||0)/100;
+    if(!isUnderlay){
+      total_lay_stake=(bs*bo-bonus*retention)/lo;
+      total_win=bs*(bo-1)-total_lay_stake*(lo-1);
+      total_lose=(total_lay_stake-bs)+bonus*retention;
+    }else{
+      total_lay_stake=bs-bonus*retention;
+      total_win=bs*(bo-1)-total_lay_stake*(lo-1);
+      total_lose=(total_lay_stake-bs)+bonus*retention; // always £0 by construction
+    }
+  }else if(!isUnderlay){
     // Lock-in: standard lay stake calculation
     if(!isFB){
       total_lay_stake=bs*bo/lo;
@@ -1949,6 +2092,7 @@ function updateFormFields(){
   sh('fg-bookie',isBet||isBookieT);sh('fg-exchange',isBet||isExchT);
   sh('fg-exchbank',isExchT);sh('fg-event',isBet);
   sh('fg-stake-odds',isBet);sh('fg-underlay',isBet);
+  sh('fg-mbal-bonus',selectedBetType==='MBAL');
   sh('fg-comm-toggle',isBet);sh('fg-result-pnl',isBet);sh('fg-result',isBet);sh('fg-pnl',isBet);
   sh('fg-amount',isBookieT||isExchT);
   sh('fg-amend-target',isAmend);sh('fg-amend-bal',isAmend);
@@ -1973,6 +2117,7 @@ function updateFlowPreview(){
 function bindFormEvents(){const exchSel=document.getElementById('f-exchange');if(exchSel)exchSel.addEventListener('change',updateFlowPreview);}
 function resetForm(){
   selectedBetType='';exchTransferBank='jg';showMoreTypes=false;showComm=false;
+  _pendingMbalLink=null; // clear if the user abandons a "Log this free bet" flow without submitting
   // Re-render the form completely for a clean slate
   const mc=document.getElementById('main-content');
   if(mc&&(currentTab==='add'||currentTab==='trade'))mc.innerHTML=renderTrade();
@@ -2025,7 +2170,21 @@ function submitTx(){
     // For pending bets, pnl=0 until settled. Store expected P&L separately for reference.
     const storedPnl=result==='Pending'?0:pnl;
     const lodds=parseFloat(document.getElementById('f-lodds')?.value)||0;
-    const tx={id:Date.now(),date,type:selectedBetType,bookie,exchange,event,bstake,bodds,lodds,comm,result,pnl:storedPnl,expectedPnl:pnl,notes,underlay:isUnderlay,_acct:formAccount,txUpdatedAt:Date.now()};
+    const isMBAL=selectedBetType==='MBAL';
+    const mbalBonus=isMBAL?(parseFloat(document.getElementById('f-mbal-bonus')?.value)||0):undefined;
+    const mbalRetention=isMBAL?(parseFloat(document.getElementById('f-mbal-retention')?.value)||0):undefined;
+    const tx={id:Date.now(),date,type:selectedBetType,bookie,exchange,event,bstake,bodds,lodds,comm,result,pnl:storedPnl,expectedPnl:pnl,notes,underlay:isUnderlay,_acct:formAccount,txUpdatedAt:Date.now(),mbalBonus,mbalRetention};
+    // If this Free Bet was logged via "Log this free bet" from the Free
+    // Bets panel, link it back to the MBAL bet it came from — this is
+    // what lets the combined real total be shown once both settle, and
+    // closes the loop by marking that panel entry Used automatically
+    // rather than needing a separate manual step.
+    if(_pendingMbalLink&&selectedBetType==='Free Bet'&&_pendingMbalLink.acct===formAccount){
+      tx.linkedMbalId=_pendingMbalLink.mbalId;
+      const fbEntry=(p.freeBets||[]).find(f=>String(f.id)===String(_pendingMbalLink.freeBetEntryId));
+      if(fbEntry)fbEntry.status='Used';
+      _pendingMbalLink=null;
+    }
     p.transactions.push(tx);applyBalanceAtLog(tx,p);
     if(selectedBetType==='Qualifier'){
       if(!p.freeBets)p.freeBets=[];
@@ -2093,6 +2252,11 @@ function duplicateTrade(acct,id,rawTx){
     const bo=document.getElementById('f-bodds');if(bo&&tx.bodds)bo.value=tx.bodds;
     // Lay odds — only set if tx has it, otherwise keep rendered value
     if(tx.lodds){const lo=document.getElementById('f-lodds');if(lo)lo.value=tx.lodds;}
+    // MBAL bonus fields, if this was a bonus lock-in bet
+    if(tx.type==='MBAL'){
+      const mb=document.getElementById('f-mbal-bonus');if(mb&&tx.mbalBonus!==undefined)mb.value=tx.mbalBonus;
+      const mr=document.getElementById('f-mbal-retention');if(mr&&tx.mbalRetention!==undefined)mr.value=tx.mbalRetention;
+    }
     // Strategy
     setStrategy(isUnderlay?'underlay':'lockin');
     autoCalcUnderlay();
@@ -2120,6 +2284,19 @@ function renderHistory(){
   ${renderTxTable(txs,showAll)}`;
 }
 
+// Once both halves of an MBAL/linked-free-bet pair have settled, this
+// computes their real combined total — shown as a small badge on both
+// rows in History, rather than something you have to add up yourself.
+function getMbalPairTotal(t){
+  if(t.result==='Pending')return null;
+  const txs=state[t._acct]?.transactions||[];
+  let partner=null;
+  if(t.type==='MBAL')partner=txs.find(o=>o.linkedMbalId===t.id);
+  else if(t.linkedMbalId)partner=txs.find(o=>o.id===t.linkedMbalId);
+  if(!partner||partner.result==='Pending')return null;
+  return Math.round(((t.pnl||0)+(partner.pnl||0))*100)/100;
+}
+
 function renderTxTable(txs,showAcct){
   if(!txs.length)return`<div class="empty">No transactions yet</div>`;
   // Paginate for performance - show 300 at a time
@@ -2141,6 +2318,7 @@ function renderTxTable(txs,showAcct){
   ${txsToRender.map(t=>{
     const isBookieT=BOOKIE_TRANSFER.includes(t.type),isExchT=EXCHANGE_TRANSFER.includes(t.type),isAmend=t.type==='Balance Amendment',isBet=BET_ONLY.includes(t.type);
     const pnlStr=t.result==='Pending'?`<span class="warn">pending</span>`:`<span class="${(t.pnl||0)>=0?'pos':'neg'}">${fmtS(t.pnl||0)}</span>`;
+    const pairTotal=(t.type==='MBAL'||t.linkedMbalId)?getMbalPairTotal(t):null;
     const resStr=t.result==='Won'?'<span class="pos">Won</span>':t.result==='Lost'?'<span class="neg">Lost</span>':t.result==='—'?'<span class="muted">—</span>':'<span class="warn">pending</span>';
     return`<tr data-txid="${t.id}">
       <td style="white-space:nowrap;font-size:11px;color:var(--text-secondary)">${t.date}</td>
@@ -2149,7 +2327,10 @@ function renderTxTable(txs,showAcct){
       <td style="font-weight:500">${isAmend?t.target:(isExchT?t.exchange:t.bookie)||'—'}</td>
       <td style="max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-secondary);font-size:11px">${(isBookieT||isExchT)&&t.amount?fmt(t.amount):t.event||t.notes||'—'}</td>
       <td>${resStr}</td>
-      <td><div style="display:flex;align-items:center;gap:4px">${pnlStr}<button class="btn-sm btn-sm-edit" onclick="editPnl('${t._acct}',${t.id})" style="padding:3px 7px;font-size:10px"><i class="ti ti-edit" aria-hidden="true"></i></button></div></td>
+      <td><div style="display:flex;flex-direction:column;gap:2px">
+        <div style="display:flex;align-items:center;gap:4px">${pnlStr}<button class="btn-sm btn-sm-edit" onclick="editPnl('${t._acct}',${t.id})" style="padding:3px 7px;font-size:10px"><i class="ti ti-edit" aria-hidden="true"></i></button></div>
+        ${pairTotal!==null?`<div style="font-size:9px;color:var(--text-muted)">Bonus pair: <span style="color:${pairTotal>=0?'#22C55E':'#F87171'};font-weight:500">${fmtS(pairTotal)}</span></div>`:''}
+      </div></td>
       <td style="white-space:nowrap">
         ${isBet?`<button class="btn-sm btn-sm-dupe" onclick="duplicateTrade('${t._acct}',${t.id})" style="padding:3px 7px;font-size:10px"><i class="ti ti-copy" aria-hidden="true"></i></button> `:''}
         <button class="btn-sm btn-sm-danger" onclick="deleteTx('${t._acct}',${t.id})" style="padding:3px 7px;font-size:10px"><i class="ti ti-trash" aria-hidden="true"></i></button>
