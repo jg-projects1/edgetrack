@@ -959,6 +959,7 @@ let showMoreTypes=false; // toggle for extra bet types
 let showComm=false; // toggle for commission field
 let calcBetType='Boost';
 let calcStrategy='underlay';
+let qcShowComm=false;
 
 function fmt(v){const n=parseFloat(v)||0;return(n<0?'-':'')+'£'+Math.abs(n).toFixed(2);}
 function fmtS(v){const n=parseFloat(v)||0;return(n>=0?'+':'-')+'£'+Math.abs(n).toFixed(2);}
@@ -1506,70 +1507,72 @@ function applyBalanceOnSettle(tx,p,result){
   const isFB=isFreeBet(tx.type);
   const bs=tx.bstake||0,bo=tx.bodds||0,lo=tx.lodds||0,exchange=tx.exchange;
   const bk=tx.bookie&&p.bookies[tx.bookie]?p.bookies[tx.bookie]:null;
+  // Exchange commission, stored as a percentage (e.g. 2 for 2%), as a
+  // decimal for the maths below. Every formula here has been checked to
+  // reduce exactly to the original pre-commission formula when this is
+  // 0 — commission only ever changes a branch where the LAY side wins,
+  // since a losing lay is never charged commission.
+  const c=(tx.comm||0)/100;
 
   if(tx.underlay){
     if(!isFB){
-      // NORMAL UNDERLAY
-      // Won: back wins net of lay liability = bs*(bo-lo)
-      // Lost: £0 — back stake lost, lay profit cancels exactly
+      // NORMAL UNDERLAY — lay stake is deliberately just the back stake
+      // (not a full hedge, that's the point of the strategy), so
+      // commission only affects the branch where the lay actually wins.
       if(result==='Won'){
-        // Bookie receives full return (bo*bs) — stake was already deducted at log
-        // Net profit = bo*bs - bs = bs*(bo-1), but lay costs bs*(lo-1)
-        // So net P&L = bs*(bo-1) - bs*(lo-1) = bs*(bo-lo)
         const winProfit=lo>0?Math.round(bs*(bo-lo)*100)/100:(tx.pnl||0);
         tx.pnl=winProfit;
         if(bk){bk.bal=Math.round(((bk.bal||0)+(bo*bs))*100)/100;bk.balUpdatedAt=Date.now();}
       }else{
-        tx.pnl=0;
-        // bookie stays deducted (back stake lost), lay profit cancels on exchange — net zero
+        // Lay wins here — commission comes off that win. Was a flat £0
+        // (assuming the back-stake loss and lay win exactly cancel);
+        // now correctly reflects the small shortfall commission causes.
+        tx.pnl=Math.round((bs*(1-c)-bs)*100)/100;
       }
     }else{
-      // FREE BET SNR UNDERLAY
-      // Lay stake = bs*(bo-2)/(lo-1)
-      // Won: profit = bs (effectively get stake back)
-      // Lost: profit = lay stake (lay wins on the exchange)
+      // FREE BET SNR UNDERLAY — same reasoning: the smaller-than-full-
+      // hedge lay stake is intentional, only the lay-wins branch changes.
       const ul_ls=lo>1&&bo>2?bs*(bo-2)/(lo-1):0;
       if(result==='Won'){
-        const winProfit=bs; // SNR: back wins (bo-1)*bs, lay loses ul_ls*(lo-1) = bs*(bo-2) → net = bs
+        const winProfit=bs;
         tx.pnl=winProfit;
-        // Free bet bookie: winnings land in bookie account
         if(bk){bk.bal=(bk.bal||0)+(bo-1)*bs;bk.balUpdatedAt=Date.now();}
-        // Pay lay liability from exchange
         if(exchange&&state.exchanges[exchange]!==undefined)
           state.exchanges[exchange]=(state.exchanges[exchange]||0)-ul_ls*(lo-1);
       }else{
-        // Lost: lay wins → profit = lay stake
-        tx.pnl=ul_ls;
+        // Lost: lay wins — profit is the lay stake net of commission
+        // (was flat ul_ls, ignoring commission entirely).
+        tx.pnl=Math.round(ul_ls*(1-c)*100)/100;
         if(exchange&&state.exchanges[exchange]!==undefined)
-          state.exchanges[exchange]=(state.exchanges[exchange]||0)+ul_ls;
+          state.exchanges[exchange]=(state.exchanges[exchange]||0)+tx.pnl;
       }
     }
   }else{
-    // LOCK-IN (standard matched bet)
+    // LOCK-IN (standard matched bet) — the lay stake itself needs
+    // adjusting so both outcomes are genuinely equal once commission is
+    // real, otherwise the "lock" isn't actually balanced in real life.
+    // Same derivation as the Quick Calculator (see calcQuick()).
     if(result==='Won'){
       if(isFB){
-        // SNR free bet won: back winnings to bookie, pay lay liability from exchange
-        const li_ls=lo>0?bs*(bo-1)/lo:0;
-        const lockinProfit=li_ls; // same both ways for lock-in
-        tx.pnl=lockinProfit;
+        const li_ls=(lo-c)>0?(bo-1)*bs/(lo-c):0;
+        tx.pnl=Math.round(((bo-1)*bs-li_ls*(lo-1))*100)/100;
         if(bk)bk.bal=(bk.bal||0)+(bo-1)*bs; // back winnings to bookie
         if(exchange&&state.exchanges[exchange]!==undefined)
           state.exchanges[exchange]=(state.exchanges[exchange]||0)-li_ls*(lo-1);
       }else{
-        // Normal won: full return to bookie, pay lay liability from exchange
-        const li_ls=lo>0?bs*bo/lo:0;
-        const lockinProfit=li_ls-bs;
-        tx.pnl=lockinProfit;
+        const li_ls=(lo-c)>0?bs*bo/(lo-c):0;
+        tx.pnl=Math.round((bs*(bo-1)-li_ls*(lo-1))*100)/100;
         if(bk){bk.bal=(bk.bal||0)+(bo*bs);bk.balUpdatedAt=Date.now();}
         if(exchange&&state.exchanges[exchange]!==undefined)
           state.exchanges[exchange]=(state.exchanges[exchange]||0)-li_ls*(lo-1);
       }
     }else{
-      // Lost: lay profit/loss goes to exchange
-      // For normal bets: lay stake = bs*bo/lo, profit = lay_stake - bs (can be negative for qualifiers)
-      // For free bets: lay stake = bs*(bo-1)/lo, profit = lay_stake (always positive)
-      const li_ls=lo>0?(isFB?bs*(bo-1)/lo:bs*bo/lo):0;
-      const lockinProfit=lo>0?(isFB?li_ls:li_ls-bs):(tx.expectedPnl||0);
+      // Lost: lay wins — commission comes off that win. Previously used
+      // the SAME formula as the Won branch (no commission-adjustment,
+      // and no (1-c) applied to the winnings), which overstated P&L on
+      // every commission-bearing bet that settled Lost.
+      const li_ls=(lo-c)>0?(isFB?(bo-1)*bs/(lo-c):bs*bo/(lo-c)):0;
+      const lockinProfit=(lo-c)>0?(isFB?li_ls*(1-c):li_ls*(1-c)-bs):(tx.expectedPnl||0);
       tx.pnl=Math.round(lockinProfit*100)/100;
       if(exchange&&state.exchanges[exchange]!==undefined)
         state.exchanges[exchange]=(state.exchanges[exchange]||0)+tx.pnl;
@@ -3185,7 +3188,7 @@ function renderQuickCalc(){
     +'<div style="display:flex;gap:6px">'+typeBtns+'</div></div>'
     +'<div style="margin-bottom:10px"><div class="form-label">Strategy</div>'
     +'<div style="display:flex;gap:6px">'+stratBtns+'</div></div>'
-    +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:10px">'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px">'
     +'<div class="form-group"><div class="form-label">Stake</div>'
     +'<input type="number" id="qc-stake" placeholder="0.00" step="0.01" inputmode="decimal" oninput="calcQuick()" style="padding:8px;font-size:14px;font-weight:500"/></div>'
     +'<div class="form-group"><div class="form-label">Back odds</div>'
@@ -3193,6 +3196,10 @@ function renderQuickCalc(){
     +'<div class="form-group"><div class="form-label">Lay odds</div>'
     +'<input type="number" id="qc-lodds" placeholder="2.00" step="0.01" inputmode="decimal" oninput="calcQuick()" style="padding:8px;font-size:14px;font-weight:500"/></div>'
     +'</div>'
+    +(qcShowComm
+      ?'<div style="margin-bottom:10px"><div class="form-group"><div class="form-label">Exchange commission (%)</div>'
+        +'<input type="number" id="qc-comm" placeholder="0" step="0.1" inputmode="decimal" oninput="calcQuick()" style="padding:8px;font-size:14px;font-weight:500;max-width:120px"/></div></div>'
+      :'<div style="margin-bottom:10px"><button onclick="toggleQcComm()" style="background:none;border:none;color:var(--text-accent);font-size:12px;font-family:system-ui;cursor:pointer;padding:0">+ Add exchange commission</button></div>')
     +'<div id="qc-results" style="display:none;background:var(--bg-card2);border-radius:10px;padding:12px 14px;margin-bottom:12px">'
     +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">'
     +'<div><div style="font-size:10px;color:var(--text-muted);margin-bottom:3px">Lay stake</div>'
@@ -3233,6 +3240,7 @@ function setCalcBetType(t){
     const s=document.getElementById('qc-stake');if(s)s.value=window._qcStake||'';
     const b=document.getElementById('qc-bodds');if(b)b.value=window._qcBodds||'';
     const l=document.getElementById('qc-lodds');if(l)l.value=window._qcLodds||'';
+    const c=document.getElementById('qc-comm');if(c)c.value=window._qcComm||'';
     calcQuick();
   }
 }
@@ -3242,14 +3250,22 @@ function setCalcStrategy(s){
   setCalcBetType(calcBetType);
 }
 
+function toggleQcComm(){
+  qcShowComm=true;
+  setCalcBetType(calcBetType); // reuses the existing surgical re-render of #qc-container
+}
+
 function calcQuick(){
   const bs=parseFloat(document.getElementById('qc-stake')?.value)||0;
   const bo=parseFloat(document.getElementById('qc-bodds')?.value)||0;
   const lo=parseFloat(document.getElementById('qc-lodds')?.value)||0;
+  const commPct=parseFloat(document.getElementById('qc-comm')?.value)||0;
+  const c=commPct/100; // decimal form for the maths below
   // Store values for re-render preservation
   window._qcStake=bs||'';
   window._qcBodds=bo||'';
   window._qcLodds=lo||'';
+  window._qcComm=commPct||'';
 
   const res=document.getElementById('qc-results');
   const btn=document.getElementById('qc-log-btn');
@@ -3259,25 +3275,41 @@ function calcQuick(){
   const isUL=calcStrategy==='underlay';
   let layStake,winPnl,losePnl;
 
+  // Commission only ever affects a branch where the LAY side actually
+  // wins (i.e. exchange charges its cut on your lay winnings) — a
+  // losing lay is never charged commission. That's why only some
+  // branches below change when c>0; each has been checked to reduce
+  // exactly to the original (pre-commission) formula when c=0.
   if(isUL){
     if(!isFB){
+      // Underlay lay stake is deliberately just the back stake — not a
+      // full hedge, that's the point of the strategy — so commission
+      // doesn't change what to lay, only the "if loses" outcome, since
+      // that's the branch where the lay wins.
       layStake=bs;
-      winPnl=bs*(bo-lo);
-      losePnl=0;
+      winPnl=bs*(bo-lo); // lay loses here — no commission impact
+      losePnl=layStake*(1-c)-bs; // was flat £0 — now reflects the real commission cost
     }else{
+      // SNR underlay: same reasoning — the smaller-than-full-hedge lay
+      // stake is intentional, only the lay-wins outcome changes.
       layStake=lo>1&&bo>2?bs*(bo-2)/(lo-1):0;
-      winPnl=bs;
-      losePnl=layStake;
+      winPnl=bs; // lay loses here — no commission impact
+      losePnl=layStake*(1-c); // was flat layStake — now net of commission
     }
   }else{
     if(!isFB){
-      layStake=lo>0?bs*bo/lo:0;
-      winPnl=layStake-bs;
-      losePnl=layStake-bs;
+      // Standard lock-in: lay stake itself needs adjusting so both
+      // outcomes are genuinely equal once commission is real — that's
+      // the whole point of a "lock". S = B*O/(L-c); reduces to the
+      // original B*O/L exactly when c=0.
+      layStake=(lo-c)>0?bs*bo/(lo-c):0;
+      winPnl=bs*(bo-1)-layStake*(lo-1);
+      losePnl=layStake*(1-c)-bs;
     }else{
-      layStake=lo>0?bs*(bo-1)/lo:0;
-      winPnl=layStake;
-      losePnl=layStake;
+      // Free bet lock-in: same principle, S=(O-1)*B/(L-c).
+      layStake=(lo-c)>0?(bo-1)*bs/(lo-c):0;
+      winPnl=(bo-1)*bs-layStake*(lo-1);
+      losePnl=layStake*(1-c);
     }
   }
 
