@@ -2034,13 +2034,8 @@ function renderAdd(prefill){
           <div class="form-group" id="fg-bodds"><div class="form-label">Back odds</div><input type="number" id="f-bodds" placeholder="2.00" step="0.01" inputmode="decimal" value="${pf.bodds||''}" oninput="autoCalcUnderlay()" style="padding:7px 8px"/></div>
           <div class="form-group" id="fg-layodds"><div class="form-label">Lay odds</div><input type="number" id="f-lodds" placeholder="2.00" step="0.01" inputmode="decimal" oninput="autoCalcUnderlay()" value="${pf.lodds||''}" style="padding:7px 8px"/></div>
         </div>
-        <div id="fg-partial-wrap" style="display:none;margin-bottom:8px">
-          <div style="display:flex;align-items:center;gap:8px">
-            <span style="font-size:11px;color:var(--text-muted)">Partial %</span>
-            <input type="number" id="f-partial" placeholder="100" min="1" max="100" step="1" inputmode="numeric" value="100" oninput="autoCalcUnderlay()" style="width:70px;padding:5px 8px;font-size:12px"/>
-            <button onclick="document.getElementById('fg-partial-wrap').style.display='none'" style="font-size:10px;color:var(--text-muted);background:none;border:none;cursor:pointer">✕</button>
-          </div>
-          <div id="underlay-calc" style="background:var(--bg-card);border-radius:8px;padding:7px 10px;margin-top:4px;display:none">
+        <div id="underlay-calc-wrap" style="margin-bottom:8px">
+          <div id="underlay-calc" style="background:var(--bg-card);border-radius:8px;padding:7px 10px;display:none">
             <div style="display:flex;justify-content:space-between;gap:8px">
               <div style="display:flex;flex-direction:column;gap:2px;flex:1">
                 <span id="ul-win-label" style="font-size:10px;color:var(--text-muted)">If wins</span>
@@ -2055,6 +2050,13 @@ function renderAdd(prefill){
                 <span id="ul-liab-display" style="font-size:14px;font-weight:500;color:var(--text-secondary)">—</span>
               </div>
             </div>
+          </div>
+        </div>
+        <div id="fg-partial-wrap" style="display:none;margin-bottom:8px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:11px;color:var(--text-muted)">Partial %</span>
+            <input type="number" id="f-partial" placeholder="100" min="1" max="100" step="1" inputmode="numeric" value="100" oninput="autoCalcUnderlay()" style="width:70px;padding:5px 8px;font-size:12px"/>
+            <button onclick="document.getElementById('fg-partial-wrap').style.display='none'" style="font-size:10px;color:var(--text-muted);background:none;border:none;cursor:pointer">✕</button>
           </div>
         </div>
 
