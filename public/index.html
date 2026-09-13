@@ -137,8 +137,8 @@ body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg-page);mi
 .profile-btn{padding:5px 12px;border-radius:20px;cursor:pointer;font-size:12px;font-weight:500;color:var(--text-secondary);border:0.5px solid var(--border-col);background:transparent;transition:all .15s;white-space:nowrap}
 .profile-btn.active-jg{background:#14B8A6;color:#fff;border-color:#14B8A6}
 .profile-btn.active-hg{background:#A78BFA;color:#fff;border-color:#A78BFA}
-.profile-btn.active-bp{background:#60A5FA;color:#fff;border-color:#60A5FA}
-.profile-btn.active-rq{background:#F87171;color:#fff;border-color:#F87171}
+.profile-btn.active-bp{background:#F0A500;color:#fff;border-color:#F0A500}
+.profile-btn.active-rq{background:#F472B6;color:#fff;border-color:#F472B6}
 .profile-btn.active-both{background:var(--bg-input);color:var(--text-primary);border-color:var(--text-muted)}
 .profile-btn.active-both{background:var(--bg-input);color:var(--text-primary);border-color:var(--border-col)}
 
@@ -167,7 +167,7 @@ body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg-page);mi
 .acct-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
 .acct-name{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:500;color:var(--text-primary)}
 .acct-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
-.dot-jg{background:#14B8A6}.dot-hg{background:#A78BFA}.dot-bp{background:#60A5FA}.dot-rq{background:#F87171}
+.dot-jg{background:#14B8A6}.dot-hg{background:#A78BFA}.dot-bp{background:#F0A500}.dot-rq{background:#F472B6}
 .acct-pnl{font-size:12px;font-weight:500}
 .acct-pnl.pos{color:var(--text-accent)}.acct-pnl.neg{color:#F87171}
 .acct-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-top:0.5px solid rgba(255,255,255,0.08)}
@@ -184,10 +184,10 @@ body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg-page);mi
 .list-row-right.pos{color:var(--text-accent)}.list-row-right.neg{color:#F87171}.list-row-right.warn{color:#BA7517}
 
 .pill{display:inline-flex;align-items:center;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:500;white-space:nowrap;border:0.5px solid transparent}
-.pill-jg{background:#7A4F00;color:#F5C842;border-color:#185FA5}
-.pill-hg{background:#3C3489;color:#AFA9EC;border-color:#534AB7}
+.pill-jg{background:#134E4A;color:#2DD4BF;border-color:#0F766E}
+.pill-hg{background:#3C3489;color:#A78BFA;border-color:#534AB7}
 .pill-bp{background:#5C3800;color:#F0A500;border-color:#854F0B}
-.pill-rq{background:#14532D;color:#86EFAC;border-color:#3B6D11}
+.pill-rq{background:#831843;color:#F472B6;border-color:#BE185D}
 .pill-qualifier{background:#7A4F00;color:#F5C842}
 .pill-freebet{background:#14532D;color:#86EFAC}
 .pill-boost{background:#5C3800;color:#F0A500}
@@ -248,8 +248,8 @@ select option{background:var(--bg-input);color:var(--text-primary)}
 .acct-sel-btn{flex:1;min-width:60px;padding:7px 5px;border-radius:8px;border:0.5px solid var(--border-col);background:var(--bg-input);color:var(--text-secondary);font-family:system-ui,-apple-system,sans-serif;font-size:12px;font-weight:500;cursor:pointer;text-align:center;transition:all .15s}
 .acct-sel-btn.active-jg{background:#14B8A6;color:#fff;border-color:#14B8A6}
 .acct-sel-btn.active-hg{background:#A78BFA;color:#fff;border-color:#A78BFA}
-.acct-sel-btn.active-bp{background:#60A5FA;color:#fff;border-color:#60A5FA}
-.acct-sel-btn.active-rq{background:#F87171;color:#fff;border-color:#F87171}
+.acct-sel-btn.active-bp{background:#F0A500;color:#fff;border-color:#F0A500}
+.acct-sel-btn.active-rq{background:#F472B6;color:#fff;border-color:#F472B6}
 
 
 .btn{padding:11px 20px;border-radius:8px;font-family:system-ui,-apple-system,sans-serif;font-size:14px;font-weight:500;cursor:pointer;border:0.5px solid var(--border-col);background:var(--bg-input);color:var(--text-primary);transition:all .15s;display:inline-flex;align-items:center;justify-content:center;gap:6px}
@@ -782,11 +782,11 @@ function save(source='unknown'){debouncedSave(source);}
 
 const PROFILES=['jg','hg','bp','rq'];
 const PROFILE_LABELS={jg:'JG',hg:'HG',bp:'BP',rq:'RQ'};
-const PROFILE_COLORS={jg:'#F0A500',hg:'#7F77DD',bp:'#BA7517',rq:'#639922'};
-const BET_TYPES=['Qualifier','Free Bet','Boost','Mug','Extra Place','2Up','MBAL','Cash Back','Arb','Deposit','Withdrawal','Exchange Deposit','Exchange Withdrawal','Balance Amendment'];
+const PROFILE_COLORS={jg:'#14B8A6',hg:'#A78BFA',bp:'#F0A500',rq:'#F472B6'};
+const BET_TYPES=['Qualifier','Free Bet','Boost','Mug','Extra Place','2Up','MBAL','Cash Back','Placement','Arb','Deposit','Withdrawal','Exchange Deposit','Exchange Withdrawal','Balance Amendment'];
 const BOOKIE_TRANSFER=['Deposit','Withdrawal'];
 const EXCHANGE_TRANSFER=['Exchange Deposit','Exchange Withdrawal'];
-const BET_ONLY=['Qualifier','Free Bet','Boost','Mug','Extra Place','2Up','MBAL','Cash Back','Arb'];
+const BET_ONLY=['Qualifier','Free Bet','Boost','Mug','Extra Place','2Up','MBAL','Cash Back','Placement','Arb'];
 const FREE_BET_TYPES=['Free Bet'];
 const EXCHANGES=['Betfair','Smarkets','Matchbook','Betdaq'];
 const BOOKIE_STATUSES=['Not Signed Up','Active','Restricted','Gubbed','Closed'];
@@ -1015,7 +1015,7 @@ function getTypeColor(t){
   return getCssVar('--bg-input')||'#3D4349';
 }
 function getTypeTextColor(t){
-  const map={Boost:'#60A5FA','Free Bet':'#34D399',Qualifier:'#FBBF24',Mug:'#9A9590','Extra Place':'#C084FC','2Up':'#F87171',MBAL:'#FB923C','Cash Back':'#A78BFA',Arb:'#F472B6'};
+  const map={Boost:'#60A5FA','Free Bet':'#34D399',Qualifier:'#FBBF24',Mug:'#9A9590','Extra Place':'#C084FC','2Up':'#F87171',MBAL:'#FB923C','Cash Back':'#A78BFA',Placement:'#22D3EE',Arb:'#F472B6'};
   return map[t]||'#9A9590';
 }
 function toggleMoreTypes(){
@@ -1421,7 +1421,7 @@ function renderFreeBetsPanel(){
           <div style="font-size:13px;color:var(--text-primary)">${fb.bookie}${fb.amount?` <span style="color:var(--text-accent)">· £${fb.amount.toFixed(2)}</span>`:''}</div>
           <div style="font-size:11px;color:var(--text-muted)">${profileLabel(fb._pr)} · ${fb.date}</div>
         </div>
-        <button onclick="${fb.sourceMbalId?`logFreeBetFromMbal('${fb._pr}','${fb.id}')`:`markFreeBetUsed('${fb._pr}','${fb.id}')`}" style="font-size:11px;padding:4px 10px;border-radius:6px;border:0.5px solid rgba(255,255,255,0.2);background:var(--bg-input);color:var(--text-primary);cursor:pointer">${fb.sourceMbalId?'Log this free bet':'Mark used'}</button>
+        <button onclick="${(fb.sourceBetId||fb.sourceMbalId)?`logLinkedFreeBet('${fb._pr}','${fb.id}')`:`markFreeBetUsed('${fb._pr}','${fb.id}')`}" style="font-size:11px;padding:4px 10px;border-radius:6px;border:0.5px solid rgba(255,255,255,0.2);background:var(--bg-input);color:var(--text-primary);cursor:pointer">${(fb.sourceBetId||fb.sourceMbalId)?'Log this free bet':'Mark used'}</button>
       </div>`).join('')}
     </div>`:''}
     ${used.length>0?`
@@ -1441,17 +1441,18 @@ function renderFreeBetsPanel(){
   </div>`;
 }
 
-// Free bets that came from an MBAL loss are linked back to that bet, so
-// the combined real total can be shown once both settle — see
-// submitTx() for where the link actually gets attached, and
-// renderTxTable() for where the combined badge gets displayed.
-// Qualifier-sourced free bets have no sourceMbalId and keep the plain
-// markFreeBetUsed() flow below, unchanged.
-let _pendingMbalLink=null;
-function logFreeBetFromMbal(pr,fbId){
+// Free bets that came from a bet like MBAL or Placement (any bet type
+// whose Lost outcome earns a real free bet, rather than immediate cash)
+// are linked back to the bet that created them, so the combined real
+// total can be shown once both settle — see submitTx() for where the
+// link actually gets attached, and renderTxTable() for where the
+// combined badge gets displayed. Qualifier-sourced free bets have no
+// sourceBetId and keep the plain markFreeBetUsed() flow below, unchanged.
+let _pendingFreeBetLink=null;
+function logLinkedFreeBet(pr,fbId){
   const fb=(state[pr].freeBets||[]).find(f=>String(f.id)===String(fbId));
   if(!fb)return;
-  _pendingMbalLink={mbalId:fb.sourceMbalId,freeBetEntryId:fb.id,acct:pr};
+  _pendingFreeBetLink={sourceId:fb.sourceBetId||fb.sourceMbalId,freeBetEntryId:fb.id,acct:pr};
   _duplicateMode=true;
   formAccount=pr;
   selectedBetType='Free Bet';
@@ -1471,7 +1472,7 @@ function logFreeBetFromMbal(pr,fbId){
     const fbs=document.getElementById('f-bookie-search');if(fbs)fbs.value=fb.bookie;
     setStrategy('lockin');
   },50);
-  showToast('Log the free bet\u2019s real result \u2014 it\u2019ll link back to the original MBAL bet');
+  showToast('Log the free bet\u2019s real result \u2014 it\u2019ll link back to the original bet');
   window.scrollTo(0,0);
 }
 
@@ -1525,6 +1526,7 @@ function renderPendingCard(t){
         <button class="btn-lost" onclick="settleBet('${t._acct}',${t.id},'Lost')" style="padding:14px;font-size:15px;border-radius:10px"><i class="ti ti-x" aria-hidden="true"></i> Lost</button>
       </div>
       ${t.type==='Cash Back'?`<button onclick="settleBet('${t._acct}',${t.id},'Lost',true)" style="width:100%;margin-top:8px;padding:10px;font-size:13px;border-radius:10px;border:0.5px solid var(--text-accent);background:rgba(34,197,94,0.08);color:var(--text-accent)"><i class="ti ti-rotate" aria-hidden="true"></i> Lost, but trigger hit — stake refunded</button>`:''}
+      ${t.type==='Placement'?`<button onclick="settleBet('${t._acct}',${t.id},'Lost',true)" style="width:100%;margin-top:8px;padding:10px;font-size:13px;border-radius:10px;border:0.5px solid var(--text-accent);background:rgba(34,197,94,0.08);color:var(--text-accent)"><i class="ti ti-rotate" aria-hidden="true"></i> Lost, but placed — free bet earned</button>`:''}
     </div>`;
 }
 
@@ -1628,7 +1630,7 @@ function applyBalanceOnSettle(tx,p,result){
     // relying on memory to go redeem it.
     if(result==='Lost'&&bonus>0&&tx.bookie){
       if(!p.freeBets)p.freeBets=[];
-      p.freeBets.push({id:Date.now()+Math.random(),date:tx.date,bookie:tx.bookie,acct:tx._acct,status:'Pending',amount:bonus,sourceMbalId:tx.id});
+      p.freeBets.push({id:Date.now()+Math.random(),date:tx.date,bookie:tx.bookie,acct:tx._acct,status:'Pending',amount:bonus,sourceBetId:tx.id});
       showToast('Free bet available at '+tx.bookie+' (£'+bonus.toFixed(2)+') — check Dashboard','success');
     }
     return;
@@ -1710,6 +1712,22 @@ function applyBalanceOnSettle(tx,p,result){
     tx.pnl=Math.round(((tx.pnl||0)+bs)*100)/100;
     if(bk){bk.bal=(bk.bal||0)+bs;bk.balUpdatedAt=Date.now();}
   }
+
+  // Placement: a horse-racing offer where losing the win bet still earns
+  // a real free bet (equal to your stake) if the selection places
+  // (2nd/3rd/4th) without winning. Unlike Cash Back, this reward isn't
+  // immediate cash — it's a genuine free bet you'll place and settle
+  // separately — so this bet's own P&L stays as the standard qualifying
+  // loss, completely unchanged. Inflating it here with an assumed value
+  // would double-count once the real free bet's own P&L comes in later,
+  // same principle as MBAL. The free bet is tracked via the same
+  // linked-free-bet mechanism (see getLinkedPairTotal, logLinkedFreeBet)
+  // so the combined real total shows once both settle.
+  if(tx.type==='Placement'&&result==='Lost'&&tx.placementTriggered&&tx.bookie){
+    if(!p.freeBets)p.freeBets=[];
+    p.freeBets.push({id:Date.now()+Math.random(),date:tx.date,bookie:tx.bookie,acct:tx._acct,status:'Pending',amount:bs,sourceBetId:tx.id});
+    showToast('Free bet available at '+tx.bookie+' (£'+bs.toFixed(2)+') — check Dashboard','success');
+  }
 }
 
 function applyBalanceAtLog(tx,p){
@@ -1727,10 +1745,20 @@ function applyBalanceAtLog(tx,p){
   }
 }
 
-function settleBet(acct,id,result,cashBackTriggered){
+function settleBet(acct,id,result,triggered){
   const p=state[acct];const tx=(p.transactions||[]).find(t=>t.id===id);if(!tx||tx.result!=='Pending')return;
   tx.result=result;tx.txUpdatedAt=Date.now();
-  if(cashBackTriggered)tx.cashBackTriggered=true;
+  // "Triggered" means different things depending on bet type — Cash
+  // Back's trigger refunds cash immediately (see applyBalanceOnSettle),
+  // Placement's trigger earns a real free bet instead (tracked via the
+  // same linked-free-bet mechanism as MBAL, not inflated into this
+  // bet's own P&L). Stored as separate, clearly-named flags rather than
+  // one generic one, so it's always obvious from the data alone which
+  // kind of trigger fired on a given bet.
+  if(triggered){
+    if(tx.type==='Cash Back')tx.cashBackTriggered=true;
+    else if(tx.type==='Placement')tx.placementTriggered=true;
+  }
   applyBalanceOnSettle(tx,p,result);
   // If this bet had a pre-settlement P&L override (edited via the Settle
   // tab before clicking Won/Lost — see confirmPnlEdit), apply it now as
@@ -1826,7 +1854,7 @@ function renderAdd(prefill){
   const p=state[formAccount];const pf=prefill||{};
   const exchOpts=EXCHANGES.map(e=>`<option${(pf.exchange||lastExchange)===e?' selected':''}>${e}</option>`).join('');
   const topTypes=['Boost','Qualifier','Free Bet'];
-  const moreTypes=['Mug','Extra Place','2Up','MBAL','Cash Back','Arb'];
+  const moreTypes=['Mug','Extra Place','2Up','MBAL','Cash Back','Placement','Arb'];
   const isMoreSel=moreTypes.includes(selectedBetType);
   return`
   ${lastSavedTrade&&!prefill?`<div style="background:var(--bg-card);border:0.5px solid var(--border-col);border-radius:12px;padding:12px 16px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:10px">
@@ -2161,7 +2189,7 @@ function updateFlowPreview(){
 function bindFormEvents(){const exchSel=document.getElementById('f-exchange');if(exchSel)exchSel.addEventListener('change',updateFlowPreview);}
 function resetForm(){
   selectedBetType='';exchTransferBank='jg';showMoreTypes=false;showComm=false;
-  _pendingMbalLink=null; // clear if the user abandons a "Log this free bet" flow without submitting
+  _pendingFreeBetLink=null; // clear if the user abandons a "Log this free bet" flow without submitting
   // Re-render the form completely for a clean slate
   const mc=document.getElementById('main-content');
   if(mc&&(currentTab==='add'||currentTab==='trade'))mc.innerHTML=renderTrade();
@@ -2219,15 +2247,16 @@ function submitTx(){
     const mbalRetention=isMBAL?(parseFloat(document.getElementById('f-mbal-retention')?.value)||0):undefined;
     const tx={id:Date.now(),date,type:selectedBetType,bookie,exchange,event,bstake,bodds,lodds,comm,result,pnl:storedPnl,expectedPnl:pnl,notes,underlay:isUnderlay,_acct:formAccount,txUpdatedAt:Date.now(),mbalBonus,mbalRetention};
     // If this Free Bet was logged via "Log this free bet" from the Free
-    // Bets panel, link it back to the MBAL bet it came from — this is
-    // what lets the combined real total be shown once both settle, and
-    // closes the loop by marking that panel entry Used automatically
-    // rather than needing a separate manual step.
-    if(_pendingMbalLink&&selectedBetType==='Free Bet'&&_pendingMbalLink.acct===formAccount){
-      tx.linkedMbalId=_pendingMbalLink.mbalId;
-      const fbEntry=(p.freeBets||[]).find(f=>String(f.id)===String(_pendingMbalLink.freeBetEntryId));
+    // Bets panel, link it back to the bet it came from (MBAL, Placement,
+    // or any future type using this same mechanism) — this is what lets
+    // the combined real total be shown once both settle, and closes the
+    // loop by marking that panel entry Used automatically rather than
+    // needing a separate manual step.
+    if(_pendingFreeBetLink&&selectedBetType==='Free Bet'&&_pendingFreeBetLink.acct===formAccount){
+      tx.linkedBetId=_pendingFreeBetLink.sourceId;
+      const fbEntry=(p.freeBets||[]).find(f=>String(f.id)===String(_pendingFreeBetLink.freeBetEntryId));
       if(fbEntry)fbEntry.status='Used';
-      _pendingMbalLink=null;
+      _pendingFreeBetLink=null;
     }
     p.transactions.push(tx);applyBalanceAtLog(tx,p);
     if(selectedBetType==='Qualifier'){
@@ -2328,15 +2357,24 @@ function renderHistory(){
   ${renderTxTable(txs,showAll)}`;
 }
 
-// Once both halves of an MBAL/linked-free-bet pair have settled, this
+// Once both halves of a linked-free-bet pair have settled (MBAL,
+// Placement, or any future bet type using this same mechanism), this
 // computes their real combined total — shown as a small badge on both
 // rows in History, rather than something you have to add up yourself.
-function getMbalPairTotal(t){
+// Fully generic — doesn't hardcode which bet types create these links,
+// so a future type reusing the mechanism needs no changes here.
+function getLinkedPairTotal(t){
   if(t.result==='Pending')return null;
   const txs=state[t._acct]?.transactions||[];
+  const myLinkId=t.linkedBetId||t.linkedMbalId;
   let partner=null;
-  if(t.type==='MBAL')partner=txs.find(o=>o.linkedMbalId===t.id);
-  else if(t.linkedMbalId)partner=txs.find(o=>o.id===t.linkedMbalId);
+  if(myLinkId){
+    // t is the linked free bet — find the source bet it points back to
+    partner=txs.find(o=>o.id===myLinkId);
+  }else{
+    // t might be a source bet — find any free bet linked back to it
+    partner=txs.find(o=>(o.linkedBetId||o.linkedMbalId)===t.id);
+  }
   if(!partner||partner.result==='Pending')return null;
   return Math.round(((t.pnl||0)+(partner.pnl||0))*100)/100;
 }
@@ -2362,8 +2400,8 @@ function renderTxTable(txs,showAcct){
   ${txsToRender.map(t=>{
     const isBookieT=BOOKIE_TRANSFER.includes(t.type),isExchT=EXCHANGE_TRANSFER.includes(t.type),isAmend=t.type==='Balance Amendment',isBet=BET_ONLY.includes(t.type);
     const pnlStr=t.result==='Pending'?`<span class="warn">pending</span>`:`<span class="${(t.pnl||0)>=0?'pos':'neg'}">${fmtS(t.pnl||0)}</span>`;
-    const pairTotal=(t.type==='MBAL'||t.linkedMbalId)?getMbalPairTotal(t):null;
-    const resStr=t.result==='Won'?'<span class="pos">Won</span>':t.result==='Lost'?(t.cashBackTriggered?'<span class="pos">Lost · refunded</span>':'<span class="neg">Lost</span>'):t.result==='—'?'<span class="muted">—</span>':'<span class="warn">pending</span>';
+    const pairTotal=getLinkedPairTotal(t);
+    const resStr=t.result==='Won'?'<span class="pos">Won</span>':t.result==='Lost'?(t.cashBackTriggered?'<span class="pos">Lost · refunded</span>':t.placementTriggered?'<span class="pos">Lost · free bet</span>':'<span class="neg">Lost</span>'):t.result==='—'?'<span class="muted">—</span>':'<span class="warn">pending</span>';
     return`<tr data-txid="${t.id}">
       <td style="white-space:nowrap;font-size:11px;color:var(--text-secondary)">${t.date}</td>
       ${showAcct?`<td>${acctPill(t._acct)}</td>`:''}
