@@ -1748,13 +1748,17 @@ function applyBalanceOnSettle(tx,p,result){
   // generic lock-in branches above.
   if(tx.type==='Multiplier'){
     const minBoostPct=(tx.multMinBoost||5)/100;
-    const effOdds=(bo-1)*(1+minBoostPct)+1;
-    const lay_stake=lo>0?bs*effOdds/lo:0;
+    // Must mirror whichever lay stake was ACTUALLY used at logging time
+    // (see autoCalcUnderlay) — Lock-in sizes off the guaranteed minimum
+    // boost via effective odds; Underlay lays exactly the back stake,
+    // same convention as every other underlay in this app.
+    const lay_stake=tx.underlay?bs:(lo>0?bs*((bo-1)*(1+minBoostPct)+1)/lo:0);
     if(result==='Lost'){
-      // No boost involved on a Lost result — standard qualifying loss,
-      // just using the boosted-effective lay stake actually placed.
+      // No boost involved on a Lost result — standard qualifying loss
+      // for Lock-in; Underlay's lay-equals-stake design means this is
+      // always exactly £0, matching how it's presented at logging time.
       tx.pnl=Math.round((lay_stake-bs)*100)/100;
-      if(exchange&&state.exchanges[exchange]!==undefined)
+      if(!tx.underlay&&exchange&&state.exchanges[exchange]!==undefined)
         state.exchanges[exchange]=(state.exchanges[exchange]||0)+tx.pnl;
     }
     // Won is NEVER settled here — the real boost depends on the actual
@@ -1927,8 +1931,10 @@ function confirmMultiplierWin(acct,id){
   const bs=tx.bstake||0,bo=tx.bodds||0,lo=tx.lodds||0;
   const minBoostPct=(tx.multMinBoost||5)/100;
   const maxCap=tx.multMaxCap||250;
-  const effOdds=(bo-1)*(1+minBoostPct)+1;
-  const layStake=lo>0?bs*effOdds/lo:0;
+  // Must mirror whichever lay stake was ACTUALLY used at logging time —
+  // Lock-in sizes off the guaranteed minimum boost via effective odds;
+  // Underlay lays exactly the back stake (see autoCalcUnderlay).
+  const layStake=tx.underlay?bs:(lo>0?bs*((bo-1)*(1+minBoostPct)+1)/lo:0);
   const liability=layStake*(lo-1);
   const netWinnings=bs*(bo-1);
   const hedgeResult=netWinnings-liability;
@@ -1947,7 +1953,10 @@ function confirmMultiplierWin(acct,id){
 
   const bk=tx.bookie&&p.bookies[tx.bookie]?p.bookies[tx.bookie]:null;
   if(bk){bk.bal=(bk.bal||0)+(bo*bs);bk.balUpdatedAt=Date.now();}
-  if(tx.exchange&&state.exchanges[tx.exchange]!==undefined)
+  // Underlay never touches the exchange balance, same convention as
+  // every other underlay bet in this app — only Lock-in's full hedge
+  // liability gets deducted here.
+  if(!tx.underlay&&tx.exchange&&state.exchanges[tx.exchange]!==undefined)
     state.exchanges[tx.exchange]=(state.exchanges[tx.exchange]||0)-liability;
 
   if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('settle');
@@ -2147,21 +2156,35 @@ function autoCalcUnderlay(){
 
   if(selectedBetType==='Multiplier'){
     // Goal-Time Boost promos (e.g. "cash boost % = minute of first goal,
-    // min 5%, capped at £X"). Lay stake sized off the guaranteed MINIMUM
-    // boost — folded into effective odds the same way as MBAL — so the
-    // worst case (earliest possible trigger) still comes out at breakeven
-    // relative to a plain hedge, with genuine upside above that as the
-    // real trigger (goal minute) climbs higher. The actual final P&L
-    // isn't knowable until settlement, since it depends on the real
-    // outcome — see the Won-result prompt in renderPendingCard.
+    // min 5%, capped at £X"). The actual final P&L isn't knowable until
+    // settlement, since it depends on the real outcome — see the
+    // Won-result prompt in renderPendingCard. This only sizes the lay
+    // stake and previews the pre-boost hedge shortfall.
     const minBoostPct=(parseFloat(document.getElementById('f-mult-minboost')?.value)||5)/100;
     const maxCap=parseFloat(document.getElementById('f-mult-maxcap')?.value)||250;
-    const effOdds=(bo-1)*(1+minBoostPct)+1;
-    total_lay_stake=lo>0?bs*effOdds/lo:0;
     const netWinnings=bs*(bo-1);
-    const liability=total_lay_stake*(lo-1);
-    total_win=netWinnings-liability; // hedge shortfall alone — the real boost gets added at settlement
-    total_lose=total_lay_stake-bs; // standard qualifying loss — no boost involved on a Lost result
+
+    if(!isUnderlay){
+      // Lock-in: lay stake sized off the guaranteed MINIMUM boost —
+      // folded into effective odds the same way as MBAL — so the worst
+      // case (earliest possible trigger) still comes out at breakeven
+      // relative to a plain hedge.
+      const effOdds=(bo-1)*(1+minBoostPct)+1;
+      total_lay_stake=lo>0?bs*effOdds/lo:0;
+      const liability=total_lay_stake*(lo-1);
+      total_win=netWinnings-liability;
+      total_lose=total_lay_stake-bs;
+    }else{
+      // Underlay: lay stake equals back stake exactly — same convention
+      // as every other underlay in this app for a bet whose reward can't
+      // be precisely pre-calculated into the stake (matches Cash Back's
+      // underlay). Accepts £0 if it loses (no boost applies there
+      // anyway) in exchange for more upside if it wins.
+      total_lay_stake=bs;
+      const liability=total_lay_stake*(lo-1);
+      total_win=netWinnings-liability; // = bs*(bo-lo), the real boost adds on top at settlement
+      total_lose=0;
+    }
 
     const thresholdsEl=document.getElementById('mult-thresholds');
     if(thresholdsEl&&minBoostPct>0&&bo>1){
