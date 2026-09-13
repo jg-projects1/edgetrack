@@ -2027,7 +2027,7 @@ function renderAdd(prefill){
           <div style="display:flex;gap:5px;flex-wrap:wrap">${recentBookies.map(b=>`<button onclick="selectBookie('${b.replace(/'/g,"\\'")}');document.getElementById('f-bookie-search').value='${b.replace(/'/g,"\\'")}'" style="padding:4px 10px;border-radius:20px;border:0.5px solid var(--border-col);background:var(--bg-input);color:var(--text-secondary);font-family:system-ui,-apple-system,sans-serif;font-size:11px;cursor:pointer;white-space:nowrap">${b}</button>`).join('')}</div>
         </div>`:''}
 
-        <div class="form-row single" id="fg-event"><div class="form-group"><div class="form-label" style="color:var(--text-muted)">Event <span style="font-size:9px;text-transform:none;letter-spacing:0">(optional)</span></div><input type="text" id="f-event" placeholder="e.g. Arsenal vs Chelsea" value="${pf.event||''}" style="font-size:12px;padding:7px 10px;background:var(--bg-input);border-color:rgba(255,255,255,0.09)"/></div></div>
+        <div class="form-row single" id="fg-event"><div class="form-group"><div class="form-label" style="color:var(--text-muted)">Event</div><input type="text" id="f-event" placeholder="e.g. Arsenal vs Chelsea" value="${pf.event||''}" style="font-size:12px;padding:7px 10px;background:var(--bg-input);border-color:rgba(255,255,255,0.09)"/></div></div>
 
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px" id="fg-stake-odds">
           <div class="form-group" id="fg-bstake"><div class="form-label">Stake</div><input type="number" id="f-bstake" placeholder="0.00" step="0.01" inputmode="decimal" value="${pf.bstake||''}" oninput="autoCalcUnderlay()" style="padding:7px 8px"/></div>
@@ -2084,9 +2084,9 @@ function renderAdd(prefill){
           :`<button onclick="toggleComm()" style="padding:6px 12px;border-radius:20px;border:0.5px solid rgba(255,255,255,0.10);background:transparent;color:var(--text-muted);font-family:system-ui,-apple-system,sans-serif;font-size:11px;cursor:pointer"><input type="hidden" id="f-comm" value="0"/>+ Add commission</button>`}
         </div>
 
-        <div style="margin-bottom:8px" id="fg-result-pnl">
+        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:8px" id="fg-result-pnl">
           <div class="form-group" id="fg-pnl"><div class="form-label">P&L <span id="pnl-label-hint" style="font-size:10px;color:#22C55E">${isUnderlay?'auto':'your figure'}</span></div><input type="number" id="f-pnl" placeholder="0.00" step="0.01" inputmode="decimal" value="${pf.pnl||''}" style="padding:7px 8px"/></div>
-          <div id="fg-underlay" style="margin-bottom:6px;display:none">
+          <div id="fg-underlay" style="display:none">
             <div style="display:flex;align-items:center;gap:6px">
               <span class="form-label" style="margin-bottom:0;flex-shrink:0">Strategy</span>
               <button id="btn-underlay" onclick="setStrategy('underlay')" class="btn btn-primary" style="flex:1;padding:6px;font-size:12px">Underlay</button>
@@ -2094,7 +2094,6 @@ function renderAdd(prefill){
               <button onclick="document.getElementById('fg-partial-wrap').style.display=document.getElementById('fg-partial-wrap').style.display==='none'?'block':'none'" style="font-size:10px;color:var(--text-muted);background:none;border:0.5px solid var(--border-col);border-radius:6px;padding:4px 8px;cursor:pointer">Partial</button>
             </div>
           </div>
-
         </div>
 
         <div class="form-row single" id="fg-amount" style="display:none"><div class="form-group"><div class="form-label">Amount (£)</div><input type="number" id="f-amount" placeholder="0.00" step="0.01" inputmode="decimal" oninput="updateFlowPreview()"/></div></div>
@@ -2105,7 +2104,7 @@ function renderAdd(prefill){
           <div class="form-group" id="fg-amend-new" style="display:none"><div class="form-label">New balance (£)</div><input type="number" id="f-amend-new" placeholder="0.00" step="0.01" inputmode="decimal"/></div>
         </div>
         <div class="form-row single" id="fg-amend-reason" style="display:none"><div class="form-group"><div class="form-label">Reason</div><input type="text" id="f-amend-reason" placeholder="e.g. Casino offer, correction…"/></div></div>
-        <div class="form-row single" id="fg-notes"><div class="form-group"><div class="form-label" style="color:var(--text-muted)">Notes <span style="font-size:9px;text-transform:none;letter-spacing:0">(optional)</span></div><input type="text" id="f-notes" placeholder="Any extra details…" value="${pf.notes||''}" style="font-size:12px;padding:7px 10px;background:var(--bg-input);border-color:rgba(255,255,255,0.09)"/></div></div>
+        <div class="form-row single" id="fg-notes"><div class="form-group"><div class="form-label" style="color:var(--text-muted)">Notes</div><input type="text" id="f-notes" placeholder="Any extra details…" value="${pf.notes||''}" style="font-size:12px;padding:7px 10px;background:var(--bg-input);border-color:rgba(255,255,255,0.09)"/></div></div>
       </div>
 
       <div id="flow-preview" style="display:none" class="flow-preview"><i class="ti ti-arrows-exchange" aria-hidden="true"></i><span id="flow-text"></span></div>
