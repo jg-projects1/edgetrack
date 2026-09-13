@@ -847,6 +847,7 @@ function migrateLegacy(){
       'planet sports':'Planet Sport Bet',
       'Grosvenor Casinos':'Grosvenor',
       'grosvenor casinos':'Grosvenor',
+      '36':'36 Vegas',
     };
     Object.entries(renames).forEach(([oldName,newName])=>{
       if(bk[oldName]){
@@ -856,6 +857,15 @@ function migrateLegacy(){
         if(bk[oldName].notes)bk[newName].notes=bk[oldName].notes;
         delete bk[oldName];
       }
+    });
+    // Same renames also need applying to the `bookie` field stored on
+    // each individual TRANSACTION — merging the balance entries above
+    // never touched this. A transaction logged with a stale/typo'd name
+    // (e.g. "36" instead of "36 Vegas") keeps showing that stale name
+    // forever otherwise, including in Settle-tab bookie grouping, even
+    // after the balance side is correctly merged.
+    (state[pr].transactions||[]).forEach(t=>{
+      if(t.bookie&&renames[t.bookie])t.bookie=renames[t.bookie];
     });
     // Add any new bookies with Not Signed Up default
     DEFAULT_BOOKIES.forEach(b=>{if(!bk[b])bk[b]={bal:0,status:'Not Signed Up',notes:'',verifiedAt:null};});
@@ -1561,9 +1571,12 @@ function renderPending(){
     <div class="metric-card"><div class="metric-label">Expected P&L</div><div class="metric-value pos" style="font-size:20px">${fmtS(pending.reduce((a,t)=>a+(t.expectedPnl||0),0))}</div></div>
   </div>
   ${bookieOrder.map(bookie=>`
-  <div style="display:flex;align-items:center;justify-content:space-between;padding:0 2px 8px">
-    <span style="font-size:14px;font-weight:500;color:var(--text-primary)">${bookie}</span>
-    <span style="font-size:12px;color:var(--text-muted)">${groups[bookie].length} pending</span>
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;margin:14px 0 8px;background:var(--border-col2);border-radius:10px;border-left:3px solid var(--text-accent)">
+    <div style="display:flex;align-items:center;gap:8px">
+      <i class="ti ti-building-bank" aria-hidden="true" style="font-size:15px;color:var(--text-accent)"></i>
+      <span style="font-size:15px;font-weight:600;color:var(--text-primary)">${bookie}</span>
+    </div>
+    <span style="font-size:11px;font-weight:500;color:var(--text-accent);background:var(--bg-card);padding:3px 9px;border-radius:20px">${groups[bookie].length} pending</span>
   </div>
   ${groups[bookie].map(t=>renderPendingCard(t)).join('')}
   `).join('')}`;
