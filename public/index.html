@@ -196,6 +196,7 @@ body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg-page);mi
 .pill-mbal{background:#72243E;color:#ED93B1}
 .pill-cashback{background:#14532D;color:#86EFAC}
 .pill-placement{background:#164E63;color:#67E8F9}
+.pill-multiplier{background:#3F6212;color:#BEF264}
 .pill-arb{background:#5C3800;color:#F0A500}
 .pill-deposit,.pill-withdrawal{background:#0D4F5C;color:#5DCAA5}
 .pill-exchangedeposit,.pill-exchangewithdrawal{background:#0D4F5C;color:#5DCAA5}
@@ -237,6 +238,7 @@ select option{background:var(--bg-input);color:var(--text-primary)}
 .sel-mbal{background:var(--bg-input);color:#FB923C;border-color:#FB923C}
 .sel-cashback{background:var(--bg-input);color:#A78BFA;border-color:#A78BFA}
 .sel-placement{background:var(--bg-input);color:#22D3EE;border-color:#22D3EE}
+.sel-multiplier{background:var(--bg-input);color:#A3E635;border-color:#A3E635}
 .sel-arb{background:var(--bg-input);color:#F472B6;border-color:#F472B6}
 .sel-deposit,.sel-withdrawal{background:var(--bg-input);color:#34D399;border-color:#34D399}
 .sel-exchangedeposit,.sel-exchangewithdrawal{background:var(--bg-input);color:#34D399;border-color:#34D399}
@@ -781,10 +783,10 @@ function save(source='unknown'){debouncedSave(source);}
 const PROFILES=['jg','hg','bp','rq'];
 const PROFILE_LABELS={jg:'JG',hg:'HG',bp:'BP',rq:'RQ'};
 const PROFILE_COLORS={jg:'#14B8A6',hg:'#A78BFA',bp:'#F0A500',rq:'#F472B6'};
-const BET_TYPES=['Qualifier','Free Bet','Boost','Mug','2Up','MBAL','Cash Back','Placement','Arb','Deposit','Withdrawal','Exchange Deposit','Exchange Withdrawal','Balance Amendment'];
+const BET_TYPES=['Qualifier','Free Bet','Boost','Mug','2Up','MBAL','Cash Back','Placement','Multiplier','Arb','Deposit','Withdrawal','Exchange Deposit','Exchange Withdrawal','Balance Amendment'];
 const BOOKIE_TRANSFER=['Deposit','Withdrawal'];
 const EXCHANGE_TRANSFER=['Exchange Deposit','Exchange Withdrawal'];
-const BET_ONLY=['Qualifier','Free Bet','Boost','Mug','2Up','MBAL','Cash Back','Placement','Arb'];
+const BET_ONLY=['Qualifier','Free Bet','Boost','Mug','2Up','MBAL','Cash Back','Placement','Multiplier','Arb'];
 const FREE_BET_TYPES=['Free Bet'];
 const EXCHANGES=['Betfair','Smarkets','Matchbook','Betdaq'];
 const BOOKIE_STATUSES=['Not Signed Up','Active','Restricted','Gubbed','Closed'];
@@ -1023,7 +1025,7 @@ function getTypeColor(t){
   return getCssVar('--bg-input')||'#3D4349';
 }
 function getTypeTextColor(t){
-  const map={Boost:'#60A5FA','Free Bet':'#34D399',Qualifier:'#FBBF24',Mug:'#818CF8','2Up':'#F87171',MBAL:'#FB923C','Cash Back':'#A78BFA',Placement:'#22D3EE',Arb:'#F472B6'};
+  const map={Boost:'#60A5FA','Free Bet':'#34D399',Qualifier:'#FBBF24',Mug:'#818CF8','2Up':'#F87171',MBAL:'#FB923C','Cash Back':'#A78BFA',Placement:'#22D3EE',Multiplier:'#A3E635',Arb:'#F472B6'};
   return map[t]||'#9A9590';
 }
 function toggleMoreTypes(){
@@ -1530,7 +1532,7 @@ function renderPendingCard(t){
         <div style="margin-left:auto"><button class="btn-sm btn-sm-edit" onclick="editPnl('${t._acct}',${t.id})">Edit P&L</button></div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px">
-        <button class="btn-won" onclick="settleBet('${t._acct}',${t.id},'Won')" style="padding:14px;font-size:15px;border-radius:10px"><i class="ti ti-check" aria-hidden="true"></i> Won</button>
+        <button class="btn-won" onclick="${t.type==='Multiplier'?`promptMultiplierWin('${t._acct}',${t.id})`:`settleBet('${t._acct}',${t.id},'Won')`}" style="padding:14px;font-size:15px;border-radius:10px"><i class="ti ti-check" aria-hidden="true"></i> Won</button>
         <button class="btn-lost" onclick="settleBet('${t._acct}',${t.id},'Lost')" style="padding:14px;font-size:15px;border-radius:10px"><i class="ti ti-x" aria-hidden="true"></i> Lost</button>
       </div>
       ${t.type==='Cash Back'?`<button onclick="settleBet('${t._acct}',${t.id},'Lost',true)" style="width:100%;margin-top:8px;padding:10px;font-size:13px;border-radius:10px;border:0.5px solid var(--text-accent);background:rgba(34,197,94,0.08);color:var(--text-accent)"><i class="ti ti-rotate" aria-hidden="true"></i> Lost, but trigger hit — stake refunded</button>`:''}
@@ -1735,6 +1737,34 @@ function applyBalanceOnSettle(tx,p,result){
     p.freeBets.push({id:Date.now()+Math.random(),date:tx.date,bookie:tx.bookie,acct:tx._acct,status:'Pending',amount:bs,sourceBetId:tx.id});
     showToast('Free bet available at '+tx.bookie+' (£'+bs.toFixed(2)+') — check Dashboard','success');
   }
+
+  // Multiplier: "goal-time boost" promos, where the cash boost % on a
+  // WIN depends on something only known once the match is over (e.g.
+  // minute of the first goal), with a guaranteed minimum and a hard cap.
+  // The lay stake is sized off the guaranteed MINIMUM boost (effective
+  // odds), same principle as MBAL's bonus — this genuinely uses a
+  // DIFFERENT lay stake than the standard formula, which is why this
+  // needs its own dedicated handling rather than falling through to the
+  // generic lock-in branches above.
+  if(tx.type==='Multiplier'){
+    const minBoostPct=(tx.multMinBoost||5)/100;
+    const effOdds=(bo-1)*(1+minBoostPct)+1;
+    const lay_stake=lo>0?bs*effOdds/lo:0;
+    if(result==='Lost'){
+      // No boost involved on a Lost result — standard qualifying loss,
+      // just using the boosted-effective lay stake actually placed.
+      tx.pnl=Math.round((lay_stake-bs)*100)/100;
+      if(exchange&&state.exchanges[exchange]!==undefined)
+        state.exchanges[exchange]=(state.exchanges[exchange]||0)+tx.pnl;
+    }
+    // Won is NEVER settled here — the real boost depends on the actual
+    // goal minute, which isn't known at the point this function runs.
+    // The pending card's Won button opens a dedicated prompt instead
+    // (see promptMultiplierWin/confirmMultiplierWin) that computes the
+    // true final P&L and applies it directly — settleBet() should never
+    // be called with result='Won' for this bet type.
+    return;
+  }
 }
 
 function applyBalanceAtLog(tx,p){
@@ -1854,6 +1884,79 @@ function confirmPnlEdit(acct,id){
 
 function closeModal(){document.getElementById('modal-root').innerHTML='';}
 
+// Multiplier ("goal-time boost") bets can't be settled as Won by the
+// normal instant formula — the real boost depends on the actual goal
+// minute, only known once the match is over. This prompts for it
+// (mandatory — no "skip" option, since the whole point is capturing the
+// exact figure to compare against what the bookie actually credits),
+// then hands off to confirmMultiplierWin() to compute and apply the
+// true final P&L.
+function promptMultiplierWin(acct,id){
+  const tx=state[acct].transactions.find(t=>t.id===id);if(!tx)return;
+  document.getElementById('modal-root').innerHTML=`
+  <div class="modal-bg" onclick="if(event.target===this)closeModal()">
+    <div class="modal">
+      <div class="modal-handle"></div>
+      <div class="modal-title">What minute was the first goal?</div>
+      <div class="modal-sub">${tx.event||tx.bookie||'Transaction'} · ${tx.date}</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:12px">The first goal of the match by either side — not specifically your selection's own goal. Enter 0 if the match finished 0-0 (the guaranteed minimum boost still applies).</div>
+      <div style="margin-bottom:4px">
+        <div class="form-label">Goal minute</div>
+        <input type="number" id="modal-goal-minute" step="1" min="0" placeholder="e.g. 60" inputmode="numeric" style="font-size:20px;font-weight:500;border-color:var(--text-accent);background:var(--bg-input)"/>
+      </div>
+      <div id="mult-win-error" style="font-size:12px;color:#E24B4A;margin-top:4px"></div>
+      <div class="modal-actions">
+        <button class="btn btn-primary" style="flex:1" onclick="confirmMultiplierWin('${acct}',${id})">Confirm & settle</button>
+        <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      </div>
+    </div>
+  </div>`;
+  setTimeout(()=>document.getElementById('modal-goal-minute')?.focus(),50);
+}
+
+function confirmMultiplierWin(acct,id){
+  const goalMinuteRaw=document.getElementById('modal-goal-minute')?.value;
+  const goalMinute=parseFloat(goalMinuteRaw);
+  const errEl=document.getElementById('mult-win-error');
+  if(goalMinuteRaw===''||goalMinuteRaw===undefined||isNaN(goalMinute)||goalMinute<0){
+    if(errEl)errEl.textContent='Enter the goal minute (0 if the match was scoreless) to settle this bet.';
+    return;
+  }
+  const p=state[acct];const tx=(p.transactions||[]).find(t=>t.id===id);if(!tx||tx.result!=='Pending')return;
+
+  const bs=tx.bstake||0,bo=tx.bodds||0,lo=tx.lodds||0;
+  const minBoostPct=(tx.multMinBoost||5)/100;
+  const maxCap=tx.multMaxCap||250;
+  const effOdds=(bo-1)*(1+minBoostPct)+1;
+  const layStake=lo>0?bs*effOdds/lo:0;
+  const liability=layStake*(lo-1);
+  const netWinnings=bs*(bo-1);
+  const hedgeResult=netWinnings-liability;
+  // Real-world minimum still applies even on an unusually early goal —
+  // the guaranteed floor is a MINIMUM, not just whatever the raw minute
+  // implies, matching the offer's own wording.
+  const effectiveBoostPct=Math.max(goalMinute/100,minBoostPct);
+  const rawBoost=netWinnings*effectiveBoostPct;
+  const actualBoost=Math.min(rawBoost,maxCap);
+  const finalPnl=Math.round((hedgeResult+actualBoost)*100)/100;
+
+  tx.result='Won';
+  tx.actualGoalMinute=goalMinute;
+  tx.pnl=finalPnl;
+  tx.txUpdatedAt=Date.now();
+
+  const bk=tx.bookie&&p.bookies[tx.bookie]?p.bookies[tx.bookie]:null;
+  if(bk){bk.bal=(bk.bal||0)+(bo*bs);bk.balUpdatedAt=Date.now();}
+  if(tx.exchange&&state.exchanges[tx.exchange]!==undefined)
+    state.exchanges[tx.exchange]=(state.exchanges[tx.exchange]||0)-liability;
+
+  if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('settle');
+  closeModal();
+  showToast('Settled — final P&L: '+fmtS(finalPnl));
+  if(currentTab==='dashboard'){const mc=document.getElementById('main-content');if(mc)mc.innerHTML=renderDashboard();}
+  else render();
+}
+
 // ── ADD FORM ─────────────────────────────────────────────────────────────────
 
 
@@ -1861,7 +1964,7 @@ function renderAdd(prefill){
   const p=state[formAccount];const pf=prefill||{};
   const exchOpts=EXCHANGES.map(e=>`<option${(pf.exchange||lastExchange)===e?' selected':''}>${e}</option>`).join('');
   const topTypes=['Boost','Qualifier','Free Bet'];
-  const moreTypes=['Mug','2Up','MBAL','Cash Back','Placement','Arb'];
+  const moreTypes=['Mug','2Up','MBAL','Cash Back','Placement','Multiplier','Arb'];
   const isMoreSel=moreTypes.includes(selectedBetType);
   return`
   ${lastSavedTrade&&!prefill?`<div style="background:var(--bg-card);border:0.5px solid var(--border-col);border-radius:12px;padding:12px 16px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:10px">
@@ -1952,6 +2055,13 @@ function renderAdd(prefill){
             <div class="form-group"><div class="form-label">Bonus retention (%)</div><input type="number" id="f-mbal-retention" placeholder="70" step="1" inputmode="decimal" value="${pf.mbalRetention!==undefined?pf.mbalRetention:70}" oninput="autoCalcUnderlay()"/></div>
           </div>
         </div>
+        <div id="fg-multiplier" style="display:none;margin-bottom:8px">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div class="form-group"><div class="form-label">Min guaranteed boost (%)</div><input type="number" id="f-mult-minboost" placeholder="5" step="1" inputmode="decimal" value="${pf.multMinBoost!==undefined?pf.multMinBoost:5}" oninput="autoCalcUnderlay()"/></div>
+            <div class="form-group"><div class="form-label">Max cash boost cap (£)</div><input type="number" id="f-mult-maxcap" placeholder="250" step="1" inputmode="decimal" value="${pf.multMaxCap!==undefined?pf.multMaxCap:250}" oninput="autoCalcUnderlay()"/></div>
+          </div>
+          <div id="mult-thresholds" style="margin-top:8px;font-size:11px;color:var(--text-muted);background:var(--bg-input);border-radius:8px;padding:8px 10px"></div>
+        </div>
         <div style="margin-bottom:8px" id="fg-comm-toggle">
           ${showComm?`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:end">
             <div class="form-group"><div class="form-label">Commission (%)</div><input type="number" id="f-comm" placeholder="0" step="0.1" inputmode="decimal" value="${pf.comm||0}"/></div>
@@ -2035,7 +2145,37 @@ function autoCalcUnderlay(){
 
   let total_win, total_lose, total_lay_stake;
 
-  if(isMBAL){
+  if(selectedBetType==='Multiplier'){
+    // Goal-Time Boost promos (e.g. "cash boost % = minute of first goal,
+    // min 5%, capped at £X"). Lay stake sized off the guaranteed MINIMUM
+    // boost — folded into effective odds the same way as MBAL — so the
+    // worst case (earliest possible trigger) still comes out at breakeven
+    // relative to a plain hedge, with genuine upside above that as the
+    // real trigger (goal minute) climbs higher. The actual final P&L
+    // isn't knowable until settlement, since it depends on the real
+    // outcome — see the Won-result prompt in renderPendingCard.
+    const minBoostPct=(parseFloat(document.getElementById('f-mult-minboost')?.value)||5)/100;
+    const maxCap=parseFloat(document.getElementById('f-mult-maxcap')?.value)||250;
+    const effOdds=(bo-1)*(1+minBoostPct)+1;
+    total_lay_stake=lo>0?bs*effOdds/lo:0;
+    const netWinnings=bs*(bo-1);
+    const liability=total_lay_stake*(lo-1);
+    total_win=netWinnings-liability; // hedge shortfall alone — the real boost gets added at settlement
+    total_lose=total_lay_stake-bs; // standard qualifying loss — no boost involved on a Lost result
+
+    const thresholdsEl=document.getElementById('mult-thresholds');
+    if(thresholdsEl&&minBoostPct>0&&bo>1){
+      const safeUpTo=(maxCap/0.9)/(bo-1);
+      const guaranteedCappedBeyond=(maxCap/minBoostPct)/(bo-1);
+      let warning='';
+      if(bs>guaranteedCappedBeyond){
+        warning=`<div style="color:var(--text-warn);margin-top:4px">⚠ This stake guarantees hitting the £${maxCap} cap regardless of goal timing — reduce stake, there's no further upside beyond this point.</div>`;
+      }else if(bs>safeUpTo){
+        warning=`<div style="color:var(--text-warn);margin-top:4px">⚠ A very late goal could push this bet over the £${maxCap} cap at this stake.</div>`;
+      }
+      thresholdsEl.innerHTML=`Cap-safe up to: <b>£${safeUpTo.toFixed(2)}</b> &nbsp;·&nbsp; Guaranteed capped beyond: <b>£${guaranteedCappedBeyond.toFixed(2)}</b>${warning}`;
+    }
+  }else if(isMBAL){
     // Bonus lock-in: a bookie promo that pays a free bet ONLY if the
     // qualifying bet loses, nothing extra if it wins. The maths here
     // fold that bonus's retained value directly into the lay stake so
@@ -2172,6 +2312,7 @@ function updateFormFields(){
   sh('fg-exchbank',isExchT);sh('fg-event',isBet);
   sh('fg-stake-odds',isBet);sh('fg-underlay',isBet);
   sh('fg-mbal-bonus',selectedBetType==='MBAL');
+  sh('fg-multiplier',selectedBetType==='Multiplier');
   sh('fg-comm-toggle',isBet);sh('fg-result-pnl',isBet);sh('fg-result',isBet);sh('fg-pnl',isBet);
   sh('fg-amount',isBookieT||isExchT);
   sh('fg-amend-target',isAmend);sh('fg-amend-bal',isAmend);
@@ -2252,7 +2393,10 @@ function submitTx(){
     const isMBAL=selectedBetType==='MBAL';
     const mbalBonus=isMBAL?(parseFloat(document.getElementById('f-mbal-bonus')?.value)||0):undefined;
     const mbalRetention=isMBAL?(parseFloat(document.getElementById('f-mbal-retention')?.value)||0):undefined;
-    const tx={id:Date.now(),date,type:selectedBetType,bookie,exchange,event,bstake,bodds,lodds,comm,result,pnl:storedPnl,expectedPnl:pnl,notes,underlay:isUnderlay,_acct:formAccount,txUpdatedAt:Date.now(),mbalBonus,mbalRetention};
+    const isMultiplier=selectedBetType==='Multiplier';
+    const multMinBoost=isMultiplier?(parseFloat(document.getElementById('f-mult-minboost')?.value)||5):undefined;
+    const multMaxCap=isMultiplier?(parseFloat(document.getElementById('f-mult-maxcap')?.value)||250):undefined;
+    const tx={id:Date.now(),date,type:selectedBetType,bookie,exchange,event,bstake,bodds,lodds,comm,result,pnl:storedPnl,expectedPnl:pnl,notes,underlay:isUnderlay,_acct:formAccount,txUpdatedAt:Date.now(),mbalBonus,mbalRetention,multMinBoost,multMaxCap};
     // If this Free Bet was logged via "Log this free bet" from the Free
     // Bets panel, link it back to the bet it came from (MBAL, Placement,
     // or any future type using this same mechanism) — this is what lets
@@ -2408,7 +2552,7 @@ function renderTxTable(txs,showAcct){
     const isBookieT=BOOKIE_TRANSFER.includes(t.type),isExchT=EXCHANGE_TRANSFER.includes(t.type),isAmend=t.type==='Balance Amendment',isBet=BET_ONLY.includes(t.type);
     const pnlStr=t.result==='Pending'?`<span class="warn">pending</span>`:`<span class="${(t.pnl||0)>=0?'pos':'neg'}">${fmtS(t.pnl||0)}</span>`;
     const pairTotal=getLinkedPairTotal(t);
-    const resStr=t.result==='Won'?'<span class="pos">Won</span>':t.result==='Lost'?(t.cashBackTriggered?'<span class="pos">Lost · refunded</span>':t.placementTriggered?'<span class="pos">Lost · free bet</span>':'<span class="neg">Lost</span>'):t.result==='—'?'<span class="muted">—</span>':'<span class="warn">pending</span>';
+    const resStr=t.result==='Won'?(t.type==='Multiplier'&&t.actualGoalMinute!==undefined?`<span class="pos">Won · goal @ ${t.actualGoalMinute}′</span>`:'<span class="pos">Won</span>'):t.result==='Lost'?(t.cashBackTriggered?'<span class="pos">Lost · refunded</span>':t.placementTriggered?'<span class="pos">Lost · free bet</span>':'<span class="neg">Lost</span>'):t.result==='—'?'<span class="muted">—</span>':'<span class="warn">pending</span>';
     return`<tr data-txid="${t.id}">
       <td style="white-space:nowrap;font-size:11px;color:var(--text-secondary)">${t.date}</td>
       ${showAcct?`<td>${acctPill(t._acct)}</td>`:''}
