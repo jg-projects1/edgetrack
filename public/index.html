@@ -2326,7 +2326,7 @@ function selectBetType(t){
     if(el.dataset.type===t)el.classList.add('sel','sel-'+t.toLowerCase().split(' ').join(''));
   });
   // Qualifier defaults to Lock-in, all others default to Underlay
-  setStrategy(t==='Qualifier'?'lockin':'underlay');
+  setStrategy((t==='Qualifier'||t==='Multiplier')?'lockin':'underlay');
   updateFormFields();
 }
 function updateFormFields(){
