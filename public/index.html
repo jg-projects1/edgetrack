@@ -191,12 +191,11 @@ body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg-page);mi
 .pill-qualifier{background:#7A4F00;color:#F5C842}
 .pill-freebet{background:#14532D;color:#86EFAC}
 .pill-boost{background:#5C3800;color:#F0A500}
-.pill-mug{background:#042C53;color:#F5C842}
-.pill-extraplace{background:#3C3489;color:#AFA9EC}
+.pill-mug{background:#312E81;color:#A5B4FC}
 .pill-2up{background:#085041;color:#5DCAA5}
 .pill-mbal{background:#72243E;color:#ED93B1}
 .pill-cashback{background:#14532D;color:#86EFAC}
-.pill-cashout{background:#791F1F;color:#F09595}
+.pill-placement{background:#164E63;color:#67E8F9}
 .pill-arb{background:#5C3800;color:#F0A500}
 .pill-deposit,.pill-withdrawal{background:#0D4F5C;color:#5DCAA5}
 .pill-exchangedeposit,.pill-exchangewithdrawal{background:#0D4F5C;color:#5DCAA5}
@@ -233,12 +232,11 @@ select option{background:var(--bg-input);color:var(--text-primary)}
 .sel-qualifier{background:var(--bg-input);color:#FBBF24;border-color:#FBBF24}
 .sel-freebet{background:var(--bg-input);color:#34D399;border-color:#34D399}
 .sel-boost{background:var(--bg-input);color:#60A5FA;border-color:#60A5FA}
-.sel-mug{background:var(--bg-input);color:var(--text-muted);border-color:var(--text-muted)}
-.sel-extraplace{background:var(--bg-input);color:#C084FC;border-color:#C084FC}
+.sel-mug{background:var(--bg-input);color:#818CF8;border-color:#818CF8}
 .sel-2up{background:var(--bg-input);color:#F87171;border-color:#F87171}
 .sel-mbal{background:var(--bg-input);color:#FB923C;border-color:#FB923C}
 .sel-cashback{background:var(--bg-input);color:#A78BFA;border-color:#A78BFA}
-.sel-cashout{background:var(--bg-input);color:#94A3B8;border-color:#94A3B8}
+.sel-placement{background:var(--bg-input);color:#22D3EE;border-color:#22D3EE}
 .sel-arb{background:var(--bg-input);color:#F472B6;border-color:#F472B6}
 .sel-deposit,.sel-withdrawal{background:var(--bg-input);color:#34D399;border-color:#34D399}
 .sel-exchangedeposit,.sel-exchangewithdrawal{background:var(--bg-input);color:#34D399;border-color:#34D399}
@@ -783,10 +781,10 @@ function save(source='unknown'){debouncedSave(source);}
 const PROFILES=['jg','hg','bp','rq'];
 const PROFILE_LABELS={jg:'JG',hg:'HG',bp:'BP',rq:'RQ'};
 const PROFILE_COLORS={jg:'#14B8A6',hg:'#A78BFA',bp:'#F0A500',rq:'#F472B6'};
-const BET_TYPES=['Qualifier','Free Bet','Boost','Mug','Extra Place','2Up','MBAL','Cash Back','Placement','Arb','Deposit','Withdrawal','Exchange Deposit','Exchange Withdrawal','Balance Amendment'];
+const BET_TYPES=['Qualifier','Free Bet','Boost','Mug','2Up','MBAL','Cash Back','Placement','Arb','Deposit','Withdrawal','Exchange Deposit','Exchange Withdrawal','Balance Amendment'];
 const BOOKIE_TRANSFER=['Deposit','Withdrawal'];
 const EXCHANGE_TRANSFER=['Exchange Deposit','Exchange Withdrawal'];
-const BET_ONLY=['Qualifier','Free Bet','Boost','Mug','Extra Place','2Up','MBAL','Cash Back','Placement','Arb'];
+const BET_ONLY=['Qualifier','Free Bet','Boost','Mug','2Up','MBAL','Cash Back','Placement','Arb'];
 const FREE_BET_TYPES=['Free Bet'];
 const EXCHANGES=['Betfair','Smarkets','Matchbook','Betdaq'];
 const BOOKIE_STATUSES=['Not Signed Up','Active','Restricted','Gubbed','Closed'];
@@ -1025,7 +1023,7 @@ function getTypeColor(t){
   return getCssVar('--bg-input')||'#3D4349';
 }
 function getTypeTextColor(t){
-  const map={Boost:'#60A5FA','Free Bet':'#34D399',Qualifier:'#FBBF24',Mug:'#9A9590','Extra Place':'#C084FC','2Up':'#F87171',MBAL:'#FB923C','Cash Back':'#A78BFA',Placement:'#22D3EE',Arb:'#F472B6'};
+  const map={Boost:'#60A5FA','Free Bet':'#34D399',Qualifier:'#FBBF24',Mug:'#818CF8','2Up':'#F87171',MBAL:'#FB923C','Cash Back':'#A78BFA',Placement:'#22D3EE',Arb:'#F472B6'};
   return map[t]||'#9A9590';
 }
 function toggleMoreTypes(){
@@ -1863,7 +1861,7 @@ function renderAdd(prefill){
   const p=state[formAccount];const pf=prefill||{};
   const exchOpts=EXCHANGES.map(e=>`<option${(pf.exchange||lastExchange)===e?' selected':''}>${e}</option>`).join('');
   const topTypes=['Boost','Qualifier','Free Bet'];
-  const moreTypes=['Mug','Extra Place','2Up','MBAL','Cash Back','Placement','Arb'];
+  const moreTypes=['Mug','2Up','MBAL','Cash Back','Placement','Arb'];
   const isMoreSel=moreTypes.includes(selectedBetType);
   return`
   ${lastSavedTrade&&!prefill?`<div style="background:var(--bg-card);border:0.5px solid var(--border-col);border-radius:12px;padding:12px 16px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:10px">
