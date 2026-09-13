@@ -1559,11 +1559,7 @@ function renderPending(){
     groups[key].push(t);
   });
   Object.values(groups).forEach(arr=>arr.sort((a,b)=>a.id-b.id));
-  const bookieOrder=Object.keys(groups).sort((a,b)=>{
-    const oldestA=Math.min(...groups[a].map(t=>t.id));
-    const oldestB=Math.min(...groups[b].map(t=>t.id));
-    return oldestA-oldestB;
-  });
+  const bookieOrder=Object.keys(groups).sort((a,b)=>a.localeCompare(b));
 
   return`
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
