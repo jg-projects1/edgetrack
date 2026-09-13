@@ -2047,7 +2047,10 @@ function renderAdd(prefill){
               </div>
               <div style="display:flex;flex-direction:column;gap:2px;flex:1;text-align:right">
                 <span style="font-size:10px;color:var(--text-muted)">Lay stake</span>
-                <span id="ul-liab-display" style="font-size:14px;font-weight:500;color:var(--text-secondary)">—</span>
+                <div style="display:flex;align-items:center;justify-content:flex-end;gap:4px">
+                  <span id="ul-liab-display" style="font-size:14px;font-weight:500;color:var(--text-secondary)">—</span>
+                  <button id="form-laystake-copy-btn" onclick="copyFormLayStake()" style="background:none;border:none;color:var(--text-muted);cursor:pointer;padding:2px;line-height:0" title="Copy lay stake"><i class="ti ti-copy" aria-hidden="true"></i></button>
+                </div>
               </div>
             </div>
           </div>
@@ -2068,8 +2071,8 @@ function renderAdd(prefill){
         </div>
         <div id="fg-multiplier" style="display:none;margin-bottom:8px">
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-            <div class="form-group"><div class="form-label">Min guaranteed boost (%)</div><input type="number" id="f-mult-minboost" placeholder="5" step="1" inputmode="decimal" value="${pf.multMinBoost!==undefined?pf.multMinBoost:5}" oninput="autoCalcUnderlay()"/></div>
-            <div class="form-group"><div class="form-label">Max cash boost cap (£)</div><input type="number" id="f-mult-maxcap" placeholder="250" step="1" inputmode="decimal" value="${pf.multMaxCap!==undefined?pf.multMaxCap:250}" oninput="autoCalcUnderlay()"/></div>
+            <div class="form-group"><div class="form-label">Boost (%)</div><input type="number" id="f-mult-minboost" placeholder="5" step="1" inputmode="decimal" value="${pf.multMinBoost!==undefined?pf.multMinBoost:5}" oninput="autoCalcUnderlay()"/></div>
+            <div class="form-group"><div class="form-label">Cash cap (£)</div><input type="number" id="f-mult-maxcap" placeholder="250" step="1" inputmode="decimal" value="${pf.multMaxCap!==undefined?pf.multMaxCap:250}" oninput="autoCalcUnderlay()"/></div>
           </div>
           <div id="mult-thresholds" style="margin-top:8px;font-size:11px;color:var(--text-muted);background:var(--bg-input);border-radius:8px;padding:8px 10px"></div>
         </div>
@@ -2081,8 +2084,7 @@ function renderAdd(prefill){
           :`<button onclick="toggleComm()" style="padding:6px 12px;border-radius:20px;border:0.5px solid rgba(255,255,255,0.10);background:transparent;color:var(--text-muted);font-family:system-ui,-apple-system,sans-serif;font-size:11px;cursor:pointer"><input type="hidden" id="f-comm" value="0"/>+ Add commission</button>`}
         </div>
 
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px" id="fg-result-pnl">
-          <div class="form-group" id="fg-result"><div class="form-label">Result</div><select id="f-result"><option value="Pending">Pending</option><option value="Won">Won</option><option value="Lost">Lost</option></select></div>
+        <div style="margin-bottom:8px" id="fg-result-pnl">
           <div class="form-group" id="fg-pnl"><div class="form-label">P&L <span id="pnl-label-hint" style="font-size:10px;color:#22C55E">${isUnderlay?'auto':'your figure'}</span></div><input type="number" id="f-pnl" placeholder="0.00" step="0.01" inputmode="decimal" value="${pf.pnl||''}" style="padding:7px 8px"/></div>
           <div id="fg-underlay" style="margin-bottom:6px;display:none">
             <div style="display:flex;align-items:center;gap:6px">
@@ -2338,7 +2340,7 @@ function updateFormFields(){
   sh('fg-stake-odds',isBet);sh('fg-underlay',isBet);
   sh('fg-mbal-bonus',selectedBetType==='MBAL');
   sh('fg-multiplier',selectedBetType==='Multiplier');
-  sh('fg-comm-toggle',isBet);sh('fg-result-pnl',isBet);sh('fg-result',isBet);sh('fg-pnl',isBet);
+  sh('fg-comm-toggle',isBet);sh('fg-result-pnl',isBet);sh('fg-pnl',isBet);
   sh('fg-amount',isBookieT||isExchT);
   sh('fg-amend-target',isAmend);sh('fg-amend-bal',isAmend);
   sh('fg-amend-current',isAmend);sh('fg-amend-new',isAmend);sh('fg-amend-reason',isAmend);
@@ -3665,6 +3667,23 @@ function copyLayStake(){
     if(btn){btn.innerHTML='<i class="ti ti-check"></i>';setTimeout(function(){btn.innerHTML='<i class="ti ti-copy"></i>';},1500);}
   }).catch(function(){
     // Fallback for browsers without clipboard API
+    const ta=document.createElement('textarea');
+    ta.value=val;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);
+    showToast('Lay stake copied: £'+val);
+  });
+}
+
+// Same pattern, for the Log form's own Lay stake display (distinct
+// element from the Dashboard Quick Calculator's copyLayStake above).
+function copyFormLayStake(){
+  const el=document.getElementById('ul-liab-display');
+  if(!el)return;
+  const val=el.textContent.replace('£','').trim();
+  if(!val||val==='—')return;
+  navigator.clipboard.writeText(val).then(function(){
+    const btn=document.getElementById('form-laystake-copy-btn');
+    if(btn){btn.innerHTML='<i class="ti ti-check" aria-hidden="true"></i>';setTimeout(function(){btn.innerHTML='<i class="ti ti-copy" aria-hidden="true"></i>';},1500);}
+  }).catch(function(){
     const ta=document.createElement('textarea');
     ta.value=val;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);
     showToast('Lay stake copied: £'+val);
