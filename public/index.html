@@ -3701,7 +3701,9 @@ function renderQuickCalc(){
         +'<div id="qc-lose" style="font-size:20px;font-weight:500;color:var(--text-muted)">—</div></div>'
         +'</div>')
     +'</div>'
-    +(qcMultiMode?'':'<button id="qc-log-btn" onclick="logFromCalc()" style="display:none;width:100%;padding:13px;border-radius:10px;border:none;background:#22C55E;color:#fff;font-family:system-ui;font-size:15px;font-weight:500;cursor:pointer"><i class="ti ti-plus"></i> Log this bet</button>')
+    +(qcMultiMode
+      ?'<button id="qc-multi-log-btn" onclick="logFromCalcMulti()" style="display:none;width:100%;padding:13px;border-radius:10px;border:none;background:#22C55E;color:#fff;font-family:system-ui;font-size:15px;font-weight:500;cursor:pointer"><i class="ti ti-plus"></i> Log this bet</button>'
+      :'<button id="qc-log-btn" onclick="logFromCalc()" style="display:none;width:100%;padding:13px;border-radius:10px;border:none;background:#22C55E;color:#fff;font-family:system-ui;font-size:15px;font-weight:500;cursor:pointer"><i class="ti ti-plus"></i> Log this bet</button>')
     +'</div></div>';
 }
 
@@ -3829,6 +3831,8 @@ function calcQuickMulti(){
       const el=document.getElementById('qc-outcome-stake-'+i);if(el)el.textContent='—';
     }
     if(res)res.style.display='none';
+    const logBtn=document.getElementById('qc-multi-log-btn');
+    if(logBtn)logBtn.style.display='none';
     return;
   }
 
@@ -3904,6 +3908,10 @@ function calcQuickMulti(){
     posEl.style.color=overallPosition>=0?'#22C55E':'#F87171';
   }
   if(res)res.style.display='block';
+  window._qcMultiOverallPosition=overallPosition;
+  window._qcMultiNetExposure=netExposure;
+  const logBtn=document.getElementById('qc-multi-log-btn');
+  if(logBtn)logBtn.style.display='block';
 }
 
 function calcQuick(){
@@ -4014,6 +4022,66 @@ function logFromCalc(){
     updateFormFields();
     bindFormEvents();
     autoCalcUnderlay();
+  },50);
+}
+
+// Multi-outcome bets can't be represented by the Log form's single Lay
+// Odds field — that's a genuine structural limit, not something this
+// button can paper over. What it DOES do: carry over everything that
+// transfers cleanly (stake, back odds, bet type, strategy), set P&L
+// directly from the calculator's own Overall Position (never
+// recalculated by the form's own single-lay-odds formula, which would
+// be wrong here), and note each outcome's odds/stake in Notes so
+// nothing gets lost once you leave the calculator. Lay Odds is left
+// genuinely blank — there's no single value that could represent two
+// separate lay positions.
+function logFromCalcMulti(){
+  const bs=window._qcStake||'';
+  const bo=window._qcBodds||'';
+  const overallPosition=window._qcMultiOverallPosition;
+  const netExposure=window._qcMultiNetExposure;
+
+  const outcomeSummaries=[];
+  for(let i=0;i<qcOutcomeCount;i++){
+    const layOdds=document.getElementById('qc-outcome-lay-'+i)?.value||'';
+    const stakeText=document.getElementById('qc-outcome-stake-'+i)?.textContent||'';
+    if(layOdds&&stakeText&&stakeText!=='—')outcomeSummaries.push(layOdds+' → '+stakeText);
+  }
+  let notes='Multi-lay: '+outcomeSummaries.join(', ');
+  if(typeof netExposure==='number')notes+='\nNet exposure: £'+netExposure.toFixed(2);
+
+  selectedBetType=calcBetType;
+  isUnderlay=qcMultiStrategy==='underlay';
+  currentTab='trade';tradeSubTab='log';
+  document.querySelectorAll('.tab').forEach(el=>el.classList.remove('active'));
+  document.getElementById('tab-trade')?.classList.add('active');
+  document.getElementById('profile-bar').style.display='none';
+  const mc=document.getElementById('main-content');
+  if(mc)mc.innerHTML=renderTrade();
+  setTimeout(function(){
+    const fs=document.getElementById('f-bstake');if(fs)fs.value=bs;
+    const fb=document.getElementById('f-bodds');if(fb)fb.value=bo;
+    // Lay odds deliberately left blank — see comment above.
+    const fn=document.getElementById('f-notes');if(fn)fn.value=notes;
+    const fp=document.getElementById('f-pnl');
+    if(fp&&typeof overallPosition==='number'){
+      fp.value=overallPosition.toFixed(2);
+      fp.setAttribute('data-manual','true'); // prevents autoCalcUnderlay from ever overwriting this
+    }
+    setStrategy(qcMultiStrategy);
+    document.querySelectorAll('[data-toptype]').forEach(function(el){
+      const isSelected=el.dataset.toptype===calcBetType;
+      el.style.background=isSelected?getTypeColor(calcBetType):getCssVar('--bg-card2')||'#252629';
+      el.style.color=isSelected?getTypeTextColor(calcBetType):'#C8C5BF';
+      el.style.borderColor=isSelected?'transparent':'rgba(255,255,255,0.10)';
+    });
+    document.querySelectorAll('.type-pill').forEach(function(el){
+      el.className='type-pill';
+      if(el.dataset.type===calcBetType)el.classList.add('sel','sel-'+calcBetType.toLowerCase().split(' ').join(''));
+    });
+    updateFormFields();
+    bindFormEvents();
+    showToast('P&L set from your calculation — lay each outcome separately at the exchange');
   },50);
 }
 
