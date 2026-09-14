@@ -981,6 +981,14 @@ let qcMultiMode=false;
 let qcMultiStrategy='lockin'; // defaults to lock-in, not underlay
 let qcMultiFreeBet=false;
 let qcOutcomeCount=2;
+// Set when the Log form was populated from the multi-outcome calculator
+// — locks the Strategy toggle there, since P&L is frozen from whichever
+// strategy was actually used to calculate it and can't be recalculated
+// from a single lay odds value. Without this, toggling Underlay/Lock-in
+// would silently tag the transaction with a strategy that no longer
+// matches its own stored P&L. Cleared on resetForm() so it doesn't
+// linger into an unrelated, later bet.
+let _multiLogLocked=false;
 
 function fmt(v){const n=parseFloat(v)||0;return(n<0?'-':'')+'£'+Math.abs(n).toFixed(2);}
 function fmtS(v){const n=parseFloat(v)||0;return(n>=0?'+':'-')+'£'+Math.abs(n).toFixed(2);}
@@ -2098,12 +2106,14 @@ function renderAdd(prefill){
         <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:8px" id="fg-result-pnl">
           <div class="form-group" id="fg-pnl"><div class="form-label">P&L <span id="pnl-label-hint" style="font-size:10px;color:#22C55E">${isUnderlay?'auto':'your figure'}</span></div><input type="number" id="f-pnl" placeholder="0.00" step="0.01" inputmode="decimal" value="${pf.pnl||''}" style="padding:7px 8px"/></div>
           <div id="fg-underlay" style="display:none">
-            <div style="display:flex;align-items:center;gap:6px">
+            ${_multiLogLocked
+              ?'<div style="display:flex;align-items:center;gap:6px"><span class="form-label" style="margin-bottom:0;flex-shrink:0">Strategy</span><span style="flex:1;padding:6px 10px;font-size:12px;color:var(--text-muted);background:var(--bg-input);border-radius:8px">'+(isUnderlay?'Underlay':'Lock-in')+' — set from your multi-outcome calculation</span></div>'
+              :`<div style="display:flex;align-items:center;gap:6px">
               <span class="form-label" style="margin-bottom:0;flex-shrink:0">Strategy</span>
               <button id="btn-underlay" onclick="setStrategy('underlay')" class="btn btn-primary" style="flex:1;padding:6px;font-size:12px">Underlay</button>
               <button id="btn-lockin" onclick="setStrategy('lockin')" class="btn btn-ghost" style="flex:1;padding:6px;font-size:12px">Lock-in</button>
               <button onclick="document.getElementById('fg-partial-wrap').style.display=document.getElementById('fg-partial-wrap').style.display==='none'?'block':'none'" style="font-size:10px;color:var(--text-muted);background:none;border:0.5px solid var(--border-col);border-radius:6px;padding:4px 8px;cursor:pointer">Partial</button>
-            </div>
+            </div>`}
           </div>
         </div>
 
@@ -2375,6 +2385,7 @@ function bindFormEvents(){const exchSel=document.getElementById('f-exchange');if
 function resetForm(){
   selectedBetType='';exchTransferBank='jg';showMoreTypes=false;showComm=false;
   _pendingFreeBetLink=null; // clear if the user abandons a "Log this free bet" flow without submitting
+  _multiLogLocked=false; // clear so a later, unrelated bet isn't stuck with a locked Strategy toggle
   // Re-render the form completely for a clean slate
   const mc=document.getElementById('main-content');
   if(mc&&(currentTab==='add'||currentTab==='trade'))mc.innerHTML=renderTrade();
@@ -2462,6 +2473,7 @@ function submitTx(){
   const lastTx={type:selectedBetType,bookie:document.getElementById('f-bookie')?.value||(document.getElementById('f-bookie-search')?.value||''),exchange:document.getElementById('f-exchange')?.value||'',event:document.getElementById('f-event')?.value||'',bstake:document.getElementById('f-bstake')?.value||'',bodds:document.getElementById('f-bodds')?.value||'',lodds:document.getElementById('f-lodds')?.value||'',pnl:document.getElementById('f-pnl')?.value||'',underlay:isUnderlay,notes:document.getElementById('f-notes')?.value||'',_acct:formAccount};
   lastSavedTrade=lastTx;
   if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}invalidateTxCache(formAccount);saveData('logTrade');showToast('✓ Trade saved');msg.textContent='';
+  _multiLogLocked=false; // clear so a following, unrelated bet isn't stuck with a locked Strategy toggle
   // Stay on form — keep type, bookie, exchange; clear event/stake/odds/pnl
   const keepBookie=document.getElementById('f-bookie-search')?.value||'';
   const keepBookieVal=document.getElementById('f-bookie')?.value||'';
@@ -3749,6 +3761,17 @@ function setCalcBetType(t){
     const b=document.getElementById('qc-bodds');if(b)b.value=window._qcBodds||'';
     const l=document.getElementById('qc-lodds');if(l)l.value=window._qcLodds||'';
     const c=document.getElementById('qc-comm');if(c)c.value=window._qcComm||'';
+    // Multi-outcome lay odds — same restoration principle as the fields
+    // above, just missing until now. Every toggle in multi mode (Lock-in
+    // ↔ Underlay, Free Bet on/off, +/− an outcome) re-renders the whole
+    // container from scratch, which would otherwise wipe out whatever
+    // had already been typed into each outcome row.
+    if(window._qcOutcomeLayOdds){
+      for(let i=0;i<qcOutcomeCount;i++){
+        const el=document.getElementById('qc-outcome-lay-'+i);
+        if(el&&window._qcOutcomeLayOdds[i]!==undefined)el.value=window._qcOutcomeLayOdds[i]||'';
+      }
+    }
     calcQuick();
   }
 }
@@ -3818,11 +3841,15 @@ function calcQuickMulti(){
   const bs=parseFloat(document.getElementById('qc-stake')?.value)||0;
   const bo=parseFloat(document.getElementById('qc-bodds')?.value)||0;
   const layOddsArr=[];
+  const rawOutcomeValues=[];
   for(let i=0;i<qcOutcomeCount;i++){
-    layOddsArr.push(parseFloat(document.getElementById('qc-outcome-lay-'+i)?.value)||0);
+    const raw=document.getElementById('qc-outcome-lay-'+i)?.value||'';
+    rawOutcomeValues.push(raw);
+    layOddsArr.push(parseFloat(raw)||0);
   }
   window._qcStake=bs||'';
   window._qcBodds=bo||'';
+  window._qcOutcomeLayOdds=rawOutcomeValues; // raw strings, so an empty field restores empty, not "0"
 
   const res=document.getElementById('qc-results');
   const allEntered=bs>0&&bo>0&&layOddsArr.every(o=>o>0);
@@ -4036,6 +4063,7 @@ function logFromCalc(){
 // genuinely blank — there's no single value that could represent two
 // separate lay positions.
 function logFromCalcMulti(){
+  _multiLogLocked=true;
   const bs=window._qcStake||'';
   const bo=window._qcBodds||'';
   const overallPosition=window._qcMultiOverallPosition;
