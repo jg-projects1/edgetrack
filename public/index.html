@@ -1537,6 +1537,13 @@ function renderPendingCard(t){
         ${(()=>{
           const isFB=isFreeBet(t.type);
           const bs=t.bstake||0,bo=t.bodds||0,lo=t.lodds||0;
+          // Multi-lay bets (from the Quick Calculator's multi-outcome
+          // mode) have no single Lay Odds to compute from — the correct
+          // figure was calculated properly at logging time and carried
+          // through directly, rather than trying to derive it here.
+          if(t.multiLosePnl!==undefined){
+            return '<div class="pinfo-item"><span class="pinfo-label">If loses</span><span class="pinfo-val '+(t.multiLosePnl>=0?'pos':'neg')+'">'+fmtS(t.multiLosePnl)+'</span></div>';
+          }
           if(t.underlay&&isFB&&lo>1&&bo>2){
             const ul_ls=bs*(bo-2)/(lo-1);
             return '<div class="pinfo-item"><span class="pinfo-label">If loses</span><span class="pinfo-val pos">'+fmtS(ul_ls)+'</span></div>';
@@ -2445,6 +2452,14 @@ function submitTx(){
     const multMinBoost=isMultiplier?(parseFloat(document.getElementById('f-mult-minboost')?.value)||5):undefined;
     const multMaxCap=isMultiplier?(parseFloat(document.getElementById('f-mult-maxcap')?.value)||250):undefined;
     const tx={id:Date.now(),date,type:selectedBetType,bookie,exchange,event,bstake,bodds,lodds,comm,result,pnl:storedPnl,expectedPnl:pnl,notes,underlay:isUnderlay,_acct:formAccount,txUpdatedAt:Date.now(),mbalBonus,mbalRetention,multMinBoost,multMaxCap};
+    // Carries the multi-outcome calculator's "if neither outcome hits"
+    // figure through to the actual transaction, so the pending card can
+    // show a correct "If loses" — genuinely different from "If wins" for
+    // Underlay, identical to it for Lock-in — rather than nothing at all
+    // (this bet has no single Lay Odds to compute either from directly).
+    if(_multiLogLocked&&typeof window._qcMultiLosePosition==='number'){
+      tx.multiLosePnl=window._qcMultiLosePosition;
+    }
     // If this Free Bet was logged via "Log this free bet" from the Free
     // Bets panel, link it back to the bet it came from (MBAL, Placement,
     // or any future type using this same mechanism) — this is what lets
@@ -3903,6 +3918,19 @@ function calcQuickMulti(){
 
   const liabilities=stakes.map((s,i)=>s*(layOddsArr[i]-1));
   const sumStakes=stakes.reduce((a,b)=>a+b,0);
+
+  // "If neither outcome hits" — genuinely different from the win-side
+  // figure for Underlay (where it's the whole point of the design), but
+  // identical to it for Lock-in (every scenario converges to the same
+  // number, by construction). Stored separately so the pending card can
+  // show a correct "If loses" figure rather than nothing at all.
+  let losePosition;
+  if(!isUL){
+    losePosition=isFB?sumStakes:(-bs+sumStakes);
+  }else{
+    losePosition=isFB?sumStakes:0; // normal underlay guarantees exactly £0
+  }
+  window._qcMultiLosePosition=losePosition;
 
   // Net exposure: worst case across outcomes, netting each outcome's
   // liability against every OTHER outcome's stake (generalizes the
