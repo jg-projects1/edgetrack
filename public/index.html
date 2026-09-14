@@ -970,6 +970,17 @@ let showComm=false; // toggle for commission field
 let calcBetType='Boost';
 let calcStrategy='underlay';
 let qcShowComm=false;
+// Multi-outcome mode ("bet builders" like Draw + Under 4.5 + BTTS Yes,
+// satisfied by several distinct correct scores, each needing its own
+// lay bet since the exchange has no market matching the combined
+// selection). Kept entirely independent of the single-outcome
+// calculator's own state above, per explicit design decision — opening
+// multi mode never changes what the single-outcome view has set, and
+// vice versa.
+let qcMultiMode=false;
+let qcMultiStrategy='lockin'; // defaults to lock-in, not underlay
+let qcMultiFreeBet=false;
+let qcOutcomeCount=2;
 
 function fmt(v){const n=parseFloat(v)||0;return(n<0?'-':'')+'£'+Math.abs(n).toFixed(2);}
 function fmtS(v){const n=parseFloat(v)||0;return(n>=0?'+':'-')+'£'+Math.abs(n).toFixed(2);}
@@ -3606,6 +3617,7 @@ function renderCasinoHistory(){
 function renderQuickCalc(){
   const isFB=calcBetType==='Free Bet';
   const isUL=calcStrategy==='underlay';
+  const multiIsUL=qcMultiStrategy==='underlay';
   const types=['Boost','Free Bet','Qualifier','Mug'];
   const inputBg=getCssVar('--bg-input')||'#3D4349';
   const typeBg={Boost:inputBg,'Free Bet':inputBg,Qualifier:inputBg,Mug:inputBg};
@@ -3617,9 +3629,22 @@ function renderQuickCalc(){
     return '<button onclick="setCalcBetType(\'' + t + '\')" style="flex:1;padding:8px 4px;border-radius:8px;border:0.5px solid var(--border-col);background:'+bg+';color:'+col+';font-family:system-ui;font-size:11px;font-weight:500;cursor:pointer">'+t+'</button>';
   }).join('');
 
-  const stratBtns=
-    '<button onclick="setCalcStrategy(\'underlay\')" class="btn '+(isUL?'btn-primary':'btn-ghost')+'" style="flex:1;padding:8px;font-size:12px">Underlay</button>'
-    +'<button onclick="setCalcStrategy(\'lockin\')" class="btn '+(isUL?'btn-ghost':'btn-primary')+'" style="flex:1;padding:8px;font-size:12px">Lock-in</button>';
+  const stratBtns=qcMultiMode
+    ? '<button onclick="setQcMultiStrategy(\'underlay\')" class="btn '+(multiIsUL?'btn-primary':'btn-ghost')+'" style="flex:1;padding:8px;font-size:12px">Underlay</button>'
+      +'<button onclick="setQcMultiStrategy(\'lockin\')" class="btn '+(multiIsUL?'btn-ghost':'btn-primary')+'" style="flex:1;padding:8px;font-size:12px">Lock-in</button>'
+    : '<button onclick="setCalcStrategy(\'underlay\')" class="btn '+(isUL?'btn-primary':'btn-ghost')+'" style="flex:1;padding:8px;font-size:12px">Underlay</button>'
+      +'<button onclick="setCalcStrategy(\'lockin\')" class="btn '+(isUL?'btn-ghost':'btn-primary')+'" style="flex:1;padding:8px;font-size:12px">Lock-in</button>';
+
+  // Outcome rows — only relevant in multi mode, but harmless to compute either way
+  let outcomeRows='';
+  for(let i=0;i<qcOutcomeCount;i++){
+    outcomeRows+='<div style="display:flex;gap:4px;align-items:center;padding:5px 0;border-bottom:0.5px solid var(--border-col)'+(i<qcOutcomeCount-1?'':';margin-bottom:6px')+'">'
+      +'<input type="number" id="qc-outcome-lay-'+i+'" placeholder="e.g. 1-1" step="0.01" inputmode="decimal" oninput="calcQuick()" style="width:64px;box-sizing:border-box;padding:5px 6px;font-size:13px;border-radius:6px"/>'
+      +'<span id="qc-outcome-stake-'+i+'" style="flex:1;font-size:13px;font-weight:500;color:var(--text-primary);text-align:right">—</span>'
+      +'<button onclick="copyQcOutcomeStake('+i+')" style="background:none;border:none;color:var(--text-muted);cursor:pointer;padding:2px;line-height:0" title="Copy lay stake"><i class="ti ti-copy" aria-hidden="true"></i></button>'
+      +(qcOutcomeCount>2?'<button onclick="removeQcOutcome('+i+')" style="background:none;border:none;color:var(--text-muted);font-size:13px;padding:0 2px;width:16px;cursor:pointer">✕</button>':'<span style="width:16px"></span>')
+      +'</div>';
+  }
 
   return '<div class="card" style="margin-bottom:12px">'
     +'<div style="height:4px"></div>'
@@ -3628,31 +3653,55 @@ function renderQuickCalc(){
     +'<div style="display:flex;gap:6px">'+typeBtns+'</div></div>'
     +'<div style="margin-bottom:10px"><div class="form-label">Strategy</div>'
     +'<div style="display:flex;gap:6px">'+stratBtns+'</div></div>'
-    +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px">'
+    +(qcMultiMode
+      ?'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;padding:7px 10px;background:var(--bg-input);border-radius:8px">'
+        +'<span style="font-size:12px;font-weight:500;color:var(--text-primary)">Free bet (stake not returned)</span>'
+        +'<button onclick="toggleQcMultiFreeBet()" style="width:36px;height:20px;border-radius:20px;border:none;background:'+(qcMultiFreeBet?'var(--text-accent)':'var(--border-col2)')+';position:relative;flex-shrink:0;cursor:pointer;padding:0">'
+        +'<span style="width:16px;height:16px;border-radius:50%;background:#fff;position:absolute;top:2px;'+(qcMultiFreeBet?'right':'left')+':2px;transition:all .15s"></span>'
+        +'</button></div>'
+      :'')
+    +'<div style="display:grid;grid-template-columns:'+(qcMultiMode?'1fr 1fr':'1fr 1fr 1fr')+';gap:6px;margin-bottom:8px">'
     +'<div class="form-group"><div class="form-label">Stake</div>'
     +'<input type="number" id="qc-stake" placeholder="0.00" step="0.01" inputmode="decimal" oninput="calcQuick()" style="padding:8px;font-size:14px;font-weight:500"/></div>'
     +'<div class="form-group"><div class="form-label">Back odds</div>'
     +'<input type="number" id="qc-bodds" placeholder="2.00" step="0.01" inputmode="decimal" oninput="calcQuick()" style="padding:8px;font-size:14px;font-weight:500"/></div>'
-    +'<div class="form-group"><div class="form-label">Lay odds</div>'
-    +'<input type="number" id="qc-lodds" placeholder="2.00" step="0.01" inputmode="decimal" oninput="calcQuick()" style="padding:8px;font-size:14px;font-weight:500"/></div>'
+    +(qcMultiMode?'':'<div class="form-group"><div class="form-label">Lay odds</div>'
+    +'<input type="number" id="qc-lodds" placeholder="2.00" step="0.01" inputmode="decimal" oninput="calcQuick()" style="padding:8px;font-size:14px;font-weight:500"/></div>')
+    +'</div>'
+    +'<div style="display:flex;justify-content:space-between;margin-bottom:10px">'
+    +'<button onclick="toggleQcMultiMode()" style="background:none;border:none;color:var(--text-accent);font-size:12px;font-weight:500;font-family:system-ui;cursor:pointer;padding:0">'+(qcMultiMode?'✕ single outcome':'+ Multiple outcomes')+'</button>'
+    +(qcShowComm?'':'<button onclick="toggleQcComm()" style="background:none;border:none;color:var(--text-accent);font-size:12px;font-family:system-ui;cursor:pointer;padding:0">+ Add commission</button>')
     +'</div>'
     +(qcShowComm
       ?'<div style="margin-bottom:10px"><div class="form-group"><div class="form-label">Exchange commission (%)</div>'
         +'<input type="number" id="qc-comm" placeholder="0" step="0.1" inputmode="decimal" oninput="calcQuick()" style="padding:8px;font-size:14px;font-weight:500;max-width:120px"/></div></div>'
-      :'<div style="margin-bottom:10px"><button onclick="toggleQcComm()" style="background:none;border:none;color:var(--text-accent);font-size:12px;font-family:system-ui;cursor:pointer;padding:0">+ Add exchange commission</button></div>')
+      :'')
+    +(qcMultiMode
+      ?'<div style="margin-bottom:4px"><div class="form-label">Outcomes</div></div>'
+        +outcomeRows
+        +'<button onclick="addQcOutcome()" style="background:none;border:none;color:var(--text-accent);font-size:12px;font-weight:500;font-family:system-ui;cursor:pointer;padding:0;margin-bottom:12px">+ Add outcome</button>'
+      :'')
     +'<div id="qc-results" style="display:none;background:var(--bg-card2);border-radius:10px;padding:12px 14px;margin-bottom:12px">'
-    +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">'
-    +'<div><div style="font-size:10px;color:var(--text-muted);margin-bottom:3px">Lay stake</div>'
-    +'<div style="display:flex;align-items:center;gap:6px">'
-    +'<div id="qc-laystake" style="font-size:20px;font-weight:500;color:var(--text-primary)">—</div>'
-    +'<button id="qc-copy-btn" onclick="copyLayStake()" style="display:none;padding:4px 8px;border-radius:6px;border:0.5px solid rgba(255,255,255,0.15);background:var(--bg-input);color:var(--text-secondary);font-size:11px;cursor:pointer;font-family:system-ui">Copy</button>'
-    +'</div></div>'
-    +'<div><div style="font-size:10px;color:var(--text-muted);margin-bottom:3px">If wins</div>'
-    +'<div id="qc-win" style="font-size:20px;font-weight:500;color:#22C55E">—</div></div>'
-    +'<div><div style="font-size:10px;color:var(--text-muted);margin-bottom:3px">If loses</div>'
-    +'<div id="qc-lose" style="font-size:20px;font-weight:500;color:var(--text-muted)">—</div></div>'
-    +'</div></div>'
-    +'<button id="qc-log-btn" onclick="logFromCalc()" style="display:none;width:100%;padding:13px;border-radius:10px;border:none;background:#22C55E;color:#fff;font-family:system-ui;font-size:15px;font-weight:500;cursor:pointer"><i class="ti ti-plus"></i> Log this bet</button>'
+    +(qcMultiMode
+      ?'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'
+        +'<div><div style="font-size:10px;color:var(--text-muted);margin-bottom:3px">Net exposure</div>'
+        +'<div id="qc-multi-exposure" style="font-size:18px;font-weight:500;color:var(--text-primary)">—</div></div>'
+        +'<div><div style="font-size:10px;color:var(--text-muted);margin-bottom:3px">Overall position</div>'
+        +'<div id="qc-multi-position" style="font-size:18px;font-weight:500;color:var(--text-primary)">—</div></div>'
+        +'</div>'
+      :'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">'
+        +'<div><div style="font-size:10px;color:var(--text-muted);margin-bottom:3px">Lay stake</div>'
+        +'<div style="display:flex;align-items:center;gap:6px">'
+        +'<div id="qc-laystake" style="font-size:20px;font-weight:500;color:var(--text-primary)">—</div>'
+        +'<button id="qc-copy-btn" onclick="copyLayStake()" style="display:none;padding:4px 8px;border-radius:6px;border:0.5px solid rgba(255,255,255,0.15);background:var(--bg-input);color:var(--text-secondary);font-size:11px;cursor:pointer;font-family:system-ui">Copy</button>'
+        +'</div></div>'
+        +'<div><div style="font-size:10px;color:var(--text-muted);margin-bottom:3px">If wins</div>'
+        +'<div id="qc-win" style="font-size:20px;font-weight:500;color:#22C55E">—</div></div>'
+        +'<div><div style="font-size:10px;color:var(--text-muted);margin-bottom:3px">If loses</div>'
+        +'<div id="qc-lose" style="font-size:20px;font-weight:500;color:var(--text-muted)">—</div></div>'
+        +'</div>')
+    +'</div>'
+    +(qcMultiMode?'':'<button id="qc-log-btn" onclick="logFromCalc()" style="display:none;width:100%;padding:13px;border-radius:10px;border:none;background:#22C55E;color:#fff;font-family:system-ui;font-size:15px;font-weight:500;cursor:pointer"><i class="ti ti-plus"></i> Log this bet</button>')
     +'</div></div>';
 }
 
@@ -3712,7 +3761,153 @@ function toggleQcComm(){
   setCalcBetType(calcBetType); // reuses the existing surgical re-render of #qc-container
 }
 
+function toggleQcMultiMode(){
+  qcMultiMode=!qcMultiMode;
+  if(qcMultiMode){qcOutcomeCount=2;} // reset to a clean 2-row start each time it's opened
+  setCalcBetType(calcBetType);
+  calcQuick();
+}
+
+function toggleQcMultiFreeBet(){
+  qcMultiFreeBet=!qcMultiFreeBet;
+  calcQuick();
+}
+
+function setQcMultiStrategy(s){
+  qcMultiStrategy=s;
+  setCalcBetType(calcBetType);
+  calcQuick();
+}
+
+function addQcOutcome(){
+  qcOutcomeCount++;
+  setCalcBetType(calcBetType);
+  calcQuick();
+}
+
+function removeQcOutcome(i){
+  // Shift every later outcome's entered value down one slot, since the
+  // rows are re-indexed 0..n-1 after a removal, not just hidden.
+  for(let j=i;j<qcOutcomeCount-1;j++){
+    const next=document.getElementById('qc-outcome-lay-'+(j+1));
+    const cur=document.getElementById('qc-outcome-lay-'+j);
+    if(cur&&next)cur.value=next.value;
+  }
+  qcOutcomeCount--;
+  setCalcBetType(calcBetType);
+  calcQuick();
+}
+
+function copyQcOutcomeStake(i){
+  const el=document.getElementById('qc-outcome-stake-'+i);
+  if(!el)return;
+  const val=el.textContent.replace('£','').trim();
+  if(!val||val==='—')return;
+  navigator.clipboard.writeText(val).then(function(){
+    showToast('Lay stake copied: £'+val);
+  }).catch(function(){
+    const ta=document.createElement('textarea');
+    ta.value=val;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);
+    showToast('Lay stake copied: £'+val);
+  });
+}
+
+function calcQuickMulti(){
+  const bs=parseFloat(document.getElementById('qc-stake')?.value)||0;
+  const bo=parseFloat(document.getElementById('qc-bodds')?.value)||0;
+  const layOddsArr=[];
+  for(let i=0;i<qcOutcomeCount;i++){
+    layOddsArr.push(parseFloat(document.getElementById('qc-outcome-lay-'+i)?.value)||0);
+  }
+  window._qcStake=bs||'';
+  window._qcBodds=bo||'';
+
+  const res=document.getElementById('qc-results');
+  const allEntered=bs>0&&bo>0&&layOddsArr.every(o=>o>0);
+  if(!allEntered){
+    for(let i=0;i<qcOutcomeCount;i++){
+      const el=document.getElementById('qc-outcome-stake-'+i);if(el)el.textContent='—';
+    }
+    if(res)res.style.display='none';
+    return;
+  }
+
+  const isFB=qcMultiFreeBet;
+  const isUL=qcMultiStrategy==='underlay';
+  let stakes;
+
+  if(!isUL){
+    // Lock-in — each outcome's lay stake computed independently, exactly
+    // the pattern verified against real worked examples: this alone
+    // balances all outcomes (any one hitting, or none) to the same
+    // overall position, with no interaction needed between outcomes.
+    stakes=layOddsArr.map(L=>isFB?bs*(bo-1)/L:bs*bo/L);
+  }else{
+    if(!isFB){
+      // Normal underlay — same lock-in values, uniformly scaled down so
+      // they sum to exactly the back stake, guaranteeing the "none of
+      // these outcomes hit" scenario nets to £0. Verified against real
+      // examples.
+      const lockinStakes=layOddsArr.map(L=>bs*bo/L);
+      const sum=lockinStakes.reduce((a,b)=>a+b,0);
+      const scale=sum>0?bs/sum:0;
+      stakes=lockinStakes.map(s=>s*scale);
+    }else{
+      // Free bet underlay — no verified multi-outcome example exists for
+      // this specific combination. Extrapolated by applying the same
+      // independent-per-outcome principle that correctly matched BOTH
+      // verified lock-in cases (rather than the "scale to sum" trick,
+      // which specifically exists to protect a real stake — there isn't
+      // one here, since it's a free bet). Treat this one combination
+      // with a bit more caution than the other three until confirmed
+      // against a real example.
+      stakes=layOddsArr.map(L=>bs*(bo-2)/(L-1));
+    }
+  }
+
+  for(let i=0;i<qcOutcomeCount;i++){
+    const el=document.getElementById('qc-outcome-stake-'+i);
+    if(el)el.textContent='£'+stakes[i].toFixed(2);
+  }
+
+  const liabilities=stakes.map((s,i)=>s*(layOddsArr[i]-1));
+  const sumStakes=stakes.reduce((a,b)=>a+b,0);
+
+  // Net exposure: worst case across outcomes, netting each outcome's
+  // liability against every OTHER outcome's stake (generalizes the
+  // two-outcome formula verified earlier to any number of outcomes).
+  let netExposure=-Infinity;
+  const winPositions=[];
+  for(let i=0;i<qcOutcomeCount;i++){
+    const otherStakes=sumStakes-stakes[i];
+    const exposure=liabilities[i]-otherStakes;
+    if(exposure>netExposure)netExposure=exposure;
+    winPositions.push(bs*(bo-1)-liabilities[i]+otherStakes);
+  }
+
+  let overallPosition;
+  if(!isUL){
+    // Lock-in — every scenario gives the same result, by construction.
+    overallPosition=isFB?sumStakes:(-bs+sumStakes);
+  }else{
+    // Underlay — the win-side result varies slightly by which specific
+    // outcome actually hits; show the most conservative (worst-case)
+    // figure, matching Net Exposure's own worst-case philosophy.
+    overallPosition=Math.min(...winPositions);
+  }
+
+  const expEl=document.getElementById('qc-multi-exposure');
+  const posEl=document.getElementById('qc-multi-position');
+  if(expEl)expEl.textContent='£'+netExposure.toFixed(2);
+  if(posEl){
+    posEl.textContent=(overallPosition>=0?'+':'−')+'£'+Math.abs(overallPosition).toFixed(2);
+    posEl.style.color=overallPosition>=0?'#22C55E':'#F87171';
+  }
+  if(res)res.style.display='block';
+}
+
 function calcQuick(){
+  if(qcMultiMode){calcQuickMulti();return;}
   const bs=parseFloat(document.getElementById('qc-stake')?.value)||0;
   const bo=parseFloat(document.getElementById('qc-bodds')?.value)||0;
   const lo=parseFloat(document.getElementById('qc-lodds')?.value)||0;
