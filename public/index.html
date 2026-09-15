@@ -1530,6 +1530,7 @@ function renderPendingCard(t){
       </div>
       <div class="pending-info">
         ${t.bstake?`<div class="pinfo-item"><span class="pinfo-label">Back</span><span class="pinfo-val">£${t.bstake} @ ${t.bodds}</span></div>`:''}
+        ${t.type==='2Up'&&t.lodds?`<div class="pinfo-item"><span class="pinfo-label">Lay</span><span class="pinfo-val">@ ${t.lodds}</span></div>`:''}
         <div class="pinfo-item">
           <span class="pinfo-label">If wins</span>
           <span class="pinfo-val pos">${fmtS(t.expectedPnl||0)}</span>
