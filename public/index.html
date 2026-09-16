@@ -4752,6 +4752,14 @@ function checkPin(){
 }
 
 async function init(){
+  // Theme must be restored BEFORE the PIN screen renders, not only after
+  // a successful unlock (which is where this used to live, inside
+  // loadApp()) — otherwise the PIN screen always shows using whatever
+  // the default theme is, regardless of what's actually saved, since
+  // nothing had applied the real preference yet at that point.
+  const savedTheme=localStorage.getItem('mbe_theme')||'stone';
+  _theme=savedTheme;
+  document.documentElement.setAttribute('data-theme',savedTheme==='dark'?'':savedTheme);
   checkPin();
 }
 
