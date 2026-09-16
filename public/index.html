@@ -3835,10 +3835,10 @@ function renderQuickCalc(){
     +(qcMultiMode?'':'<div class="form-group"><div class="form-label">Lay odds</div>'
     +'<input type="number" id="qc-lodds" placeholder="2.00" step="0.01" inputmode="decimal" oninput="calcQuick()" style="padding:8px;font-size:14px;font-weight:500"/></div>')
     +'</div>'
-    +'<div style="display:flex;align-items:center;justify-content:center;gap:14px;margin-bottom:10px">'
-    +'<button onclick="toggleQcMultiMode()" style="background:none;border:none;color:var(--text-accent);font-size:12px;font-weight:500;font-family:system-ui;cursor:pointer;padding:0">'+(qcMultiMode?'✕ single outcome':'+ Multiple outcomes')+'</button>'
-    +'<button onclick="openBetBuilderLibrary()" style="background:none;border:none;color:var(--text-accent);font-size:15px;padding:0;display:flex;align-items:center;line-height:1;cursor:pointer" title="Bet Builder Library">📖</button>'
-    +(qcShowComm?'':'<button onclick="toggleQcComm()" style="background:none;border:none;color:var(--text-accent);font-size:12px;font-family:system-ui;cursor:pointer;padding:0">+ Add commission</button>')
+    +'<div style="display:grid;grid-template-columns:1fr auto 1fr;align-items:center;margin-bottom:10px">'
+    +'<button onclick="toggleQcMultiMode()" style="background:none;border:none;color:var(--text-accent);font-size:12px;font-weight:500;font-family:system-ui;cursor:pointer;padding:0;justify-self:start">'+(qcMultiMode?'✕ single outcome':'+ Multiple outcomes')+'</button>'
+    +'<button onclick="openBetBuilderLibrary()" style="background:none;border:none;color:var(--text-accent);font-size:15px;padding:0;justify-self:center;line-height:1;cursor:pointer" title="Bet Builder Library">📖</button>'
+    +(qcShowComm?'<span></span>':'<button onclick="toggleQcComm()" style="background:none;border:none;color:var(--text-accent);font-size:12px;font-family:system-ui;cursor:pointer;padding:0;justify-self:end">+ Add commission</button>')
     +'</div>'
     +(qcShowComm
       ?'<div style="margin-bottom:10px"><div class="form-group"><div class="form-label">Exchange commission (%)</div>'
