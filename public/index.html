@@ -422,6 +422,7 @@ async function loadData(){
           casinoDataLoaded=true;
         }
         if(parsed.exchanges)state.exchanges=JSON.parse(JSON.stringify(parsed.exchanges));
+        if(parsed.betBuilderLibrary)state.betBuilderLibrary=JSON.parse(JSON.stringify(parsed.betBuilderLibrary));
         if(parsed._deletedTxIds){
           PROFILES.forEach(pr=>{if(parsed._deletedTxIds[pr])deletedTxIds[pr]=parsed._deletedTxIds[pr];});
         }
@@ -540,6 +541,7 @@ async function fetchFromServer(){
           // casinoDataLoaded flag. Leave it exactly as-is.
         });
         if(saved.exchanges)state.exchanges=JSON.parse(JSON.stringify(saved.exchanges));
+        if(saved.betBuilderLibrary)state.betBuilderLibrary=JSON.parse(JSON.stringify(saved.betBuilderLibrary));
         lastServerState=JSON.parse(JSON.stringify(saved));
       }
     }
@@ -615,7 +617,7 @@ function buildSavePayload(){
   // `casino` object this used to build here was dead code anyway: it
   // was captured into every queued entry but drainQueue() never
   // actually sent it anywhere.
-  const sports={exchanges:state.exchanges,_source:'queue',_serverState:lastServerState};
+  const sports={exchanges:state.exchanges,betBuilderLibrary:state.betBuilderLibrary,_source:'queue',_serverState:lastServerState};
   PROFILES.forEach(pr=>{
     sports[pr]={bank:state[pr]?.bank||0,bankUpdatedAt:state[pr]?.bankUpdatedAt||0,bookies:state[pr]?.bookies||{},
       transactions:state[pr]?.transactions||[],freeBets:state[pr]?.freeBets||[],
@@ -662,7 +664,7 @@ async function saveData(source='unknown'){
   try{
     // Sports-only payload — casino is now handled entirely by
     // saveCasinoOnly() via /api/save-casino, and never sent here.
-    const sportsState={exchanges:state.exchanges,_source:source,_serverState:lastServerState};
+    const sportsState={exchanges:state.exchanges,betBuilderLibrary:state.betBuilderLibrary,_source:source,_serverState:lastServerState};
     PROFILES.forEach(pr=>{
       sportsState[pr]={
         bank:state[pr]?.bank||0,
@@ -733,6 +735,7 @@ async function saveData(source='unknown'){
         }
       });
       if(sportsJson.data.exchanges)state.exchanges=sportsJson.data.exchanges;
+      if(sportsJson.data.betBuilderLibrary)state.betBuilderLibrary=sportsJson.data.betBuilderLibrary;
       // Track confirmed server state so next save can skip stale KV read
       lastServerState=JSON.parse(JSON.stringify(sportsJson.data));
       // Cache in sessionStorage so pull-to-refresh gets fresh data
@@ -886,6 +889,7 @@ function migrateLegacy(){
   });
   if(!state.exchanges){state.exchanges={};EXCHANGES.forEach(e=>state.exchanges[e]=0);}
   EXCHANGES.forEach(e=>{if(state.exchanges[e]===undefined)state.exchanges[e]=0;});
+  if(!Array.isArray(state.betBuilderLibrary))state.betBuilderLibrary=[];
   // Casino is lazy-loaded now (see ensureCasinoLoaded()) — deliberately
   // NOT touching state[pr].casino here. migrateLegacy() runs on every
   // single load, so a line here forcing it to [] would silently undo
@@ -1914,6 +1918,141 @@ function confirmPnlEdit(acct,id){
 }
 
 function closeModal(){document.getElementById('modal-root').innerHTML='';}
+
+// ── BET BUILDER LIBRARY ──────────────────────────────────────────────────────
+// A pure reference list — deliberately NOT tied to bets, calculations, or
+// any auto-tracking. You build it up manually over time as a lookup for
+// "which correct scores does this combo map to, and which bookies don't
+// support it". Stored as a single shared list (state.betBuilderLibrary),
+// same pattern as state.exchanges — not per-profile, since this is
+// strategy knowledge, not account-specific data.
+let _bbFormExceptions=[]; // in-progress exceptions list while the add/edit form is open, before saving
+let _bbEditingId=null;
+
+function openBetBuilderLibrary(){
+  document.getElementById('modal-root').innerHTML=`
+  <div class="modal-bg" onclick="if(event.target===this)closeModal()">
+    <div class="modal" style="max-height:80vh;overflow-y:auto">
+      <div class="modal-handle"></div>
+      <div id="bb-modal-body">${renderBetBuilderLibraryList()}</div>
+    </div>
+  </div>`;
+}
+
+function renderBetBuilderLibraryList(){
+  const entries=state.betBuilderLibrary||[];
+  return `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+      <div class="modal-title" style="margin-bottom:0">Bet Builder Library</div>
+      <button onclick="showBetBuilderForm(null)" style="background:none;border:none;color:var(--text-accent);font-size:12px;font-weight:500;cursor:pointer">+ Add</button>
+    </div>
+    <div class="modal-sub">Your saved bet builder combinations</div>
+    ${!entries.length?'<div class="empty" style="padding:20px 0">No combinations saved yet</div>':entries.map(e=>{
+      const scoreLabel=(e.scores||'').includes(',')?'Scores':'Score';
+      const exceptions=e.exceptions||[];
+      return `<div style="background:var(--bg-card2);border-radius:10px;padding:12px;margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:5px">
+          <div style="font-size:13px;font-weight:600;color:var(--text-primary);flex:1;padding-right:8px">${e.description}</div>
+          <div style="display:flex;gap:2px;flex-shrink:0">
+            <button onclick="showBetBuilderForm('${e.id}')" style="background:none;border:none;color:var(--text-muted);padding:4px;cursor:pointer"><i class="ti ti-edit" aria-hidden="true"></i></button>
+            <button onclick="deleteBetBuilderEntry('${e.id}')" style="background:none;border:none;color:var(--text-muted);padding:4px;cursor:pointer"><i class="ti ti-trash" aria-hidden="true"></i></button>
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">${scoreLabel}: ${e.scores||'—'}</div>
+        <div style="font-size:11px;color:var(--text-accent)">
+          ✓ Applies everywhere
+          ${exceptions.length?` <span style="color:var(--text-muted)">except</span> `+exceptions.map(b=>`<span style="background:#E24B4A;color:#fff;padding:1px 8px;border-radius:20px;font-size:10px">${b}</span>`).join(' '):''}
+        </div>
+      </div>`;
+    }).join('')}
+    <button onclick="closeModal()" style="width:100%;padding:12px;border-radius:10px;border:none;background:var(--bg-card2);color:var(--text-secondary);font-size:13px;font-weight:500;margin-top:4px;cursor:pointer">Close</button>
+  `;
+}
+
+function showBetBuilderForm(editId){
+  _bbEditingId=editId;
+  const entry=editId?(state.betBuilderLibrary||[]).find(e=>e.id===editId):null;
+  _bbFormExceptions=entry?[...(entry.exceptions||[])]:[];
+  const body=document.getElementById('bb-modal-body');
+  if(!body)return;
+  body.innerHTML=`
+    <div class="modal-title">${editId?'Edit combination':'Add combination'}</div>
+    <div style="margin-bottom:10px">
+      <div class="form-label">Description</div>
+      <input type="text" id="bb-description" placeholder="e.g. Draw + Under 3.5 + BTTS Yes" value="${entry?entry.description:''}" style="width:100%;box-sizing:border-box"/>
+    </div>
+    <div style="margin-bottom:12px">
+      <div class="form-label">Correct scores</div>
+      <input type="text" id="bb-scores" placeholder="e.g. 1-1" value="${entry?entry.scores:''}" style="width:100%;box-sizing:border-box"/>
+    </div>
+    <div style="margin-bottom:6px">
+      <div class="form-label">Except at <span style="font-size:9px;color:var(--text-muted);text-transform:none">applies everywhere else by default</span></div>
+      <div id="bb-exceptions-list" style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px">${renderBbExceptionTags()}</div>
+      <input type="text" id="bb-exception-search" list="bb-bookie-list" placeholder="+ search a bookie to add as an exception" oninput="if(event.key==='Enter')addBbExceptionFromInput()" onchange="addBbExceptionFromInput()" style="width:100%;box-sizing:border-box;font-size:12px"/>
+      <datalist id="bb-bookie-list">${DEFAULT_BOOKIES.map(b=>`<option value="${b}">`).join('')}</datalist>
+    </div>
+    <div id="bb-form-error" style="font-size:12px;color:#E24B4A;margin-bottom:4px"></div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" style="flex:1" onclick="saveBetBuilderEntry()">Save combination</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('bb-modal-body').innerHTML=renderBetBuilderLibraryList()">Cancel</button>
+    </div>
+  `;
+  setTimeout(()=>document.getElementById('bb-description')?.focus(),50);
+}
+
+function renderBbExceptionTags(){
+  if(!_bbFormExceptions.length)return '<span style="font-size:11px;color:var(--text-muted)">None yet</span>';
+  return _bbFormExceptions.map(b=>`<span style="font-size:11px;background:#E24B4A;color:#fff;padding:4px 8px 4px 10px;border-radius:20px;display:inline-flex;align-items:center;gap:5px">${b} <button onclick="removeBbException('${b}')" style="background:none;border:none;color:#fff;font-size:12px;padding:0;cursor:pointer;line-height:1">✕</button></span>`).join('');
+}
+
+function addBbExceptionFromInput(){
+  const input=document.getElementById('bb-exception-search');
+  const val=(input?.value||'').trim();
+  if(!val)return;
+  // Accept an exact or close match against the known bookie list, same
+  // spirit as the bookie search elsewhere in the app — but don't block
+  // on it, in case a bookie isn't in DEFAULT_BOOKIES yet.
+  if(!_bbFormExceptions.includes(val))_bbFormExceptions.push(val);
+  if(input)input.value='';
+  const list=document.getElementById('bb-exceptions-list');
+  if(list)list.innerHTML=renderBbExceptionTags();
+}
+
+function removeBbException(bookie){
+  _bbFormExceptions=_bbFormExceptions.filter(b=>b!==bookie);
+  const list=document.getElementById('bb-exceptions-list');
+  if(list)list.innerHTML=renderBbExceptionTags();
+}
+
+function saveBetBuilderEntry(){
+  const description=document.getElementById('bb-description')?.value?.trim()||'';
+  const scores=document.getElementById('bb-scores')?.value?.trim()||'';
+  const errEl=document.getElementById('bb-form-error');
+  if(!description){
+    if(errEl)errEl.textContent='Enter a description for this combination.';
+    return;
+  }
+  if(!state.betBuilderLibrary)state.betBuilderLibrary=[];
+  if(_bbEditingId){
+    const entry=state.betBuilderLibrary.find(e=>e.id===_bbEditingId);
+    if(entry){entry.description=description;entry.scores=scores;entry.exceptions=[..._bbFormExceptions];}
+  }else{
+    state.betBuilderLibrary.push({id:'bb'+Date.now(),description,scores,exceptions:[..._bbFormExceptions]});
+  }
+  _bbEditingId=null;_bbFormExceptions=[];
+  if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('betBuilderLibrary');
+  const body=document.getElementById('bb-modal-body');
+  if(body)body.innerHTML=renderBetBuilderLibraryList();
+  showToast('Saved');
+}
+
+function deleteBetBuilderEntry(id){
+  if(!confirm('Delete this combination?'))return;
+  state.betBuilderLibrary=(state.betBuilderLibrary||[]).filter(e=>e.id!==id);
+  if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('betBuilderLibrary');
+  const body=document.getElementById('bb-modal-body');
+  if(body)body.innerHTML=renderBetBuilderLibraryList();
+}
 
 // Multiplier ("goal-time boost") bets can't be settled as Won by the
 // normal instant formula — the real boost depends on the actual goal
@@ -3696,9 +3835,10 @@ function renderQuickCalc(){
     +(qcMultiMode?'':'<div class="form-group"><div class="form-label">Lay odds</div>'
     +'<input type="number" id="qc-lodds" placeholder="2.00" step="0.01" inputmode="decimal" oninput="calcQuick()" style="padding:8px;font-size:14px;font-weight:500"/></div>')
     +'</div>'
-    +'<div style="display:flex;justify-content:space-between;margin-bottom:10px">'
+    +'<div style="display:flex;flex-wrap:wrap;gap:14px;margin-bottom:10px">'
     +'<button onclick="toggleQcMultiMode()" style="background:none;border:none;color:var(--text-accent);font-size:12px;font-weight:500;font-family:system-ui;cursor:pointer;padding:0">'+(qcMultiMode?'✕ single outcome':'+ Multiple outcomes')+'</button>'
-    +(qcShowComm?'':'<button onclick="toggleQcComm()" style="background:none;border:none;color:var(--text-accent);font-size:12px;font-family:system-ui;cursor:pointer;padding:0">+ Add commission</button>')
+    +'<button onclick="openBetBuilderLibrary()" style="background:none;border:none;color:var(--text-accent);font-size:12px;font-weight:500;font-family:system-ui;cursor:pointer;padding:0">📖 Bet Builder Library</button>'
+    +(qcShowComm?'':'<button onclick="toggleQcComm()" style="background:none;border:none;color:var(--text-accent);font-size:12px;font-family:system-ui;cursor:pointer;padding:0;margin-left:auto">+ Add commission</button>')
     +'</div>'
     +(qcShowComm
       ?'<div style="margin-bottom:10px"><div class="form-group"><div class="form-label">Exchange commission (%)</div>'
