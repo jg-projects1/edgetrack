@@ -79,12 +79,13 @@ export default async function handler(req, res) {
     };
 
     // Load all profiles in parallel under their NEW key names first.
-    const [profileData, exchanges] = await Promise.all([
+    const [profileData, exchanges, betBuilderLibrary] = await Promise.all([
       Promise.all(profiles.map(async pr => {
         const data = await kvGet(`edgetrack_${pr}`);
         return { pr, data };
       })),
-      kvGet('edgetrack_exchanges')
+      kvGet('edgetrack_exchanges'),
+      kvGet('edgetrack_bet_builder_library')
     ]);
 
     // ONE-TIME MIGRATION: for any renamed profile whose new key is still
@@ -105,7 +106,7 @@ export default async function handler(req, res) {
 
     const hasSplitData = profileData.some(p => p.data !== null);
     if (hasSplitData) {
-      const result = { exchanges: exchanges || {} };
+      const result = { exchanges: exchanges || {}, betBuilderLibrary: betBuilderLibrary || [] };
       await Promise.all(profileData.map(async ({ pr, data }) => {
         if (!data) {
           result[pr] = { transactions: [], bank: 0, bankUpdatedAt: 0, bookies: {}, freeBets: [], casino: [] };
