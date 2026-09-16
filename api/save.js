@@ -259,6 +259,15 @@ export default async function handler(req, res) {
 
     await kvSet('edgetrack_exchanges', incoming.exchanges || {});
 
+    // Same protection as save-sports.js — never let a payload missing
+    // this field silently wipe out already-saved entries.
+    if (Array.isArray(incoming.betBuilderLibrary)) {
+      await kvSet('edgetrack_bet_builder_library', incoming.betBuilderLibrary);
+      responseData.betBuilderLibrary = incoming.betBuilderLibrary;
+    } else {
+      responseData.betBuilderLibrary = await kvGet('edgetrack_bet_builder_library') || [];
+    }
+
     return res.status(200).json({ ok: true, data: responseData });
   } catch (e) {
     console.error('Save error:', e);
