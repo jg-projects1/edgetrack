@@ -85,12 +85,13 @@ export default async function handler(req, res) {
       return { bookies: out, changed };
     };
 
-    const [profileData, exchanges] = await Promise.all([
+    const [profileData, exchanges, betBuilderLibrary] = await Promise.all([
       Promise.all(profiles.map(async pr => {
         const data = await kvGet(`edgetrack_${pr}`);
         return { pr, data };
       })),
-      kvGet('edgetrack_exchanges')
+      kvGet('edgetrack_exchanges'),
+      kvGet('edgetrack_bet_builder_library')
     ]);
 
     // Same one-time me/wife -> jg/hg migration as load.js — unchanged.
@@ -107,7 +108,7 @@ export default async function handler(req, res) {
 
     const hasSplitData = profileData.some(p => p.data !== null);
     if (hasSplitData) {
-      const result = { exchanges: exchanges || {} };
+      const result = { exchanges: exchanges || {}, betBuilderLibrary: betBuilderLibrary || [] };
       await Promise.all(profileData.map(async ({ pr, data }) => {
         if (!data) {
           // NOTE: no `casino` key here at all — deliberately, this is a
