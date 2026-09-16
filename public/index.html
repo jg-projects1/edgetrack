@@ -1948,17 +1948,16 @@ function renderBetBuilderLibraryList(){
     </div>
     <div class="modal-sub">Your saved bet builder combinations</div>
     ${!entries.length?'<div class="empty" style="padding:20px 0">No combinations saved yet</div>':entries.map(e=>{
-      const scoreLabel=(e.scores||'').includes(',')?'Scores':'Score';
       const exceptions=e.exceptions||[];
       return `<div style="background:var(--bg-card2);border-radius:10px;padding:12px;margin-bottom:8px">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:5px">
-          <div style="font-size:13px;font-weight:600;color:var(--text-primary);flex:1;padding-right:8px">${e.description}</div>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:2px">
+          <div style="font-size:18px;font-weight:700;color:var(--text-primary);flex:1;padding-right:8px">${e.scores||'—'}</div>
           <div style="display:flex;gap:2px;flex-shrink:0">
             <button onclick="showBetBuilderForm('${e.id}')" style="background:none;border:none;color:var(--text-muted);padding:4px;cursor:pointer"><i class="ti ti-edit" aria-hidden="true"></i></button>
             <button onclick="deleteBetBuilderEntry('${e.id}')" style="background:none;border:none;color:var(--text-muted);padding:4px;cursor:pointer"><i class="ti ti-trash" aria-hidden="true"></i></button>
           </div>
         </div>
-        <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">${scoreLabel}: ${e.scores||'—'}</div>
+        <div style="font-size:12px;color:var(--text-secondary);margin-bottom:6px">${e.description}</div>
         <div style="font-size:11px;color:var(--text-accent)">
           ✓ Applies everywhere
           ${exceptions.length?` <span style="color:var(--text-muted)">except</span> `+exceptions.map(b=>`<span style="background:#E24B4A;color:#fff;padding:1px 8px;border-radius:20px;font-size:10px">${b}</span>`).join(' '):''}
