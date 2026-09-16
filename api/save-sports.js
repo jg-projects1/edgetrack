@@ -211,6 +211,21 @@ export default async function handler(req, res) {
 
     await kvSet('edgetrack_exchanges', incoming.exchanges || {});
 
+    // Unlike exchanges (always populated in every save, since it's
+    // initialized with defaults before any save can happen), this field
+    // could genuinely be absent — e.g. an older client, or simply
+    // before the library's ever been touched. Never overwrite existing
+    // saved entries with an empty array just because this particular
+    // save didn't include it; only overwrite when the client explicitly
+    // sent an array (even an empty one, meaning "I intentionally
+    // cleared everything").
+    if (Array.isArray(incoming.betBuilderLibrary)) {
+      await kvSet('edgetrack_bet_builder_library', incoming.betBuilderLibrary);
+      responseData.betBuilderLibrary = incoming.betBuilderLibrary;
+    } else {
+      responseData.betBuilderLibrary = await kvGet('edgetrack_bet_builder_library') || [];
+    }
+
     return res.status(200).json({ ok: true, data: responseData });
   } catch (e) {
     console.error('Save-sports error:', e);
