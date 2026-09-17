@@ -897,7 +897,7 @@ function migrateLegacy(){
   // Bookie migration save disabled — was overwriting correct balances
 }
 
-let currentProfile='jg',currentTab='dashboard',tradeSubTab='log',formAccount='jg',selectedBetType='',exchTransferBank='jg',isUnderlay=false;
+let currentProfile='jg',currentTab='dashboard',tradeSubTab='log',formAccount='jg',selectedBetType='',exchTransferBank='jg',isUnderlay=false,isNoLay=false;
 // LAZY-LOADING CASINO DATA: index.html calls load-sports.js (which omits
 // casino) instead of load.js, so casino genuinely isn't loaded upfront.
 // ensureCasinoLoaded() fetches it the first time it's actually needed.
@@ -1524,15 +1524,15 @@ function markFreeBetUsed(pr,id){
 function renderPendingCard(t){
   const isFB=isFreeBet(t.type);
   const is2Up=t.type==='2Up';
-  return`<div class="pending-card" id="pcard-${t.id}">
-      ${is2Up?`<div style="margin:-14px -14px 10px -14px;background:#F87171;color:#fff;padding:7px 14px;font-size:11px;font-weight:600;border-radius:12px 12px 0 0;display:flex;justify-content:space-between;align-items:center">
-        <span>2UP</span>
-        ${t.kickoffTime?`<span>Kicks off ${t.kickoffTime}</span>`:''}
-      </div>`:''}
+  const isNoLayBet=!!t.noLay;
+  const borderColor=is2Up?'#F87171':(isNoLayBet?'#F0A500':null);
+  return`<div class="pending-card" id="pcard-${t.id}" style="${borderColor?'border:1.5px solid '+borderColor:''}">
       <div class="pending-event">${t.event||'Unnamed event'}</div>
       <div class="pending-meta">
         <span class="${pillClass(t.type)}">${t.type}</span>${acctPill(t._acct)}
         <span style="font-size:11px;color:var(--text-secondary)">${t.date}</span>
+        ${isNoLayBet?'<span style="font-size:11px;font-weight:600;background:rgba(240,165,0,0.18);color:#B87E00;padding:2px 8px;border-radius:20px;border:0.5px solid rgba(240,165,0,0.35)">No Lay</span>':''}
+        ${t.kickoffTime?`<span style="font-size:11px;font-weight:600;color:#F87171">Kicks off ${t.kickoffTime}</span>`:''}
         ${t.exchange?`<span style="font-size:11px;color:var(--text-muted);background:var(--border-col2);padding:2px 6px;border-radius:4px">${t.exchange}</span>`:''}
         ${isFB?'<span class="badge" style="background:rgba(34,197,94,0.1);color:var(--text-accent)">SNR</span>':''}
         ${t.underlay?'<span class="badge" style="background:rgba(34,197,94,0.1);color:var(--text-accent);border:0.5px solid rgba(93,202,165,0.3)">UL</span>':''}
@@ -1624,6 +1624,23 @@ function applyBalanceOnSettle(tx,p,result){
   // 0 — commission only ever changes a branch where the LAY side wins,
   // since a losing lay is never charged commission.
   const c=(tx.comm||0)/100;
+
+  if(tx.noLay){
+    // No Lay: the genuine unhedged result — full win-side profit if it
+    // wins, full stake lost if it loses (or £0 for a Free Bet, since no
+    // real stake was ever at risk). No exchange interaction at all,
+    // since no lay bet was ever placed. Takes priority over any other
+    // bet-type-specific mechanic — kept deliberately simple, matching
+    // the straightforward "what if I never hedged this" test this
+    // strategy exists for.
+    if(result==='Won'){
+      tx.pnl=Math.round((bs*(bo-1))*100)/100;
+      if(bk){bk.bal=(bk.bal||0)+(bo*bs);bk.balUpdatedAt=Date.now();}
+    }else{
+      tx.pnl=isFB?0:Math.round((-bs)*100)/100;
+    }
+    return;
+  }
 
   if(tx.type==='MBAL'){
     // Bonus lock-in: a real (non-free-bet) qualifying bet where the
@@ -2199,10 +2216,10 @@ function renderAdd(prefill){
 
         <div class="form-row single" id="fg-event"><div class="form-group"><div class="form-label" style="color:var(--text-muted)">Event</div><input type="text" id="f-event" placeholder="e.g. Arsenal vs Chelsea" value="${pf.event||''}" style="font-size:12px;padding:7px 10px;background:var(--bg-input);border-color:rgba(255,255,255,0.09)"/></div></div>
 
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px" id="fg-stake-odds">
+        <div style="display:grid;grid-template-columns:${isNoLay?'1fr 1fr':'1fr 1fr 1fr'};gap:6px;margin-bottom:8px" id="fg-stake-odds">
           <div class="form-group" id="fg-bstake"><div class="form-label">Stake</div><input type="number" id="f-bstake" placeholder="0.00" step="0.01" inputmode="decimal" value="${pf.bstake||''}" oninput="autoCalcUnderlay()" style="padding:7px 8px"/></div>
           <div class="form-group" id="fg-bodds"><div class="form-label">Back odds</div><input type="number" id="f-bodds" placeholder="2.00" step="0.01" inputmode="decimal" value="${pf.bodds||''}" oninput="autoCalcUnderlay()" style="padding:7px 8px"/></div>
-          <div class="form-group" id="fg-layodds"><div class="form-label">Lay odds</div><input type="number" id="f-lodds" placeholder="2.00" step="0.01" inputmode="decimal" oninput="autoCalcUnderlay()" value="${pf.lodds||''}" style="padding:7px 8px"/></div>
+          ${isNoLay?'':'<div class="form-group" id="fg-layodds"><div class="form-label">Lay odds</div><input type="number" id="f-lodds" placeholder="2.00" step="0.01" inputmode="decimal" oninput="autoCalcUnderlay()" value="'+(pf.lodds||'')+'" style="padding:7px 8px"/></div>'}
         </div>
         <div id="underlay-calc-wrap" style="margin-bottom:8px">
           <div id="underlay-calc" style="background:var(--bg-card);border-radius:8px;padding:7px 10px;display:none">
@@ -2211,17 +2228,17 @@ function renderAdd(prefill){
                 <span id="ul-win-label" style="font-size:10px;color:var(--text-muted)">If wins</span>
                 <span id="ul-win-display" style="font-size:14px;font-weight:500;color:#22C55E">—</span>
               </div>
-              <div style="display:flex;flex-direction:column;gap:2px;flex:1;text-align:center">
+              <div style="display:flex;flex-direction:column;gap:2px;flex:1;text-align:${isNoLay?'right':'center'}">
                 <span id="ul-lose-label" style="font-size:10px;color:var(--text-muted)">If loses</span>
                 <span id="ul-lose-display" style="font-size:14px;font-weight:500;color:var(--text-muted)">£0.00</span>
               </div>
-              <div style="display:flex;flex-direction:column;gap:2px;flex:1;text-align:right">
+              ${isNoLay?'':`<div style="display:flex;flex-direction:column;gap:2px;flex:1;text-align:right">
                 <span style="font-size:10px;color:var(--text-muted)">Lay stake</span>
                 <div style="display:flex;align-items:center;justify-content:flex-end;gap:4px">
                   <span id="ul-liab-display" style="font-size:14px;font-weight:500;color:var(--text-secondary)">—</span>
                   <button id="form-laystake-copy-btn" onclick="copyFormLayStake()" style="background:none;border:none;color:var(--text-muted);cursor:pointer;padding:2px;line-height:0" title="Copy lay stake"><i class="ti ti-copy" aria-hidden="true"></i></button>
                 </div>
-              </div>
+              </div>`}
             </div>
           </div>
         </div>
@@ -2264,9 +2281,10 @@ function renderAdd(prefill){
               ?'<div style="display:flex;align-items:center;gap:6px"><span class="form-label" style="margin-bottom:0;flex-shrink:0">Strategy</span><span style="flex:1;padding:6px 10px;font-size:12px;color:var(--text-muted);background:var(--bg-input);border-radius:8px">'+(isUnderlay?'Underlay':'Lock-in')+' — set from your multi-outcome calculation</span></div>'
               :`<div style="display:flex;align-items:center;gap:6px">
               <span class="form-label" style="margin-bottom:0;flex-shrink:0">Strategy</span>
-              <button id="btn-underlay" onclick="setStrategy('underlay')" class="btn btn-primary" style="flex:1;padding:6px;font-size:12px">Underlay</button>
-              <button id="btn-lockin" onclick="setStrategy('lockin')" class="btn btn-ghost" style="flex:1;padding:6px;font-size:12px">Lock-in</button>
-              <button onclick="document.getElementById('fg-partial-wrap').style.display=document.getElementById('fg-partial-wrap').style.display==='none'?'block':'none'" style="font-size:10px;color:var(--text-muted);background:none;border:0.5px solid var(--border-col);border-radius:6px;padding:4px 8px;cursor:pointer">Partial</button>
+              <button id="btn-underlay" onclick="setStrategy('underlay')" class="btn ${isUnderlay?'btn-primary':'btn-ghost'}" style="flex:1;padding:6px;font-size:12px">Underlay</button>
+              <button id="btn-lockin" onclick="setStrategy('lockin')" class="btn ${!isUnderlay&&!isNoLay?'btn-primary':'btn-ghost'}" style="flex:1;padding:6px;font-size:12px">Lock-in</button>
+              <button id="btn-nolay" onclick="setStrategy('nolay')" class="btn ${isNoLay?'btn-primary':'btn-ghost'}" style="flex:1;padding:6px;font-size:12px">No Lay</button>
+              ${isNoLay?'':`<button onclick="document.getElementById('fg-partial-wrap').style.display=document.getElementById('fg-partial-wrap').style.display==='none'?'block':'none'" style="font-size:10px;color:var(--text-muted);background:none;border:0.5px solid var(--border-col);border-radius:6px;padding:4px 8px;cursor:pointer">Partial</button>`}
             </div>`}
           </div>
         </div>
@@ -2307,15 +2325,34 @@ function setExchBank(b){exchTransferBank=b;PROFILES.forEach(pr=>{const el=docume
 function autoCalcUnderlay(){
   const bs=parseFloat(document.getElementById('f-bstake')?.value)||0;
   const bo=parseFloat(document.getElementById('f-bodds')?.value)||0;
-  const lo=parseFloat(document.getElementById('f-lodds')?.value)||0;
-  const partial=Math.min(100,Math.max(1,parseFloat(document.getElementById('f-partial')?.value)||100))/100;
   const isFB=isFreeBet(selectedBetType);
-  const isMBAL=selectedBetType==='MBAL';
 
   const calc=document.getElementById('underlay-calc');
   const pnlEl=document.getElementById('f-pnl');
   const winEl=document.getElementById('ul-win-display');
   const loseEl=document.getElementById('ul-lose-display');
+
+  // No Lay: no lay odds involved at all — full win-side profit if it
+  // wins, full stake lost if it loses (or £0 for a genuine Free Bet,
+  // since no real stake was ever at risk there). This is the true
+  // unhedged result, not an approximation of one.
+  if(isNoLay){
+    if(!bs||!bo){
+      if(calc)calc.style.display='none';
+      return;
+    }
+    const total_win=bs*(bo-1);
+    const total_lose=isFB?0:-bs;
+    if(winEl)winEl.textContent=fmtS(total_win);
+    if(loseEl){loseEl.textContent=fmtS(total_lose);loseEl.style.color=total_lose>=0?'#22C55E':'#F87171';}
+    if(calc)calc.style.display='block';
+    if(pnlEl&&!pnlEl.hasAttribute('data-manual'))pnlEl.value=total_win.toFixed(2);
+    return;
+  }
+
+  const lo=parseFloat(document.getElementById('f-lodds')?.value)||0;
+  const partial=Math.min(100,Math.max(1,parseFloat(document.getElementById('f-partial')?.value)||100))/100;
+  const isMBAL=selectedBetType==='MBAL';
   const stakeEl=document.getElementById('ul-liab-display');
 
   if(!bs||!bo||!lo){
@@ -2450,7 +2487,19 @@ function autoCalcUnderlay(){
 }
 
 function setStrategy(s){
+  const wasNoLay=isNoLay;
   isUnderlay=(s==='underlay');
+  isNoLay=(s==='nolay');
+  // No Lay needs a full form re-render either way — switching INTO it
+  // hides the Lay Odds field and drops the results panel from 3 columns
+  // to 2; switching OUT of it needs both restored. Neither a simple
+  // button-state update can handle.
+  if(isNoLay||wasNoLay){
+    const mc=document.getElementById('main-content');
+    if(mc)mc.innerHTML=renderTrade();
+    updateFormFields();bindFormEvents();
+    return;
+  }
   const bu=document.getElementById('btn-underlay');
   const bl=document.getElementById('btn-lockin');
   if(bu){bu.className='btn '+(isUnderlay?'btn-primary':'btn-ghost');}
@@ -2538,7 +2587,7 @@ function updateFlowPreview(){
 }
 function bindFormEvents(){const exchSel=document.getElementById('f-exchange');if(exchSel)exchSel.addEventListener('change',updateFlowPreview);}
 function resetForm(){
-  selectedBetType='';exchTransferBank='jg';showMoreTypes=false;showComm=false;
+  selectedBetType='';exchTransferBank='jg';showMoreTypes=false;showComm=false;isNoLay=false;
   _pendingFreeBetLink=null; // clear if the user abandons a "Log this free bet" flow without submitting
   _multiLogLocked=false; // clear so a later, unrelated bet isn't stuck with a locked Strategy toggle
   // Re-render the form completely for a clean slate
@@ -2600,7 +2649,7 @@ function submitTx(){
     const multMinBoost=isMultiplier?(parseFloat(document.getElementById('f-mult-minboost')?.value)||5):undefined;
     const multMaxCap=isMultiplier?(parseFloat(document.getElementById('f-mult-maxcap')?.value)||250):undefined;
     const kickoffTime=selectedBetType==='2Up'?(document.getElementById('f-2up-kickoff')?.value||undefined):undefined;
-    const tx={id:Date.now(),date,type:selectedBetType,bookie,exchange,event,bstake,bodds,lodds,comm,result,pnl:storedPnl,expectedPnl:pnl,notes,underlay:isUnderlay,_acct:formAccount,txUpdatedAt:Date.now(),mbalBonus,mbalRetention,multMinBoost,multMaxCap,kickoffTime};
+    const tx={id:Date.now(),date,type:selectedBetType,bookie,exchange,event,bstake,bodds,lodds,comm,result,pnl:storedPnl,expectedPnl:pnl,notes,underlay:isUnderlay,noLay:isNoLay,_acct:formAccount,txUpdatedAt:Date.now(),mbalBonus,mbalRetention,multMinBoost,multMaxCap,kickoffTime};
     // Carries the multi-outcome calculator's "if neither outcome hits"
     // figure through to the actual transaction, so the pending card can
     // show a correct "If loses" — genuinely different from "If wins" for
@@ -2879,8 +2928,14 @@ function exportCasinoCSV(){
 
 function exportCSV(){
   const txs=allTxs();
-  const headers=['Date','Account','Type','Bookmaker','Exchange','Event','Back Stake','Back Odds','Commission %','Result','P&L','Notes'];
-  const rows=txs.map(t=>[t.date||'',profileLabel(t._acct),t.type||'',t.bookie||'',t.exchange||'',t.event||t.notes||'',t.bstake||'',t.bodds||'',t.comm!==undefined?t.comm:'',t.result||'',t.pnl!==undefined?t.pnl.toFixed(2):'',t.notes||'']);
+  // Blank for non-bet rows (deposits, withdrawals, balance amendments,
+  // exchange transfers) — a "strategy" label doesn't mean anything for
+  // those, same principle as Bookmaker/Exchange already being blank
+  // where irrelevant.
+  const nonBetTypes=['Deposit','Withdrawal','Balance Amendment','Exchange Deposit','Exchange Withdrawal'];
+  const strategyLabel=t=>nonBetTypes.includes(t.type)?'':(t.noLay?'No Lay':(t.underlay?'Underlay':'Lock-in'));
+  const headers=['Date','Account','Type','Bookmaker','Exchange','Event','Back Stake','Back Odds','Commission %','Strategy','Result','P&L','Notes'];
+  const rows=txs.map(t=>[t.date||'',profileLabel(t._acct),t.type||'',t.bookie||'',t.exchange||'',t.event||t.notes||'',t.bstake||'',t.bodds||'',t.comm!==undefined?t.comm:'',strategyLabel(t),t.result||'',t.pnl!==undefined?t.pnl.toFixed(2):'',t.notes||'']);
   const csv=[headers,...rows].map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\n');
   const blob=new Blob([csv],{type:'text/csv'}),url=URL.createObjectURL(blob),a=document.createElement('a');
   a.href=url;a.download=`mbempire_${todayStr().replace(/\//g,'-')}.csv`;a.click();URL.revokeObjectURL(url);showToast('CSV exported!');
@@ -3793,6 +3848,7 @@ function renderCasinoHistory(){
 function renderQuickCalc(){
   const isFB=calcBetType==='Free Bet';
   const isUL=calcStrategy==='underlay';
+  const isNoLayCalc=calcStrategy==='nolay';
   const multiIsUL=qcMultiStrategy==='underlay';
   const types=['Boost','Free Bet','Qualifier','Mug'];
   const inputBg=getCssVar('--bg-input')||'#3D4349';
@@ -3809,7 +3865,8 @@ function renderQuickCalc(){
     ? '<button onclick="setQcMultiStrategy(\'underlay\')" class="btn '+(multiIsUL?'btn-primary':'btn-ghost')+'" style="flex:1;padding:8px;font-size:12px">Underlay</button>'
       +'<button onclick="setQcMultiStrategy(\'lockin\')" class="btn '+(multiIsUL?'btn-ghost':'btn-primary')+'" style="flex:1;padding:8px;font-size:12px">Lock-in</button>'
     : '<button onclick="setCalcStrategy(\'underlay\')" class="btn '+(isUL?'btn-primary':'btn-ghost')+'" style="flex:1;padding:8px;font-size:12px">Underlay</button>'
-      +'<button onclick="setCalcStrategy(\'lockin\')" class="btn '+(isUL?'btn-ghost':'btn-primary')+'" style="flex:1;padding:8px;font-size:12px">Lock-in</button>';
+      +'<button onclick="setCalcStrategy(\'lockin\')" class="btn '+(!isUL&&!isNoLayCalc?'btn-primary':'btn-ghost')+'" style="flex:1;padding:8px;font-size:12px">Lock-in</button>'
+      +'<button onclick="setCalcStrategy(\'nolay\')" class="btn '+(isNoLayCalc?'btn-primary':'btn-ghost')+'" style="flex:1;padding:8px;font-size:12px">No Lay</button>';
 
   // Outcome rows — only relevant in multi mode, but harmless to compute either way
   let outcomeRows='';
@@ -3836,12 +3893,12 @@ function renderQuickCalc(){
         +'<span style="width:16px;height:16px;border-radius:50%;background:#fff;position:absolute;top:2px;'+(qcMultiFreeBet?'right':'left')+':2px;transition:all .15s"></span>'
         +'</button></div>'
       :'')
-    +'<div style="display:grid;grid-template-columns:'+(qcMultiMode?'1fr 1fr':'1fr 1fr 1fr')+';gap:6px;margin-bottom:8px">'
+    +'<div style="display:grid;grid-template-columns:'+(qcMultiMode||isNoLayCalc?'1fr 1fr':'1fr 1fr 1fr')+';gap:6px;margin-bottom:8px">'
     +'<div class="form-group"><div class="form-label">Stake</div>'
     +'<input type="number" id="qc-stake" placeholder="0.00" step="0.01" inputmode="decimal" oninput="calcQuick()" style="padding:8px;font-size:14px;font-weight:500"/></div>'
     +'<div class="form-group"><div class="form-label">Back odds</div>'
     +'<input type="number" id="qc-bodds" placeholder="2.00" step="0.01" inputmode="decimal" oninput="calcQuick()" style="padding:8px;font-size:14px;font-weight:500"/></div>'
-    +(qcMultiMode?'':'<div class="form-group"><div class="form-label">Lay odds</div>'
+    +(qcMultiMode||isNoLayCalc?'':'<div class="form-group"><div class="form-label">Lay odds</div>'
     +'<input type="number" id="qc-lodds" placeholder="2.00" step="0.01" inputmode="decimal" oninput="calcQuick()" style="padding:8px;font-size:14px;font-weight:500"/></div>')
     +'</div>'
     +'<div style="display:grid;grid-template-columns:1fr auto 1fr;align-items:center;margin-bottom:10px">'
@@ -3866,12 +3923,12 @@ function renderQuickCalc(){
         +'<div><div style="font-size:10px;color:var(--text-muted);margin-bottom:3px">Overall position</div>'
         +'<div id="qc-multi-position" style="font-size:18px;font-weight:500;color:var(--text-primary)">—</div></div>'
         +'</div>'
-      :'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">'
-        +'<div><div style="font-size:10px;color:var(--text-muted);margin-bottom:3px">Lay stake</div>'
+      :'<div style="display:grid;grid-template-columns:'+(isNoLayCalc?'1fr 1fr':'1fr 1fr 1fr')+';gap:8px">'
+        +(isNoLayCalc?'':'<div><div style="font-size:10px;color:var(--text-muted);margin-bottom:3px">Lay stake</div>'
         +'<div style="display:flex;align-items:center;gap:6px">'
         +'<div id="qc-laystake" style="font-size:20px;font-weight:500;color:var(--text-primary)">—</div>'
         +'<button id="qc-copy-btn" onclick="copyLayStake()" style="display:none;padding:4px 8px;border-radius:6px;border:0.5px solid rgba(255,255,255,0.15);background:var(--bg-input);color:var(--text-secondary);font-size:11px;cursor:pointer;font-family:system-ui">Copy</button>'
-        +'</div></div>'
+        +'</div></div>')
         +'<div><div style="font-size:10px;color:var(--text-muted);margin-bottom:3px">If wins</div>'
         +'<div id="qc-win" style="font-size:20px;font-weight:500;color:#22C55E">—</div></div>'
         +'<div><div style="font-size:10px;color:var(--text-muted);margin-bottom:3px">If loses</div>'
@@ -4123,6 +4180,29 @@ function calcQuick(){
   if(qcMultiMode){calcQuickMulti();return;}
   const bs=parseFloat(document.getElementById('qc-stake')?.value)||0;
   const bo=parseFloat(document.getElementById('qc-bodds')?.value)||0;
+  const isFB=calcBetType==='Free Bet';
+  const isNoLayCalc=calcStrategy==='nolay';
+
+  // No Lay: the genuine unhedged result — no lay odds involved, full
+  // win-side profit if it wins, full stake lost if it loses (or £0 for
+  // a Free Bet, since no real stake was ever at risk).
+  if(isNoLayCalc){
+    window._qcStake=bs||'';
+    window._qcBodds=bo||'';
+    const res=document.getElementById('qc-results');
+    const btn=document.getElementById('qc-log-btn');
+    if(!bs||!bo){if(res)res.style.display='none';if(btn)btn.style.display='none';return;}
+    const winEl=document.getElementById('qc-win');
+    const loseEl=document.getElementById('qc-lose');
+    const total_win=bs*(bo-1);
+    const total_lose=isFB?0:-bs;
+    if(winEl)winEl.textContent=fmtS(total_win);
+    if(loseEl){loseEl.textContent=fmtS(total_lose);loseEl.style.color=total_lose>=0?'#22C55E':'#F87171';}
+    if(res)res.style.display='block';
+    if(btn)btn.style.display='block';
+    return;
+  }
+
   const lo=parseFloat(document.getElementById('qc-lodds')?.value)||0;
   const commPct=parseFloat(document.getElementById('qc-comm')?.value)||0;
   const c=commPct/100; // decimal form for the maths below
@@ -4136,7 +4216,6 @@ function calcQuick(){
   const btn=document.getElementById('qc-log-btn');
   if(!bs||!bo||!lo){if(res)res.style.display='none';if(btn)btn.style.display='none';return;}
 
-  const isFB=calcBetType==='Free Bet';
   const isUL=calcStrategy==='underlay';
   let layStake,winPnl,losePnl;
 
@@ -4200,6 +4279,7 @@ function logFromCalc(){
   // Set form state
   selectedBetType=calcBetType;
   isUnderlay=calcStrategy==='underlay';
+  isNoLay=calcStrategy==='nolay';
   currentTab='trade';tradeSubTab='log';
   // Switch to Trade tab
   document.querySelectorAll('.tab').forEach(el=>el.classList.remove('active'));
