@@ -1490,6 +1490,9 @@ function logLinkedFreeBet(pr,fbId){
   formAccount=pr;
   selectedBetType='Free Bet';
   isUnderlay=false;
+  isNoLay=false; // always starts in Lock-in — must be explicit, since a
+                 // stale true from an earlier action would otherwise
+                 // render the wrong layout on the very first render below
   currentTab='trade';tradeSubTab='log';
   document.querySelectorAll('.tab').forEach(el=>el.classList.remove('active'));
   document.getElementById('tab-trade')?.classList.add('active');
@@ -1503,7 +1506,8 @@ function logLinkedFreeBet(pr,fbId){
   setTimeout(function(){
     const fbEl=document.getElementById('f-bookie');if(fbEl)fbEl.value=fb.bookie;
     const fbs=document.getElementById('f-bookie-search');if(fbs)fbs.value=fb.bookie;
-    setStrategy('lockin');
+    // isUnderlay/isNoLay already correct from before the render above —
+    // no need to call setStrategy() again here.
   },50);
   showToast('Log the free bet\u2019s real result \u2014 it\u2019ll link back to the original bet');
   window.scrollTo(0,0);
@@ -2744,8 +2748,11 @@ function duplicateTrade(acct,id,rawTx){
       const mb=document.getElementById('f-mbal-bonus');if(mb&&tx.mbalBonus!==undefined)mb.value=tx.mbalBonus;
       const mr=document.getElementById('f-mbal-retention');if(mr&&tx.mbalRetention!==undefined)mr.value=tx.mbalRetention;
     }
-    // Strategy
-    setStrategy(isUnderlay?'underlay':'lockin');
+    // Strategy buttons already correct — isUnderlay/isNoLay were set
+    // before the render above, and calling setStrategy() here would be
+    // redundant at best (it never even knew about 'nolay' as a value,
+    // so it would have silently reset a No Lay duplicate to Lock-in)
+    // and destructive at worst, for the same reason as logFromCalc().
     autoCalcUnderlay();
   },50);
   showToast('Duplicated — edit and save');window.scrollTo(0,0);
@@ -4292,8 +4299,13 @@ function logFromCalc(){
     const fs=document.getElementById('f-bstake');if(fs)fs.value=bs;
     const fb=document.getElementById('f-bodds');if(fb)fb.value=bo;
     const fl=document.getElementById('f-lodds');if(fl)fl.value=lo;
-    // Set strategy buttons
-    setStrategy(calcStrategy);
+    // Strategy buttons are already correct — isUnderlay/isNoLay were set
+    // BEFORE the render above, so the template already reflects them.
+    // Calling setStrategy() here would be redundant at best, and
+    // actively destructive for No Lay specifically: it always re-renders
+    // the whole form on any transition into/out of No Lay, which would
+    // wipe out the Stake/Back Odds values just set above, since that
+    // re-render carries no prefill data.
     // Update type buttons
     document.querySelectorAll('[data-toptype]').forEach(function(el){
       const isSelected=el.dataset.toptype===calcBetType;
@@ -4339,6 +4351,12 @@ function logFromCalcMulti(){
 
   selectedBetType=calcBetType;
   isUnderlay=qcMultiStrategy==='underlay';
+  isNoLay=false; // multi-outcome logging never uses No Lay — must explicitly
+                 // clear this, since a stale true from an earlier action
+                 // would otherwise render the wrong field layout entirely
+                 // (No Lay's 2-column view has no Lay Odds field at all,
+                 // but this flow specifically needs one present, even
+                 // left blank, for the user's own reference)
   currentTab='trade';tradeSubTab='log';
   document.querySelectorAll('.tab').forEach(el=>el.classList.remove('active'));
   document.getElementById('tab-trade')?.classList.add('active');
@@ -4355,7 +4373,10 @@ function logFromCalcMulti(){
       fp.value=overallPosition.toFixed(2);
       fp.setAttribute('data-manual','true'); // prevents autoCalcUnderlay from ever overwriting this
     }
-    setStrategy(qcMultiStrategy);
+    // Strategy buttons already correct — isUnderlay/isNoLay were set
+    // before the render above, and calling setStrategy() here would be
+    // redundant at best, destructive at worst (same reasoning as
+    // logFromCalc() and duplicateTrade()).
     document.querySelectorAll('[data-toptype]').forEach(function(el){
       const isSelected=el.dataset.toptype===calcBetType;
       el.style.background=isSelected?getTypeColor(calcBetType):getCssVar('--bg-card2')||'#252629';
