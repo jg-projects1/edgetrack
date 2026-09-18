@@ -2687,7 +2687,7 @@ function submitTx(){
   if(usedBookie){recentBookies=([usedBookie,...recentBookies.filter(b=>b!==usedBookie)]).slice(0,8);}
   if(usedExchange)lastExchange=usedExchange;
   // Store last saved tx for quick duplicate
-  const lastTx={type:selectedBetType,bookie:document.getElementById('f-bookie')?.value||(document.getElementById('f-bookie-search')?.value||''),exchange:document.getElementById('f-exchange')?.value||'',event:document.getElementById('f-event')?.value||'',bstake:document.getElementById('f-bstake')?.value||'',bodds:document.getElementById('f-bodds')?.value||'',lodds:document.getElementById('f-lodds')?.value||'',pnl:document.getElementById('f-pnl')?.value||'',underlay:isUnderlay,notes:document.getElementById('f-notes')?.value||'',_acct:formAccount};
+  const lastTx={type:selectedBetType,bookie:document.getElementById('f-bookie')?.value||(document.getElementById('f-bookie-search')?.value||''),exchange:document.getElementById('f-exchange')?.value||'',event:document.getElementById('f-event')?.value||'',bstake:document.getElementById('f-bstake')?.value||'',bodds:document.getElementById('f-bodds')?.value||'',lodds:document.getElementById('f-lodds')?.value||'',pnl:document.getElementById('f-pnl')?.value||'',underlay:isUnderlay,noLay:isNoLay,notes:document.getElementById('f-notes')?.value||'',_acct:formAccount};
   lastSavedTrade=lastTx;
   if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}invalidateTxCache(formAccount);saveData('logTrade');showToast('✓ Trade saved');msg.textContent='';
   _multiLogLocked=false; // clear so a following, unrelated bet isn't stuck with a locked Strategy toggle
