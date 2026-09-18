@@ -985,6 +985,7 @@ let qcMultiMode=false;
 let qcMultiStrategy='lockin'; // defaults to lock-in, not underlay
 let qcMultiFreeBet=false;
 let qcOutcomeCount=2;
+let settleFilter='all'; // all | 2up | nolay — quick filter on the Settle tab
 // Set when the Log form was populated from the multi-outcome calculator
 // — locks the Strategy toggle there, since P&L is frozen from whichever
 // strategy was actually used to calculate it and can't be recalculated
@@ -1581,8 +1582,23 @@ function renderPendingCard(t){
 }
 
 function renderPending(){
-  const pending=pendingAll();
-  if(!pending.length)return`<div style="text-align:center;padding:60px 20px"><i class="ti ti-circle-check" style="font-size:48px;color:#22C55E" aria-hidden="true"></i><div style="font-size:15px;font-weight:500;margin-top:12px;color:var(--text-primary)">All settled</div></div>`;
+  const allPending=pendingAll();
+  if(!allPending.length)return`<div style="text-align:center;padding:60px 20px"><i class="ti ti-circle-check" style="font-size:48px;color:#22C55E" aria-hidden="true"></i><div style="font-size:15px;font-weight:500;margin-top:12px;color:var(--text-primary)">All settled</div></div>`;
+
+  const count2up=allPending.filter(t=>t.type==='2Up').length;
+  const countNoLay=allPending.filter(t=>t.noLay).length;
+  const filterRow=(count2up||countNoLay)?`
+  <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">
+    <button onclick="setSettleFilter('all')" style="padding:6px 12px;border-radius:20px;font-size:12px;font-weight:500;cursor:pointer;border:0.5px solid ${settleFilter==='all'?'transparent':'var(--border-col)'};background:${settleFilter==='all'?'var(--text-accent)':'var(--bg-card2)'};color:${settleFilter==='all'?'#fff':'var(--text-secondary)'}">All (${allPending.length})</button>
+    ${count2up?`<button onclick="setSettleFilter('2up')" style="padding:6px 12px;border-radius:20px;font-size:12px;font-weight:500;cursor:pointer;border:0.5px solid ${settleFilter==='2up'?'transparent':'#F87171'};background:${settleFilter==='2up'?'#F87171':'transparent'};color:${settleFilter==='2up'?'#fff':'#F87171'}">2Up (${count2up})</button>`:''}
+    ${countNoLay?`<button onclick="setSettleFilter('nolay')" style="padding:6px 12px;border-radius:20px;font-size:12px;font-weight:500;cursor:pointer;border:0.5px solid ${settleFilter==='nolay'?'transparent':'#F0A500'};background:${settleFilter==='nolay'?'#F0A500':'transparent'};color:${settleFilter==='nolay'?'#fff':'#F0A500'}">No Lay (${countNoLay})</button>`:''}
+  </div>`:'';
+
+  const pending=settleFilter==='2up'?allPending.filter(t=>t.type==='2Up')
+    :settleFilter==='nolay'?allPending.filter(t=>t.noLay)
+    :allPending;
+
+  if(!pending.length)return filterRow+`<div style="text-align:center;padding:60px 20px"><i class="ti ti-filter-off" style="font-size:40px;color:var(--text-muted)" aria-hidden="true"></i><div style="font-size:14px;color:var(--text-muted);margin-top:12px">No pending bets match this filter</div><button onclick="setSettleFilter('all')" style="margin-top:12px;padding:8px 16px;border-radius:8px;border:0.5px solid var(--border-col);background:none;color:var(--text-accent);font-size:13px;cursor:pointer">Back to All</button></div>`;
 
   // Grouped by bookie — matches how you actually settle (logging into
   // one bookie at a time, clearing everything there, moving to the
@@ -1601,7 +1617,7 @@ function renderPending(){
   Object.values(groups).forEach(arr=>arr.sort((a,b)=>a.id-b.id));
   const bookieOrder=Object.keys(groups).sort((a,b)=>a.localeCompare(b));
 
-  return`
+  return filterRow+`
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
     <div class="metric-card"><div class="metric-label">Pending</div><div class="metric-value warn">${pending.length}</div></div>
     <div class="metric-card"><div class="metric-label">Expected P&L</div><div class="metric-value pos" style="font-size:20px">${fmtS(pending.reduce((a,t)=>a+(t.expectedPnl||0),0))}</div></div>
@@ -1616,6 +1632,12 @@ function renderPending(){
   </div>
   ${groups[bookie].map(t=>renderPendingCard(t)).join('')}
   `).join('')}`;
+}
+
+function setSettleFilter(f){
+  settleFilter=f;
+  const mc=document.getElementById('main-content');
+  if(mc)mc.innerHTML=renderPending();
 }
 
 function applyBalanceOnSettle(tx,p,result){
