@@ -2711,6 +2711,7 @@ function duplicateTrade(acct,id,rawTx){
   formAccount=acct;
   selectedBetType=tx.type||'';
   if(tx.underlay!==undefined)isUnderlay=tx.underlay;
+  isNoLay=!!tx.noLay;
   currentTab='trade';tradeSubTab='log';
   document.querySelectorAll('.tab').forEach(el=>el.classList.remove('active'));
   document.getElementById('tab-trade')?.classList.add('active');
