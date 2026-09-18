@@ -2496,12 +2496,28 @@ function setStrategy(s){
   isNoLay=(s==='nolay');
   // No Lay needs a full form re-render either way — switching INTO it
   // hides the Lay Odds field and drops the results panel from 3 columns
-  // to 2; switching OUT of it needs both restored. Neither a simple
-  // button-state update can handle.
+  // to 2; switching OUT of it needs both restored. A blind re-render
+  // would wipe out whatever the user had already typed (whether from a
+  // duplicate/prefill or freshly entered), so every relevant field is
+  // snapshotted first and restored afterward — this makes setStrategy()
+  // itself safe to call at any point, not just on a still-empty form.
   if(isNoLay||wasNoLay){
+    const fieldIds=['f-event','f-bookie','f-bookie-search','f-exchange','f-bstake','f-bodds','f-lodds',
+      'f-comm','f-pnl','f-notes','f-mbal-bonus','f-mbal-retention','f-mult-minboost','f-mult-maxcap',
+      'f-2up-kickoff','f-partial'];
+    const snapshot={};
+    fieldIds.forEach(id=>{const el=document.getElementById(id);if(el)snapshot[id]=el.value;});
+    const pnlWasManual=document.getElementById('f-pnl')?.hasAttribute('data-manual');
     const mc=document.getElementById('main-content');
     if(mc)mc.innerHTML=renderTrade();
     updateFormFields();bindFormEvents();
+    fieldIds.forEach(id=>{
+      if(snapshot[id]===undefined)return;
+      const el=document.getElementById(id);
+      if(el)el.value=snapshot[id];
+    });
+    if(pnlWasManual){const pnlEl=document.getElementById('f-pnl');if(pnlEl)pnlEl.setAttribute('data-manual','true');}
+    autoCalcUnderlay();
     return;
   }
   const bu=document.getElementById('btn-underlay');
