@@ -1442,22 +1442,38 @@ function renderFreeBetsPanel(){
   const pending=all.filter(fb=>fb.status==='Pending');
   const used=all.filter(fb=>fb.status==='Used');
   if(all.length===0)return '';
+
+  // Grouped by bookie, oldest-first within each group — same organizing
+  // principle as the Settle tab, so "what's waiting at each bookie"
+  // stays consistent across both places you'd ask that question.
+  const groups={};
+  pending.forEach(fb=>{
+    const key=fb.bookie||'No bookie';
+    if(!groups[key])groups[key]=[];
+    groups[key].push(fb);
+  });
+  Object.values(groups).forEach(arr=>arr.sort((a,b)=>(a.id||0)-(b.id||0)));
+  const bookieOrder=Object.keys(groups).sort((a,b)=>a.localeCompare(b));
+
   return `<div class="card" data-panel="freebets" style="margin-top:12px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
       <div style="font-size:13px;font-weight:500;color:var(--text-primary)">Free Bets</div>
       ${pending.length>0?`<span style="font-size:11px;background:rgba(34,197,94,0.15);color:var(--text-accent);padding:3px 8px;border-radius:20px">${pending.length} pending</span>`:''}
     </div>
-    ${pending.length>0?`
-    <div style="margin-bottom:8px">
-      ${pending.map(fb=>`
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:0.5px solid var(--border-col)">
-        <div>
-          <div style="font-size:13px;color:var(--text-primary)">${fb.bookie}${fb.amount?` <span style="color:var(--text-accent)">· £${fb.amount.toFixed(2)}</span>`:''}</div>
-          <div style="font-size:11px;color:var(--text-muted)">${profileLabel(fb._pr)} · ${fb.date}</div>
-        </div>
-        <button onclick="${(fb.sourceBetId||fb.sourceMbalId)?`logLinkedFreeBet('${fb._pr}','${fb.id}')`:`markFreeBetUsed('${fb._pr}','${fb.id}')`}" style="font-size:11px;padding:4px 10px;border-radius:6px;border:0.5px solid rgba(255,255,255,0.2);background:var(--bg-input);color:var(--text-primary);cursor:pointer">${(fb.sourceBetId||fb.sourceMbalId)?'Log this free bet':'Mark used'}</button>
-      </div>`).join('')}
-    </div>`:''}
+    ${bookieOrder.map(bookie=>`
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:7px 10px;background:var(--border-col2);border-radius:8px;border-left:3px solid var(--text-accent);margin-bottom:6px">
+      <span style="font-size:12px;font-weight:600;color:var(--text-primary)">${bookie}</span>
+      <span style="font-size:10px;color:var(--text-accent)">${groups[bookie].length}</span>
+    </div>
+    ${groups[bookie].map(fb=>`
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 4px;border-bottom:0.5px solid var(--border-col)">
+      <div>
+        <div style="font-size:13px;color:var(--text-primary)">${fb.amount?`£${fb.amount.toFixed(2)}`:'Free bet'}</div>
+        <div style="font-size:11px;color:var(--text-muted)">${profileLabel(fb._pr)} · ${fb.date}</div>
+      </div>
+      <button onclick="${(fb.sourceBetId||fb.sourceMbalId)?`logLinkedFreeBet('${fb._pr}','${fb.id}')`:`markFreeBetUsed('${fb._pr}','${fb.id}')`}" style="font-size:11px;padding:4px 10px;border-radius:6px;border:0.5px solid rgba(255,255,255,0.2);background:var(--bg-input);color:var(--text-primary);cursor:pointer">${(fb.sourceBetId||fb.sourceMbalId)?'Log this free bet':'Mark used'}</button>
+    </div>`).join('')}
+    `).join('')}
     ${used.length>0?`
     <details style="margin-top:4px">
       <summary style="font-size:11px;color:var(--text-muted);cursor:pointer;list-style:none">▸ ${used.length} used</summary>
