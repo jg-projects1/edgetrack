@@ -4365,9 +4365,7 @@ function calcQuick(){
     if(isFB&&bs>0){
       const retPct=isUL?(losePnl/bs*100):(winPnl/bs*100);
       retEl.style.display='block';
-      retEl.innerHTML=isUL
-        ?`Retention if it loses: <strong>${retPct.toFixed(1)}%</strong> <span style="opacity:0.7">(100% if it wins — that's the point of Underlay)</span>`
-        :`Retention: <strong>${retPct.toFixed(1)}%</strong> of face value, guaranteed either way`;
+      retEl.innerHTML='Retention: <strong>'+retPct.toFixed(1)+'%</strong>';
     }else{
       retEl.style.display='none';
     }
