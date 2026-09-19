@@ -2282,6 +2282,7 @@ function renderAdd(prefill){
                 </div>
               </div>`}
             </div>
+            <div id="ul-retention" style="display:none;margin-top:8px;padding-top:8px;border-top:0.5px solid var(--border-col);font-size:12px;color:var(--text-secondary)"></div>
           </div>
         </div>
         <div id="fg-partial-wrap" style="display:none;margin-bottom:8px">
@@ -2388,6 +2389,8 @@ function autoCalcUnderlay(){
     if(winEl)winEl.textContent=fmtS(total_win);
     if(loseEl){loseEl.textContent=fmtS(total_lose);loseEl.style.color=total_lose>=0?'#22C55E':'#F87171';}
     if(calc)calc.style.display='block';
+    const retElNL=document.getElementById('ul-retention');
+    if(retElNL)retElNL.style.display='none'; // No Lay isn't a conversion strategy — retention % doesn't apply
     if(pnlEl&&!pnlEl.hasAttribute('data-manual'))pnlEl.value=total_win.toFixed(2);
     return;
   }
@@ -2406,6 +2409,8 @@ function autoCalcUnderlay(){
         if(stakeEl)stakeEl.textContent='Enter lay odds';
       }
     }
+    const retElEarly=document.getElementById('ul-retention');
+    if(retElEarly)retElEarly.style.display='none';
     return;
   }
 
@@ -2526,6 +2531,24 @@ function autoCalcUnderlay(){
   if(loseLbl)loseLbl.textContent=isUnderlay?'Underlay P&L if loses':'Lock-in profit';
   // Auto-fill P&L for both modes — field stays editable for manual override
   if(pnlEl&&!pnlEl.hasAttribute('data-manual'))pnlEl.value=total_win.toFixed(2);
+
+  // Retention % — same measure as the Quick Calculator: how much of a
+  // free bet's face value converts to real cash. Lock-in gives one
+  // exact figure (win=lose always); Underlay's win side is always 100%
+  // by construction regardless of Partial split, so the lose-side
+  // figure is the informative one — and dividing by the full original
+  // bs (not just the underlaid portion) keeps this correct even when
+  // Partial is in use.
+  const retEl=document.getElementById('ul-retention');
+  if(retEl){
+    if(isFB&&selectedBetType!=='MBAL'&&selectedBetType!=='Multiplier'&&bs>0){
+      const retPct=isUnderlay?(total_lose/bs*100):(total_win/bs*100);
+      retEl.style.display='block';
+      retEl.innerHTML='Retention: <strong>'+retPct.toFixed(1)+'%</strong>';
+    }else{
+      retEl.style.display='none';
+    }
+  }
 }
 
 function setStrategy(s){
@@ -3995,7 +4018,8 @@ function renderQuickCalc(){
         +'<div id="qc-win" style="font-size:20px;font-weight:500;color:#22C55E">—</div></div>'
         +'<div><div style="font-size:10px;color:var(--text-muted);margin-bottom:3px">If loses</div>'
         +'<div id="qc-lose" style="font-size:20px;font-weight:500;color:var(--text-muted)">—</div></div>'
-        +'</div>')
+        +'</div>'
+        +'<div id="qc-retention" style="display:none;margin-top:10px;padding-top:10px;border-top:0.5px solid var(--border-col);font-size:12px;color:var(--text-secondary)"></div>')
     +'</div>'
     +(qcMultiMode
       ?'<button id="qc-multi-log-btn" onclick="logFromCalcMulti()" style="display:none;width:100%;padding:13px;border-radius:10px;border:none;background:#22C55E;color:#fff;font-family:system-ui;font-size:15px;font-weight:500;cursor:pointer"><i class="ti ti-plus"></i> Log this bet</button>'
@@ -4253,6 +4277,8 @@ function calcQuick(){
     window._qcBodds=bo||'';
     const res=document.getElementById('qc-results');
     const btn=document.getElementById('qc-log-btn');
+    const retEl=document.getElementById('qc-retention');
+    if(retEl)retEl.style.display='none'; // No Lay isn't a conversion strategy — retention % doesn't apply
     if(!bs||!bo){if(res)res.style.display='none';if(btn)btn.style.display='none';return;}
     const winEl=document.getElementById('qc-win');
     const loseEl=document.getElementById('qc-lose');
@@ -4326,6 +4352,26 @@ function calcQuick(){
   if(lsEl)lsEl.textContent='£'+layStake.toFixed(2);
   if(winEl){winEl.textContent=fmtS(winPnl);winEl.style.color=winPnl>=0?'#22C55E':'#F87171';}
   if(loseEl){loseEl.textContent=fmtS(losePnl);loseEl.style.color=losePnl>0?'#22C55E':losePnl<0?'#F87171':'#9A9590';}
+
+  // Retention % — the standard matched-betting measure of how much of a
+  // free bet's face value actually converts to real cash. Only
+  // meaningful for Free Bet itself (a Boost/Qualifier/Mug has no "face
+  // value" to convert, it's your own real stake). Lock-in guarantees
+  // win and lose are identical, so a single figure is genuinely exact;
+  // Underlay's win side is always precisely 100% by construction (bs
+  // itself), so the informative number there is the lose-side rate.
+  const retEl=document.getElementById('qc-retention');
+  if(retEl){
+    if(isFB&&bs>0){
+      const retPct=isUL?(losePnl/bs*100):(winPnl/bs*100);
+      retEl.style.display='block';
+      retEl.innerHTML=isUL
+        ?`Retention if it loses: <strong>${retPct.toFixed(1)}%</strong> <span style="opacity:0.7">(100% if it wins — that's the point of Underlay)</span>`
+        :`Retention: <strong>${retPct.toFixed(1)}%</strong> of face value, guaranteed either way`;
+    }else{
+      retEl.style.display='none';
+    }
+  }
 
   if(res)res.style.display='block';
   if(btn)btn.style.display='block';
