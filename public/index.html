@@ -1561,7 +1561,7 @@ function renderPendingCard(t){
       </div>
       <div class="pending-info">
         ${t.bstake?`<div class="pinfo-item"><span class="pinfo-label">Back</span><span class="pinfo-val">£${t.bstake} @ ${t.bodds}</span></div>`:''}
-        ${t.type==='2Up'&&t.lodds?`<div class="pinfo-item"><span class="pinfo-label">Lay</span><span class="pinfo-val">@ ${t.lodds}</span></div>`:''}
+        ${(t.type==='2Up'||t.also2Up)&&t.lodds?`<div class="pinfo-item"><span class="pinfo-label">Lay</span><span class="pinfo-val">@ ${t.lodds}</span></div>`:''}
         <div class="pinfo-item">
           <span class="pinfo-label">If wins</span>
           <span class="pinfo-val pos">${fmtS(t.expectedPnl||0)}</span>
@@ -2257,7 +2257,13 @@ function renderAdd(prefill){
           <div style="display:flex;gap:5px;flex-wrap:wrap">${recentBookies.map(b=>`<button onclick="selectBookie('${b.replace(/'/g,"\\'")}');document.getElementById('f-bookie-search').value='${b.replace(/'/g,"\\'")}'" style="padding:4px 10px;border-radius:20px;border:0.5px solid var(--border-col);background:var(--bg-input);color:var(--text-secondary);font-family:system-ui,-apple-system,sans-serif;font-size:11px;cursor:pointer;white-space:nowrap">${b}</button>`).join('')}</div>
         </div>`:''}
 
-        <div class="form-row single" id="fg-event"><div class="form-group"><div class="form-label" style="color:var(--text-muted)">Event</div><input type="text" id="f-event" placeholder="e.g. Arsenal vs Chelsea" value="${pf.event||''}" style="font-size:12px;padding:7px 10px;background:var(--bg-input);border-color:rgba(255,255,255,0.09)"/></div></div>
+        <div class="form-row single" id="fg-event" style="display:flex;gap:8px;align-items:flex-end">
+          <div class="form-group" style="flex:1"><div class="form-label" style="color:var(--text-muted)">Event</div><input type="text" id="f-event" placeholder="e.g. Arsenal vs Chelsea" value="${pf.event||''}" style="font-size:12px;padding:7px 10px;background:var(--bg-input);border-color:rgba(255,255,255,0.09)"/></div>
+          <label id="fg-also2up" style="display:none;align-items:center;gap:5px;cursor:pointer;padding:7px 9px;background:var(--bg-input);border-radius:8px;flex-shrink:0;white-space:nowrap">
+            <input type="checkbox" id="f-also-2up" onchange="toggleAlso2Up()" ${pf.also2Up?'checked':''}/>
+            <span style="font-size:11px;color:var(--text-primary)">2Up</span>
+          </label>
+        </div>
 
         <div style="display:grid;grid-template-columns:${isNoLay?'1fr 1fr':'1fr 1fr 1fr'};gap:6px;margin-bottom:8px" id="fg-stake-odds">
           <div class="form-group" id="fg-bstake"><div class="form-label">Stake</div><input type="number" id="f-bstake" placeholder="0.00" step="0.01" inputmode="decimal" value="${pf.bstake||''}" oninput="autoCalcUnderlay()" style="padding:7px 8px"/></div>
@@ -2306,12 +2312,6 @@ function renderAdd(prefill){
             <div class="form-group"><div class="form-label">Cash cap (£)</div><input type="number" id="f-mult-maxcap" placeholder="250" step="1" inputmode="decimal" value="${pf.multMaxCap!==undefined?pf.multMaxCap:250}" oninput="autoCalcUnderlay()"/></div>
           </div>
           <div id="mult-thresholds" style="margin-top:8px;font-size:11px;color:var(--text-muted);background:var(--bg-input);border-radius:8px;padding:8px 10px"></div>
-        </div>
-        <div id="fg-also2up" style="display:none;margin-bottom:8px">
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:8px 10px;background:var(--bg-input);border-radius:8px">
-            <input type="checkbox" id="f-also-2up" onchange="toggleAlso2Up()" ${pf.also2Up?'checked':''}/>
-            <span style="font-size:12px;color:var(--text-primary)">Also 2Up eligible <span style="font-size:9px;color:var(--text-muted)">— this selection also qualifies for the bookie's 2Up offer</span></span>
-          </label>
         </div>
         <div id="fg-2up-kickoff" style="display:none;margin-bottom:8px">
           <div class="form-group"><div class="form-label">Kickoff time <span style="font-size:9px;color:var(--text-muted);text-transform:none">so you know when to start watching</span></div><input type="time" id="f-2up-kickoff" value="${pf.kickoffTime||''}"/></div>
