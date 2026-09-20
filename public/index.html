@@ -1544,7 +1544,7 @@ function markFreeBetUsed(pr,id){
 // ── PENDING ──────────────────────────────────────────────────────────────────
 function renderPendingCard(t){
   const isFB=isFreeBet(t.type);
-  const is2Up=t.type==='2Up';
+  const is2Up=t.type==='2Up'||!!t.also2Up;
   const isNoLayBet=!!t.noLay;
   const borderColor=is2Up?'#F87171':(isNoLayBet?'#F0A500':null);
   return`<div class="pending-card" id="pcard-${t.id}" style="${borderColor?'border:1.5px solid '+borderColor:''}">
@@ -1552,6 +1552,7 @@ function renderPendingCard(t){
       <div class="pending-meta">
         <span class="${pillClass(t.type)}">${t.type}</span>${acctPill(t._acct)}
         <span style="font-size:11px;color:var(--text-secondary)">${t.date}</span>
+        ${t.also2Up?'<span style="font-size:11px;font-weight:600;background:rgba(248,113,113,0.15);color:#F87171;padding:2px 8px;border-radius:20px;border:0.5px solid rgba(248,113,113,0.3)">2Up</span>':''}
         ${isNoLayBet?'<span style="font-size:11px;font-weight:600;background:rgba(240,165,0,0.18);color:#B87E00;padding:2px 8px;border-radius:20px;border:0.5px solid rgba(240,165,0,0.35)">No Lay</span>':''}
         ${t.kickoffTime?`<span style="font-size:11px;font-weight:600;color:#F87171">Kicks off ${t.kickoffTime}</span>`:''}
         ${t.exchange?`<span style="font-size:11px;color:var(--text-muted);background:var(--border-col2);padding:2px 6px;border-radius:4px">${t.exchange}</span>`:''}
@@ -1601,7 +1602,7 @@ function renderPending(){
   const allPending=pendingAll();
   if(!allPending.length)return`<div style="text-align:center;padding:60px 20px"><i class="ti ti-circle-check" style="font-size:48px;color:#22C55E" aria-hidden="true"></i><div style="font-size:15px;font-weight:500;margin-top:12px;color:var(--text-primary)">All settled</div></div>`;
 
-  const count2up=allPending.filter(t=>t.type==='2Up').length;
+  const count2up=allPending.filter(t=>t.type==='2Up'||t.also2Up).length;
   const countNoLay=allPending.filter(t=>t.noLay).length;
   const filterRow=(count2up||countNoLay)?`
   <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">
@@ -1610,7 +1611,7 @@ function renderPending(){
     ${countNoLay?`<button onclick="setSettleFilter('nolay')" style="padding:6px 12px;border-radius:20px;font-size:12px;font-weight:500;cursor:pointer;border:0.5px solid ${settleFilter==='nolay'?'transparent':'#F0A500'};background:${settleFilter==='nolay'?'#F0A500':'transparent'};color:${settleFilter==='nolay'?'#fff':'#F0A500'}">No Lay (${countNoLay})</button>`:''}
   </div>`:'';
 
-  const pending=settleFilter==='2up'?allPending.filter(t=>t.type==='2Up')
+  const pending=settleFilter==='2up'?allPending.filter(t=>t.type==='2Up'||t.also2Up)
     :settleFilter==='nolay'?allPending.filter(t=>t.noLay)
     :allPending;
 
@@ -2306,6 +2307,12 @@ function renderAdd(prefill){
           </div>
           <div id="mult-thresholds" style="margin-top:8px;font-size:11px;color:var(--text-muted);background:var(--bg-input);border-radius:8px;padding:8px 10px"></div>
         </div>
+        <div id="fg-also2up" style="display:none;margin-bottom:8px">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:8px 10px;background:var(--bg-input);border-radius:8px">
+            <input type="checkbox" id="f-also-2up" onchange="toggleAlso2Up()" ${pf.also2Up?'checked':''}/>
+            <span style="font-size:12px;color:var(--text-primary)">Also 2Up eligible <span style="font-size:9px;color:var(--text-muted)">— this selection also qualifies for the bookie's 2Up offer</span></span>
+          </label>
+        </div>
         <div id="fg-2up-kickoff" style="display:none;margin-bottom:8px">
           <div class="form-group"><div class="form-label">Kickoff time <span style="font-size:9px;color:var(--text-muted);text-transform:none">so you know when to start watching</span></div><input type="time" id="f-2up-kickoff" value="${pf.kickoffTime||''}"/></div>
         </div>
@@ -2566,8 +2573,11 @@ function setStrategy(s){
     const fieldIds=['f-event','f-bookie','f-bookie-search','f-exchange','f-bstake','f-bodds','f-lodds',
       'f-comm','f-pnl','f-notes','f-mbal-bonus','f-mbal-retention','f-mult-minboost','f-mult-maxcap',
       'f-2up-kickoff','f-partial'];
+    const checkboxIds=['f-also-2up']; // .checked, not .value — handled separately
     const snapshot={};
     fieldIds.forEach(id=>{const el=document.getElementById(id);if(el)snapshot[id]=el.value;});
+    const checkboxSnapshot={};
+    checkboxIds.forEach(id=>{const el=document.getElementById(id);if(el)checkboxSnapshot[id]=el.checked;});
     const pnlWasManual=document.getElementById('f-pnl')?.hasAttribute('data-manual');
     const mc=document.getElementById('main-content');
     if(mc)mc.innerHTML=renderTrade();
@@ -2577,6 +2587,12 @@ function setStrategy(s){
       const el=document.getElementById(id);
       if(el)el.value=snapshot[id];
     });
+    checkboxIds.forEach(id=>{
+      if(checkboxSnapshot[id]===undefined)return;
+      const el=document.getElementById(id);
+      if(el)el.checked=checkboxSnapshot[id];
+    });
+    toggleAlso2Up(); // re-sync the kickoff field's visibility with the restored checkbox state
     if(pnlWasManual){const pnlEl=document.getElementById('f-pnl');if(pnlEl)pnlEl.setAttribute('data-manual','true');}
     autoCalcUnderlay();
     return;
@@ -2601,6 +2617,12 @@ function setStrategy(s){
   const hint=document.getElementById('pnl-label-hint');
   if(hint)hint.textContent='auto-calculated';
   autoCalcUnderlay();
+}
+
+function toggleAlso2Up(){
+  const checked=document.getElementById('f-also-2up')?.checked;
+  const kickoffGroup=document.getElementById('fg-2up-kickoff');
+  if(kickoffGroup)kickoffGroup.style.display=checked?'block':'none';
 }
 
 function toggleUnderlay(){
@@ -2644,7 +2666,8 @@ function updateFormFields(){
   sh('fg-stake-odds',isBet);sh('fg-underlay',isBet);
   sh('fg-mbal-bonus',selectedBetType==='MBAL');
   sh('fg-multiplier',selectedBetType==='Multiplier');
-  sh('fg-2up-kickoff',selectedBetType==='2Up');
+  sh('fg-also2up',selectedBetType!=='2Up');
+  sh('fg-2up-kickoff',selectedBetType==='2Up'||document.getElementById('f-also-2up')?.checked);
   sh('fg-comm-toggle',isBet);sh('fg-result-pnl',isBet);sh('fg-pnl',isBet);
   sh('fg-amount',isBookieT||isExchT);
   sh('fg-amend-target',isAmend);sh('fg-amend-bal',isAmend);
@@ -2729,8 +2752,10 @@ function submitTx(){
     const isMultiplier=selectedBetType==='Multiplier';
     const multMinBoost=isMultiplier?(parseFloat(document.getElementById('f-mult-minboost')?.value)||5):undefined;
     const multMaxCap=isMultiplier?(parseFloat(document.getElementById('f-mult-maxcap')?.value)||250):undefined;
-    const kickoffTime=selectedBetType==='2Up'?(document.getElementById('f-2up-kickoff')?.value||undefined):undefined;
-    const tx={id:Date.now(),date,type:selectedBetType,bookie,exchange,event,bstake,bodds,lodds,comm,result,pnl:storedPnl,expectedPnl:pnl,notes,underlay:isUnderlay,noLay:isNoLay,_acct:formAccount,txUpdatedAt:Date.now(),mbalBonus,mbalRetention,multMinBoost,multMaxCap,kickoffTime};
+    const also2Up=selectedBetType!=='2Up'&&!!document.getElementById('f-also-2up')?.checked;
+    const is2UpLike=selectedBetType==='2Up'||also2Up;
+    const kickoffTime=is2UpLike?(document.getElementById('f-2up-kickoff')?.value||undefined):undefined;
+    const tx={id:Date.now(),date,type:selectedBetType,bookie,exchange,event,bstake,bodds,lodds,comm,result,pnl:storedPnl,expectedPnl:pnl,notes,underlay:isUnderlay,noLay:isNoLay,also2Up,_acct:formAccount,txUpdatedAt:Date.now(),mbalBonus,mbalRetention,multMinBoost,multMaxCap,kickoffTime};
     // Carries the multi-outcome calculator's "if neither outcome hits"
     // figure through to the actual transaction, so the pending card can
     // show a correct "If loses" — genuinely different from "If wins" for
