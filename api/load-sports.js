@@ -1,16 +1,13 @@
-// load-sports.js — PARALLEL, NOT YET WIRED UP.
-// Identical to load.js in every way (same migration, same dedupe, same
-// profile keys) EXCEPT the response strips out each profile's `casino`
-// array before sending. Casino sessions are roughly half of the total
-// payload weight, and index.html currently pulls them on every single
-// load even when the Casino tab is never opened that session — that's
-// the main driver behind the Fast Origin Transfer usage warning.
+// load-sports.js v3 - conditional loads. Data, migration and dedupe logic is
+// unchanged from the previous version; the only addition is that the
+// endpoint reads a tiny revision key first and answers 304 Not Modified when
+// nothing has changed since the browser's last load (the browser sends
+// If-None-Match automatically, as long as the client doesn't add a
+// cache-busting ?t= to the URL or use cache:'no-store').
 //
-// Nothing in index.html points at this endpoint yet. load.js is
-// untouched and keeps serving the live app exactly as before. This file
-// exists purely so it can be tested against real data with zero risk to
-// what's currently running — see the conversation this was built in for
-// the plan on cutting over once it's verified.
+// The ETag also rolls over every 15 minutes, so even if some other endpoint
+// ever changes data without bumping edgetrack_rev_sports, a stale copy can
+// only survive for 15 minutes.
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -21,6 +18,7 @@ export default async function handler(req, res) {
     const kvToken = process.env.KV_REST_API_TOKEN;
     const profiles = ['jg', 'hg', 'bp', 'rq'];
     const LEGACY_KEY_SUFFIX = { jg: 'me', hg: 'wife' };
+    const ETAG_BUCKET_MS = 15 * 60 * 1000;
 
     const kvGet = async (key) => {
       const r = await fetch(`${kvUrl}/get/${key}`, {
@@ -42,8 +40,31 @@ export default async function handler(req, res) {
       });
       if (!r.ok) throw new Error(`KV set error on ${key}: ${r.status}`);
     };
+    const kvSetNumber = async (key, n) => {
+      const r = await fetch(`${kvUrl}/set/${key}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${kvToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(n)
+      });
+      if (!r.ok) throw new Error(`KV set error on ${key}: ${r.status}`);
+    };
 
-    // Same permanent bookie dedupe as load.js — unchanged.
+    const makeEtag = (rev) => `W/"${rev}-${Math.floor(Date.now() / ETAG_BUCKET_MS)}"`;
+
+    // ---- Cheap change check ------------------------------------------------
+    let rev = await kvGet('edgetrack_rev_sports');
+    if (typeof rev !== 'number') {
+      rev = Date.now();
+      await kvSetNumber('edgetrack_rev_sports', rev);
+    }
+    res.setHeader('Cache-Control', 'no-cache'); // cacheable, but always revalidate
+    res.setHeader('ETag', makeEtag(rev));
+    if (req.headers['if-none-match'] === makeEtag(rev)) {
+      return res.status(304).end();
+    }
+
+    let anyWritten = false;
+
     const BOOKIE_RENAMES = {
       'hot streak casino': 'Hot Streak',
       'gala': 'Gala Casino',
@@ -94,7 +115,6 @@ export default async function handler(req, res) {
       kvGet('edgetrack_bet_builder_library')
     ]);
 
-    // Same one-time me/wife -> jg/hg migration as load.js — unchanged.
     for (const entry of profileData) {
       const legacySuffix = LEGACY_KEY_SUFFIX[entry.pr];
       if (!legacySuffix) continue;
@@ -103,32 +123,38 @@ export default async function handler(req, res) {
       if (legacyData !== null) {
         entry.data = legacyData;
         await kvSet(`edgetrack_${entry.pr}`, legacyData);
+        anyWritten = true;
       }
     }
+
+    const finish = async () => {
+      if (anyWritten) {
+        const now = Date.now();
+        await kvSetNumber('edgetrack_rev_sports', now);
+        res.setHeader('ETag', makeEtag(now));
+      }
+    };
 
     const hasSplitData = profileData.some(p => p.data !== null);
     if (hasSplitData) {
       const result = { exchanges: exchanges || {}, betBuilderLibrary: betBuilderLibrary || [] };
       await Promise.all(profileData.map(async ({ pr, data }) => {
         if (!data) {
-          // NOTE: no `casino` key here at all — deliberately, this is a
-          // sports-only response. The client must treat a missing
-          // `casino` field as "not loaded", never as "empty/deleted".
+          // No `casino` key at all: the client treats a missing field as
+          // "not loaded", never as "empty".
           result[pr] = { transactions: [], bank: 0, bankUpdatedAt: 0, bookies: {}, freeBets: [] };
           return;
         }
         const { bookies, changed } = dedupeBookies(data.bookies || {});
-        // Strip casino out of the response — everything else identical
-        // to what load.js would return for this profile.
         const { casino, ...withoutCasino } = { ...data, bookies };
         result[pr] = withoutCasino;
         if (changed) {
-          // Persist the bookie cleanup against the FULL record (with
-          // casino intact) — we must never write the trimmed version
-          // back to Upstash, only ever read a trimmed copy for response.
+          // Persist the cleanup against the FULL record (casino intact).
           await kvSet(`edgetrack_${pr}`, { ...data, bookies });
+          anyWritten = true;
         }
       }));
+      await finish();
       return res.status(200).json({ ok: true, data: result });
     }
 
@@ -138,15 +164,16 @@ export default async function handler(req, res) {
       Object.entries(LEGACY_KEY_SUFFIX).forEach(([newKey, oldKey]) => {
         if (!remapped[newKey] && remapped[oldKey]) remapped[newKey] = remapped[oldKey];
       });
-      // Strip casino here too, for consistency with the split-key path.
       profiles.forEach(pr => {
         if (remapped[pr]) {
           const { casino, ...withoutCasino } = remapped[pr];
           remapped[pr] = withoutCasino;
         }
       });
+      await finish();
       return res.status(200).json({ ok: true, data: remapped });
     }
+    await finish();
     return res.status(200).json({ ok: true, data: null });
   } catch (e) {
     console.error('Load-sports error:', e);
