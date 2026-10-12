@@ -132,44 +132,77 @@ function setSyncStatus(s){
 
 async function loadData(){
   try{
-    const [casinoRes, sportsRes] = await Promise.all([
-      fetch('/api/load-casino'),
-      fetch('/api/load')
-    ]);
+    const casinoRes=await fetch('/api/load-casino');
     if(!casinoRes.ok)throw new Error('HTTP '+casinoRes.status);
     const casinoJson=await casinoRes.json();
+    let haveBookieNames=false;
     if(casinoJson.ok&&casinoJson.data){
+      haveBookieNames=PROFILES.every(p=>Array.isArray(casinoJson.data[p]?.bookieNames));
       PROFILES.forEach(p=>{
-        if(casinoJson.data[p]?.casino)fullState[p].casino=casinoJson.data[p].casino;
+        const d=casinoJson.data[p];
+        if(d?.casino)fullState[p].casino=d.casino;
+        // The bookie dropdown only needs the NAMES, which load-casino now
+        // returns - no more downloading the whole sports dataset for it.
+        if(Array.isArray(d?.bookieNames)){
+          const bk={};d.bookieNames.forEach(n=>{bk[n]={};});
+          fullState[p].bookies=bk;
+        }
       });
     }
-    // Load bookie list from sports data for the dropdown only
-    if(sportsRes.ok){
-      const sportsJson=await sportsRes.json();
-      if(sportsJson.ok&&sportsJson.data){
-        PROFILES.forEach(p=>{
-          if(sportsJson.data[p]?.bookies)fullState[p].bookies=sportsJson.data[p].bookies;
-        });
+    // Fallback if an older load-casino is still deployed: fetch bookies the old way.
+    if(!haveBookieNames){
+      const sportsRes=await fetch('/api/load-sports');
+      if(sportsRes.ok){
+        const sportsJson=await sportsRes.json();
+        if(sportsJson.ok&&sportsJson.data){
+          PROFILES.forEach(p=>{
+            if(sportsJson.data[p]?.bookies)fullState[p].bookies=sportsJson.data[p].bookies;
+          });
+        }
       }
     }
     setSyncStatus('synced');
   }catch(e){setSyncStatus('error');}
 }
 
+// Sessions created/edited here that the server hasn't confirmed yet. Only
+// these (not the whole history) are sent on a save.
+const dirtyIds={jg:new Set(),hg:new Set(),bp:new Set(),rq:new Set()};
+const sendingIds={jg:new Set(),hg:new Set(),bp:new Set(),rq:new Set()};
 async function saveData(){
+  // Save casino sessions only — never touches sports data. Sends just the
+  // new sessions + pending deletions; the server unions them with what it
+  // already holds.
+  const casinoState={},sent={},sentDel={};
+  PROFILES.forEach(pr=>{
+    const sessions=(fullState[pr]?.casino||[]).filter(s=>dirtyIds[pr].has(String(s.id))&&!sendingIds[pr].has(String(s.id)));
+    const dels=(deletedIds[pr]||[]).slice();
+    if(sessions.length||dels.length){
+      casinoState[pr]={casino:sessions,deletedIds:dels};
+      sent[pr]=sessions.map(s=>String(s.id));
+      sentDel[pr]=dels;
+    }
+  });
+  if(Object.keys(casinoState).length===0){setSyncStatus('synced');return;}
+  PROFILES.forEach(pr=>(sent[pr]||[]).forEach(id=>sendingIds[pr].add(id)));
   setSyncStatus('syncing');
   try{
-    // Save casino sessions only — never touches sports data
-    const casinoState={};
-    PROFILES.forEach(pr=>{casinoState[pr]={casino:fullState[pr]?.casino||[],deletedIds:deletedIds[pr]||[]};});
     const res=await fetch('/api/save-casino',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(casinoState)});
     if(!res.ok)throw new Error('Save failed');
-    // Clear deletedIds after successful save since server has processed them
-    PROFILES.forEach(pr=>{deletedIds[pr]=[];});
+    // Clear what the server has now processed
+    PROFILES.forEach(pr=>{
+      (sent[pr]||[]).forEach(id=>dirtyIds[pr].delete(id));
+      if(sentDel[pr]){
+        const done=new Set(sentDel[pr].map(String));
+        deletedIds[pr]=(deletedIds[pr]||[]).filter(i=>!done.has(String(i)));
+      }
+    });
     setSyncStatus('synced');
   }catch(e){
     console.error('Casino save error:',e);
     setSyncStatus('error');
+  }finally{
+    PROFILES.forEach(pr=>(sent[pr]||[]).forEach(id=>sendingIds[pr].delete(id)));
   }
 }
 function save(){if(syncTimeout)clearTimeout(syncTimeout);setSyncStatus('syncing');syncTimeout=setTimeout(saveData,1000);}
@@ -316,8 +349,10 @@ function saveSession(){
   const net=endBal-startBal;
   const p=fullState[formAcct];
   if(!p.casino)p.casino=[];
+  const _newId=Date.now();
+  dirtyIds[formAcct].add(String(_newId));
   p.casino.push({
-    id:Date.now(),
+    id:_newId,
     date:document.getElementById('c-date')?.value||todayStr(),
     casino,operator,
     startBal,endBal,netProfit:net,
@@ -421,6 +456,7 @@ function confirmBonus(acct,id){
   session.bonusWin=(session.bonusWin||0)+win;
   session.netProfit=session.wagerPnl+session.bonusWin;
   session.pending=false;
+  dirtyIds[acct].add(String(id));
   const p=fullState[acct];
   if(session.casino&&p.bookies?.[session.casino])
     p.bookies[session.casino].bal=(p.bookies[session.casino].bal||0)+win;
@@ -430,6 +466,7 @@ function confirmBonus(acct,id){
 function deleteSession(acct,id){
   if(!confirm('Delete session?'))return;
   fullState[acct].casino=(fullState[acct].casino||[]).filter(s=>s.id!==id);
+  dirtyIds[acct].delete(String(id));
   if(!deletedIds[acct])deletedIds[acct]=[];
   deletedIds[acct].push(id);
   render();
