@@ -1,8 +1,19 @@
-// v2 - profile keys renamed (me->jg, wife->hg) to match the main app.
-// Also brings this endpoint's merge logic up to the same standard as the
-// main app's save.js: timestamp-based conflict resolution instead of
-// "whoever saves last wins", and a persistent deletion tombstone so a
-// stale device can't silently resurrect something already deleted.
+// v3 - bandwidth diet + safer reads. Merge, tombstone and bookie-balance
+// logic is unchanged from v2. What's different:
+//   * kvGet now THROWS on a failed request. v2 returned null, which this
+//     file then treated as "profile doesn't exist" and wrote back a blank
+//     profile with only the incoming sessions in it - i.e. one failed read
+//     (e.g. Upstash rejecting requests once the monthly bandwidth cap is hit)
+//     could silently wipe a profile's bets and bookies. A failed read now
+//     aborts the save with a 500 and nothing is written.
+//   * Only profiles that actually carry sessions or deletions are read and
+//     processed (the client can now send just the new session instead of
+//     every session for every profile).
+//   * A profile is only written back if the merge actually changed it.
+//   * The edgetrack_me / edgetrack_wife safety-net read is skipped while
+//     edgetrack_legacy_ok is fresh (it's refreshed daily by load-casino.js).
+//   * Bumps edgetrack_rev_casino / edgetrack_rev_sports after a write so
+//     load-casino.js / load-sports.js can answer "304 Not Modified".
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -13,15 +24,18 @@ export default async function handler(req, res) {
   try {
     const kvUrl = process.env.KV_REST_API_URL;
     const kvToken = process.env.KV_REST_API_TOKEN;
-    const incoming = req.body;
+    const incoming = req.body || {};
     const profiles = ['jg', 'hg', 'bp', 'rq'];
     const LEGACY_KEY_SUFFIX = { jg: 'me', hg: 'wife' };
+    const LEGACY_RECHECK_MS = 24 * 60 * 60 * 1000;
 
+    // Throws on a genuine failure so "request failed" is never mistaken for
+    // "key doesn't exist".
     const kvGet = async (key) => {
       const r = await fetch(`${kvUrl}/get/${key}`, {
         headers: { Authorization: `Bearer ${kvToken}` }
       });
-      if (!r.ok) return null;
+      if (!r.ok) throw new Error(`KV fetch failed for ${key}: ${r.status}`);
       const d = await r.json();
       if (!d.result) return null;
       let parsed = JSON.parse(d.result);
@@ -29,6 +43,8 @@ export default async function handler(req, res) {
       return parsed;
     };
 
+    // Same storage format as before (double-stringified) so every other
+    // reader keeps working exactly as it does today.
     const kvSet = async (key, value) => {
       const r = await fetch(`${kvUrl}/set/${key}`, {
         method: 'POST',
@@ -37,12 +53,16 @@ export default async function handler(req, res) {
       });
       if (!r.ok) throw new Error(`KV set error on ${key}: ${r.status}`);
     };
+    // Tiny plain-number keys (rev counters, legacy flag).
+    const kvSetNumber = async (key, n) => {
+      const r = await fetch(`${kvUrl}/set/${key}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${kvToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(n)
+      });
+      if (!r.ok) throw new Error(`KV set error on ${key}: ${r.status}`);
+    };
 
-    // Same rename map used for bookie balances elsewhere, applied here to
-    // the `casino` field stored on each session record — so a session
-    // logged/synced with a stale name (e.g. "Grosvenor Casinos") gets
-    // normalized to the canonical name before it's ever merged in,
-    // rather than sitting there as a permanent separate entry.
     const CASINO_NAME_RENAMES = {
       'hot streak casino': 'Hot Streak',
       'gala': 'Gala Casino',
@@ -57,25 +77,36 @@ export default async function handler(req, res) {
       return canonical && canonical !== s.casino ? { ...s, casino: canonical } : s;
     };
 
-    await Promise.all(profiles.map(async pr => {
-      if (!incoming[pr]) return;
+    const legacyCheckedAt = await kvGet('edgetrack_legacy_ok');
+    const legacyFresh = typeof legacyCheckedAt === 'number' &&
+      (Date.now() - legacyCheckedAt) >= 0 && (Date.now() - legacyCheckedAt) < LEGACY_RECHECK_MS;
 
+    const work = profiles.filter(pr =>
+      incoming[pr] &&
+      ((incoming[pr].casino || []).length > 0 || (incoming[pr].deletedIds || []).length > 0)
+    );
+
+    let anyWritten = false;
+
+    await Promise.all(work.map(async pr => {
       const sportKey = `edgetrack_${pr}`;
-      let sportsData = await kvGet(sportKey) || { bank: 0, bookies: {}, transactions: [], freeBets: [], casino: [] };
+      const existing = await kvGet(sportKey);
+      let sportsData = existing || { bank: 0, bookies: {}, transactions: [], freeBets: [], casino: [] };
+      if (!sportsData.bookies) sportsData.bookies = {};
+      const original = JSON.stringify(sportsData);
       if (sportsData.casino) sportsData.casino = sportsData.casino.map(normalizeCasinoField);
 
       // SAFETY NET: fold in any stray sessions still sitting under the old
-      // key (edgetrack_me/edgetrack_wife) that load-casino.js hasn't
-      // reconciled yet — covers a device that saves before ever loading.
+      // key (edgetrack_me/edgetrack_wife). Skipped while the daily
+      // reconciliation flag is fresh.
       const legacySuffix = LEGACY_KEY_SUFFIX[pr];
-      if (legacySuffix) {
+      if (legacySuffix && !legacyFresh) {
         const legacyData = await kvGet(`edgetrack_${legacySuffix}`);
         const legacyCasino = legacyData?.casino || [];
         const knownIds = new Set((sportsData.casino || []).map(s => String(s.id)));
         const strayFromLegacy = legacyCasino.filter(s => !knownIds.has(String(s.id))).map(normalizeCasinoField);
         if (strayFromLegacy.length > 0) {
           sportsData.casino = [...(sportsData.casino || []), ...strayFromLegacy];
-          if (!sportsData.bookies) sportsData.bookies = {};
           strayFromLegacy.forEach(s => {
             const net = (s.startBal !== undefined && s.endBal !== undefined)
               ? (s.endBal - s.startBal)
@@ -91,10 +122,7 @@ export default async function handler(req, res) {
       const incomingSessions = (incoming[pr]?.casino || []).map(normalizeCasinoField);
       const requestDeletedIds = new Set((incoming[pr]?.deletedIds || []).map(String));
 
-      // PERSISTENT TOMBSTONE: same principle as the main app's save.js —
-      // a deletion sent in one request must be remembered permanently, or
-      // a device that never saw the delete can resurrect the session on
-      // its next save just by including its own stale copy.
+      // PERSISTENT TOMBSTONE (unchanged).
       const persistedDeletedIds = new Set((sportsData._deletedIds || []).map(String));
       requestDeletedIds.forEach(id => persistedDeletedIds.add(id));
 
@@ -122,9 +150,6 @@ export default async function handler(req, res) {
         sportsData.bookies[casino].balUpdatedAt = Date.now();
       });
 
-      // Timestamp-based merge (matches main save.js) instead of unconditional
-      // "incoming wins" — protects against a stale device's cached copy
-      // silently overwriting a session someone else already touched.
       const serverMap = new Map(serverSessions.map(s => [String(s.id), s]));
       const incomingMap = new Map(incomingSessions.map(s => [String(s.id), s]));
       const allIds = new Set([...serverMap.keys(), ...incomingMap.keys()]);
@@ -145,11 +170,27 @@ export default async function handler(req, res) {
       sportsData.casino = mergedSessions;
       sportsData._deletedIds = Array.from(persistedDeletedIds);
 
-      await kvSet(sportKey, sportsData);
+      // Only write if the merge actually changed something.
+      if (JSON.stringify(sportsData) !== original) {
+        await kvSet(sportKey, sportsData);
+        anyWritten = true;
+      }
     }));
+
+    // Casino changes also change bookie balances (sports data), so both
+    // revision counters move. Written AFTER the data so a loader that sees
+    // the new revision is guaranteed to see the new data.
+    if (anyWritten) {
+      const now = Date.now();
+      await Promise.all([
+        kvSetNumber('edgetrack_rev_casino', now),
+        kvSetNumber('edgetrack_rev_sports', now)
+      ]);
+    }
 
     return res.status(200).json({ ok: true });
   } catch (e) {
+    console.error('Save-casino error:', e);
     return res.status(500).json({ ok: false, error: e.message });
   }
 }
