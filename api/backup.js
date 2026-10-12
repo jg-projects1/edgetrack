@@ -1,5 +1,6 @@
 // Server-side full backup — reads directly from KV, always complete
 // GET /api/backup
+// v3 - strict reads (a failed read now errors instead of producing a backup with a profile missing).
 // v2 - was reading the frozen edgetrack_me/edgetrack_wife keys, which
 // stopped being written to after the profile rename — meaning every
 // backup pulled since then was silently missing everything for two of
@@ -19,17 +20,18 @@ export default async function handler(req, res) {
     const profiles = ['jg', 'hg', 'bp', 'rq'];
 
     const kvGet = async (key) => {
-      try {
-        const r = await fetch(`${kvUrl}/get/${key}`, {
-          headers: { Authorization: `Bearer ${kvToken}` }
-        });
-        if (!r.ok) return null;
-        const d = await r.json();
-        if (!d.result) return null;
-        let parsed = JSON.parse(d.result);
-        if (typeof parsed === 'string') parsed = JSON.parse(parsed);
-        return parsed;
-      } catch(e) { return null; }
+      // Throws on a failed request: a backup must never silently come back
+      // with a profile missing just because one read failed (e.g. Upstash
+      // rejecting requests at its bandwidth limit).
+      const r = await fetch(`${kvUrl}/get/${key}`, {
+        headers: { Authorization: `Bearer ${kvToken}` }
+      });
+      if (!r.ok) throw new Error(`KV fetch failed for ${key}: ${r.status}`);
+      const d = await r.json();
+      if (!d.result) return null;
+      let parsed = JSON.parse(d.result);
+      if (typeof parsed === 'string') parsed = JSON.parse(parsed);
+      return parsed;
     };
 
     // Read everything from KV in parallel
