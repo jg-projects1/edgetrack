@@ -15,7 +15,7 @@
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{height:100%;-webkit-text-size-adjust:100%}
 
-/* ── THEMESS ────────────────────────────────────── */
+/* ── THEMES ────────────────────────────────────── */
 :root{
   --bg-page:var(--bg-page);
   --bg-card:var(--bg-card);
@@ -450,7 +450,7 @@ async function loadData(){
 
 async function fetchFromServer(){
   try{
-    const sportsRes = await fetch('/api/load-sports?t='+Date.now());
+    const sportsRes = await fetch('/api/load-sports');
     if(!sportsRes.ok)throw new Error('HTTP '+sportsRes.status);
     const sportsJson=await sportsRes.json();
     if(sportsJson.ok&&sportsJson.data){
@@ -617,7 +617,7 @@ function buildSavePayload(){
   // `casino` object this used to build here was dead code anyway: it
   // was captured into every queued entry but drainQueue() never
   // actually sent it anywhere.
-  const sports={exchanges:state.exchanges,betBuilderLibrary:state.betBuilderLibrary,_source:'queue',_serverState:lastServerState};
+  const sports={exchanges:state.exchanges,betBuilderLibrary:state.betBuilderLibrary,_source:'queue'};
   PROFILES.forEach(pr=>{
     sports[pr]={bank:state[pr]?.bank||0,bankUpdatedAt:state[pr]?.bankUpdatedAt||0,bookies:state[pr]?.bookies||{},
       transactions:state[pr]?.transactions||[],freeBets:state[pr]?.freeBets||[],
@@ -636,18 +636,40 @@ function buildSavePayload(){
 // delta from session diffing server-side — so this function only needs
 // to send casino + deletedIds, not bookies.
 async function saveCasinoOnly(source='casino'){
+  // Send only what's new: sessions created/edited since the server last
+  // confirmed them, plus pending deletions. The server unions these with
+  // what it already holds, so the full history no longer needs re-sending
+  // (and re-writing) on every single session.
+  const casinoState={},sentIds={},sentDeleted={};
+  PROFILES.forEach(pr=>{
+    const sessions=(state[pr]?.casino||[]).filter(s=>casinoDirty[pr].has(String(s.id))&&!casinoSending[pr].has(String(s.id)));
+    const dels=(casinoDeletedIds[pr]||[]).slice();
+    if(sessions.length||dels.length){
+      casinoState[pr]={casino:sessions,deletedIds:dels};
+      sentIds[pr]=sessions.map(s=>String(s.id));
+      sentDeleted[pr]=dels;
+    }
+  });
+  if(Object.keys(casinoState).length===0){setSyncStatus('synced');return;}
+  PROFILES.forEach(pr=>(sentIds[pr]||[]).forEach(id=>casinoSending[pr].add(id)));
   setSyncStatus('syncing');
   try{
-    const casinoState={};
-    PROFILES.forEach(pr=>{casinoState[pr]={casino:state[pr]?.casino||[],deletedIds:casinoDeletedIds[pr]||[]};});
     const res=await fetch('/api/save-casino',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(casinoState)});
     if(!res.ok)throw new Error('Casino save failed: '+res.status);
-    PROFILES.forEach(pr=>{casinoDeletedIds[pr]=[];});
+    PROFILES.forEach(pr=>{
+      (sentIds[pr]||[]).forEach(id=>casinoDirty[pr].delete(id));
+      if(sentDeleted[pr]){
+        const done=new Set(sentDeleted[pr].map(String));
+        casinoDeletedIds[pr]=(casinoDeletedIds[pr]||[]).filter(i=>!done.has(String(i)));
+      }
+    });
     setSyncStatus('synced');
   }catch(e){
     console.error('Casino save error:',e);
     setSyncStatus('error');
     showToast('⚠ Casino save failed — check connection and try again','error');
+  }finally{
+    PROFILES.forEach(pr=>(sentIds[pr]||[]).forEach(id=>casinoSending[pr].delete(id)));
   }
 }
 
@@ -664,9 +686,14 @@ async function saveData(source='unknown'){
   try{
     // Sports-only payload — casino is now handled entirely by
     // saveCasinoOnly() via /api/save-casino, and never sent here.
-    const sportsState={exchanges:state.exchanges,betBuilderLibrary:state.betBuilderLibrary,_source:source,_serverState:lastServerState};
+    const sportsState={exchanges:state.exchanges,betBuilderLibrary:state.betBuilderLibrary,_source:source};
+    // Only send profiles that changed since the last save this session
+    // actually went through (the first save of a session sends everything,
+    // exactly as before). Saves the server a read+write per unchanged
+    // profile and shrinks the request/response by the same factor.
+    const _sigsToRecord={};
     PROFILES.forEach(pr=>{
-      sportsState[pr]={
+      const candidate={
         bank:state[pr]?.bank||0,
         bankUpdatedAt:state[pr]?.bankUpdatedAt||0,
         bookies:state[pr]?.bookies||{},
@@ -674,6 +701,10 @@ async function saveData(source='unknown'){
         freeBets:state[pr]?.freeBets||[],
         deletedIds:deletedTxIds[pr]||[]
       };
+      const sig=profileSig(candidate);
+      if(_sentSig[pr]===sig)return; // unchanged since last confirmed save
+      sportsState[pr]=candidate;
+      _sigsToRecord[pr]=sig;
     });
     const sportsRes=await fetch('/api/save-sports',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(sportsState)});
     if(!sportsRes.ok){
@@ -683,6 +714,13 @@ async function saveData(source='unknown'){
     }
     // Update state from server's merged response — avoids stale load on next refresh
     const sportsJson=await sportsRes.json();
+    // Server confirmed these profiles. Only trust the signature if nothing
+    // was edited while the request was in flight; otherwise leave it unset so
+    // the next save re-sends that profile.
+    const _inFlightOK={};
+    Object.keys(_sigsToRecord).forEach(pr=>{
+      _inFlightOK[pr]=profileSig({bank:state[pr]?.bank||0,bankUpdatedAt:state[pr]?.bankUpdatedAt||0,bookies:state[pr]?.bookies||{},transactions:state[pr]?.transactions||[],freeBets:state[pr]?.freeBets||[],deletedIds:deletedTxIds[pr]||[]})===_sigsToRecord[pr];
+    });
     if(sportsJson.ok&&sportsJson.data){
       PROFILES.forEach(pr=>{
         if(sportsJson.data[pr]){
@@ -734,13 +772,21 @@ async function saveData(source='unknown'){
           if(!state[pr].freeBets)state[pr].freeBets=[];
         }
       });
+      // Record the signature of the post-merge state (what the server now holds).
+      Object.keys(_inFlightOK).forEach(pr=>{
+        if(!_inFlightOK[pr])return;
+        _sentSig[pr]=profileSig({bank:state[pr]?.bank||0,bankUpdatedAt:state[pr]?.bankUpdatedAt||0,bookies:state[pr]?.bookies||{},transactions:state[pr]?.transactions||[],freeBets:state[pr]?.freeBets||[],deletedIds:deletedTxIds[pr]||[]});
+      });
       if(sportsJson.data.exchanges)state.exchanges=sportsJson.data.exchanges;
       if(sportsJson.data.betBuilderLibrary)state.betBuilderLibrary=sportsJson.data.betBuilderLibrary;
       // Track confirmed server state so next save can skip stale KV read
-      lastServerState=JSON.parse(JSON.stringify(sportsJson.data));
+      lastServerState=Object.assign({},lastServerState||{},JSON.parse(JSON.stringify(sportsJson.data)));
       // Cache in sessionStorage so pull-to-refresh gets fresh data
       try{
-        const _sd=JSON.parse(JSON.stringify(sportsJson.data));
+        const _sd=JSON.parse(JSON.stringify(lastServerState));
+        // Profiles not sent this time aren't in the response: fall back to
+        // the in-memory copy so the local cache always holds all four.
+        PROFILES.forEach(pr=>{if(!_sd[pr])_sd[pr]={bank:state[pr].bank,bankUpdatedAt:state[pr].bankUpdatedAt||0,bookies:state[pr].bookies,transactions:state[pr].transactions,freeBets:state[pr].freeBets||[]};});
         _sd._deletedTxIds=deletedTxIds;
         // Only include casino in the cache if it's genuinely loaded —
         // omitting the key (rather than defaulting to []) preserves the
@@ -818,6 +864,26 @@ const state=freshState();
 let casinoDeletedIds={jg:[],hg:[],bp:[],rq:[]};
 let deletedTxIds={jg:[],hg:[],bp:[],rq:[]};
 let lastServerState=null; // tracks last confirmed server state to avoid stale reads
+// Per-profile fingerprint of the last payload the server confirmed, so a save
+// only sends profiles that actually changed. Order-insensitive for the two
+// arrays the server re-sorts, so a re-sorted-but-identical list doesn't count.
+const _sentSig={};
+function profileSig(p){
+  const byId=a=>(a||[]).slice().sort((x,y)=>{const xs=String(x.id),ys=String(y.id);return xs<ys?-1:xs>ys?1:0;});
+  return JSON.stringify({bank:p.bank,bankUpdatedAt:p.bankUpdatedAt,bookies:p.bookies,transactions:byId(p.transactions),freeBets:byId(p.freeBets),deletedIds:p.deletedIds});
+}
+// Casino sessions created/edited locally that the server hasn't confirmed yet.
+// Only these (not the whole history) are sent on a casino save.
+const casinoDirty={jg:new Set(),hg:new Set(),bp:new Set(),rq:new Set()};
+const casinoSending={jg:new Set(),hg:new Set(),bp:new Set(),rq:new Set()};
+// Keep unsynced local sessions when a fresh server list replaces state.casino.
+function mergeLoadedCasino(pr,serverList){
+  const dirty=casinoDirty[pr];
+  if(!dirty||!dirty.size)return serverList;
+  const have=new Set(serverList.map(s=>String(s.id)));
+  const keep=(state[pr]?.casino||[]).filter(s=>dirty.has(String(s.id))&&!have.has(String(s.id)));
+  return keep.length?serverList.concat(keep):serverList;
+}
 let saveInProgress=false;
 let pendingSave=null; // queues a save if one is already in progress
 function migrateLegacy(){
@@ -924,7 +990,7 @@ function ensureCasinoLoaded(onReady){
   }).then(json=>{
     if(json.ok&&json.data){
       PROFILES.forEach(pr=>{
-        state[pr].casino=json.data[pr]?.casino||[];
+        state[pr].casino=mergeLoadedCasino(pr,json.data[pr]?.casino||[]);
       });
     }else{
       // Response came back but with nothing usable — still unblock the
@@ -955,7 +1021,7 @@ function refreshCasinoIfStale(onUpdate){
   if((Date.now()-casinoLastFetchedAt)<=CASINO_STALE_MS)return; // still fresh, nothing to do
   fetch('/api/load-casino').then(r=>r.ok?r.json():null).then(json=>{
     if(json&&json.ok&&json.data){
-      PROFILES.forEach(pr=>{state[pr].casino=json.data[pr]?.casino||[];});
+      PROFILES.forEach(pr=>{state[pr].casino=mergeLoadedCasino(pr,json.data[pr]?.casino||[]);});
       casinoLastFetchedAt=Date.now();
       if(typeof invalidateCasinoCache==='function')invalidateCasinoCache();
       onUpdate();
@@ -4838,8 +4904,10 @@ function saveCasinoSession(){
   if(!p.bookies[casino])p.bookies[casino]={bal:0,status:'Active',notes:''};
   p.bookies[casino].bal=(p.bookies[casino].bal||0)+net;p.bookies[casino].balUpdatedAt=Date.now();
   if(!p.casino)p.casino=[];
+  const _newCsId=Date.now();
+  casinoDirty[casinoFormAcct].add(String(_newCsId));
   p.casino.push({
-    id:Date.now(),
+    id:_newCsId,
     date:document.getElementById('c-date')?.value||todayStr(),
     casino,operator:casinoOperator,startBal,endBal,netProfit:net,
     notes:document.getElementById('c-notes')?.value||'',_acct:casinoFormAcct,
@@ -4885,6 +4953,7 @@ function deleteCasinoSession(acct,id){
     }
     state[realAcct].casino=(state[realAcct].casino||[]).filter(s=>String(s.id)!==String(id));
   }
+  PROFILES.forEach(pr=>casinoDirty[pr].delete(String(id)));
   // Track deleted ID on all profiles to prevent server restore
   PROFILES.forEach(pr=>{
     if(!casinoDeletedIds[pr])casinoDeletedIds[pr]=[];
