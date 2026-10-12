@@ -1,6 +1,7 @@
 // Casino restore endpoint
 // POST /api/restore with casino session data
 // Merges uploaded sessions with existing KV data
+// v3 - bumps the change counters so loaders drop cached copies.
 // v2 - profile keys renamed (me->jg, wife->hg) to match the main app
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -39,6 +40,7 @@ export default async function handler(req, res) {
     };
 
     const report = {};
+    let anyWritten = false;
 
     await Promise.all(profiles.map(async pr => {
       const incomingSessions = incoming[pr] || [];
@@ -68,6 +70,7 @@ export default async function handler(req, res) {
 
       existing.casino = merged;
       await kvSet(`edgetrack_${pr}`, existing);
+      anyWritten = true;
 
       const pnl = merged.reduce((a, s) => {
         if (s.startBal !== undefined && s.endBal !== undefined && (s.startBal !== 0 || s.endBal !== 0)) {
@@ -84,6 +87,19 @@ export default async function handler(req, res) {
         pnl: Math.round(pnl * 100) / 100
       };
     }));
+
+    // Tell load-sports / load-casino their cached copies are out of date.
+    if (anyWritten) {
+      const now = Date.now();
+      await Promise.all(['edgetrack_rev_casino', 'edgetrack_rev_sports'].map(async k => {
+        const rr = await fetch(`${kvUrl}/set/${k}`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${kvToken}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify(now)
+        });
+        if (!rr.ok) throw new Error(`KV set error on ${k}: ${rr.status}`);
+      }));
+    }
 
     return res.status(200).json({ ok: true, report });
   } catch(e) {
