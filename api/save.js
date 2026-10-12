@@ -1,4 +1,9 @@
-// v6 - profile keys renamed (me->jg, wife->hg), robust legacy detection, timestamped bank merge
+// v7 - bandwidth diet: only reads profiles the client actually sent, skips
+// writes when nothing changed, stores values single-stringified (~16% smaller),
+// and bumps a tiny edgetrack_meta key so /api/load can answer "not modified".
+// All merge / tombstone / dedupe logic is unchanged from v6.
+import { createHash } from 'node:crypto';
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -11,13 +16,11 @@ export default async function handler(req, res) {
     const kvToken = process.env.KV_REST_API_TOKEN;
     const incoming = req.body;
     const profiles = ['jg', 'hg', 'bp', 'rq'];
-    // Old KV key suffix for each renamed profile — used ONLY as a
-    // one-time read fallback if the new key has never been written yet.
-    // bp/rq are unchanged so they don't need an entry.
     const LEGACY_KEY_SUFFIX = { jg: 'me', hg: 'wife' };
 
-    // Throws on genuine fetch failure instead of swallowing it — a failed
-    // request must never be treated the same as "key doesn't exist".
+    // Throws on genuine fetch failure — a failed request must never be
+    // treated the same as "key doesn't exist". Reads both the old
+    // double-stringified format and the new single-stringified one.
     const kvGet = async (key) => {
       const r = await fetch(`${kvUrl}/get/${key}`, {
         headers: { Authorization: `Bearer ${kvToken}` }
@@ -30,27 +33,22 @@ export default async function handler(req, res) {
       return parsed;
     };
 
+    // Single stringify: Upstash stores the raw body, so the old
+    // JSON.stringify(JSON.stringify(v)) escaped every quote (+~16%).
     const kvSet = async (key, value) => {
       const r = await fetch(`${kvUrl}/set/${key}`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${kvToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(JSON.stringify(value))
+        body: JSON.stringify(value)
       });
       if (!r.ok) throw new Error(`KV set error on ${key}: ${r.status}`);
     };
 
-    // PERMANENT dedupe, run server-side on every save. Mirrors the
-    // client's migrateLegacy() renames, but unlike that function (which
-    // only cleans up the in-browser copy) this one actually removes the
-    // stale key from what gets written back to Upstash — otherwise a
-    // "cleaned up" duplicate just silently persists on the server forever
-    // and reappears on next load, and balance edits only ever touch the
-    // canonical key while the stale one keeps its own leftover balance.
     const BOOKIE_RENAMES = {
       'hot streak casino': 'Hot Streak',
       'gala': 'Gala Casino',
       'bet st george': 'BetStGeorge',
-      'betstgeorge': 'BetStGeorge', // lowercase form only; exact-case dupes handled below
+      'betstgeorge': 'BetStGeorge',
       'grosvenor casinos': 'Grosvenor',
       'planet sports': 'Planet Sport Bet',
     };
@@ -69,12 +67,10 @@ export default async function handler(req, res) {
         };
         delete out[staleKey];
       };
-      // Explicit rename list (handles differently-spelled/spaced variants)
       Object.keys(out).forEach(k => {
         const canonical = BOOKIE_RENAMES[k.toLowerCase()];
         if (canonical && canonical !== k) mergeInto(canonical, k);
       });
-      // Generic case-insensitive dedupe for anything else (e.g. 'betfred' vs 'Betfred')
       const seenLower = {};
       Object.keys(out).forEach(k => {
         const lower = k.toLowerCase();
@@ -118,17 +114,10 @@ export default async function handler(req, res) {
         const srv = serverMap.get(id);
         const inc = incomingMap.get(id);
         if (inc && srv) {
-          // Timestamp-based merge: whichever version was actually edited
-          // more recently wins, instead of "whoever's save request arrives
-          // last" (which let a stale device silently undo a fresh edit —
-          // e.g. a settled bet reverting back to Pending).
           const srvTs = srv.txUpdatedAt || 0;
           const incTs = inc.txUpdatedAt || 0;
           if (incTs > srvTs) merged.push(inc);
           else if (srvTs > incTs) merged.push(srv);
-          // Equal/both-zero timestamps (old data predating this field):
-          // fall back to the original heuristic — prefer a settled result
-          // over a stale Pending one.
           else merged.push(srv.result !== 'Pending' && inc.result === 'Pending' ? srv : inc);
         } else if (inc) {
           merged.push(inc);
@@ -149,9 +138,6 @@ export default async function handler(req, res) {
         const srv = serverMap.get(id);
         const inc = incomingMap.get(id);
         if (inc && srv) {
-          // Same timestamp-based principle as transactions — a stale
-          // device's cached copy of a session must never silently
-          // overwrite a newer one.
           const srvTs = srv.csUpdatedAt || 0;
           const incTs = inc.csUpdatedAt || 0;
           merged.push(incTs >= srvTs ? inc : srv);
@@ -164,41 +150,47 @@ export default async function handler(req, res) {
       return merged;
     };
 
-    // Check ALL profiles (new key names) for split-key data, not just one.
-    // kvGet throws on genuine failures, so if this Promise.all rejects we
-    // abort the whole save (see catch block) rather than silently falling
-    // back to legacy data.
-    const splitCheck = await Promise.all(
-      profiles.map(pr => kvGet(`edgetrack_${pr}`))
-    );
-    const useSplitKeys = splitCheck.some(
-      d => d !== null && ((d.transactions?.length || 0) > 0 || Object.keys(d.bookies || {}).length > 0)
-    );
+    const md5 = (s) => createHash('md5').update(s).digest('hex');
+    const stripBankTs = (o) => { const { bankUpdatedAt, ...rest } = o; return rest; };
 
-    // If NONE of the new-named profiles have split data, only then
-    // consider edgetrack_main as a one-time migration source.
+    // Tiny change-tracking key: { v: {key: lastChangedTs}, h: {key: contentHash} }.
+    // /api/load builds its ETag from this so unchanged data costs ~bytes.
+    const meta = (await kvGet('edgetrack_meta')) || {};
+    meta.v = meta.v || {};
+    meta.h = meta.h || {};
+    let metaDirty = false;
+    let tick = Date.now();
+    const bump = (key) => { meta.v[key] = tick++; metaDirty = true; };
+
+    // v6 read ALL four profiles (~2.2 MB) on every save. Only read the ones
+    // the client actually sent.
+    const sentProfiles = profiles.filter(pr => incoming[pr]);
+    const existing = {};
+    await Promise.all(sentProfiles.map(async pr => {
+      existing[pr] = await kvGet(`edgetrack_${pr}`);
+    }));
+
+    // edgetrack_main is only a one-time migration source — fetched lazily,
+    // and only if a sent profile has no data under any of its keys.
+    let legacyMainLoaded = false;
     let legacyMainData = null;
-    if (!useSplitKeys) {
-      legacyMainData = await kvGet('edgetrack_main');
-    }
+    const getLegacyMain = async () => {
+      if (!legacyMainLoaded) { legacyMainData = await kvGet('edgetrack_main'); legacyMainLoaded = true; }
+      return legacyMainData;
+    };
 
     const responseData = { exchanges: incoming.exchanges || {} };
 
-    await Promise.all(profiles.map(async (pr, i) => {
-      if (!incoming[pr]) return;
+    await Promise.all(sentProfiles.map(async (pr) => {
+      const fromNewKey = existing[pr] !== null;
+      let server = existing[pr];
 
-      let server = splitCheck[i];
-
-      // ONE-TIME MIGRATION: if this profile's new key has never been
-      // written, but it's a renamed profile (jg/hg) with data still
-      // sitting under its old key (me/wife), use that as the merge
-      // baseline instead of starting from blank. This prevents the
-      // rename from silently discarding pre-rename history on first save.
       if (!server && LEGACY_KEY_SUFFIX[pr]) {
         server = await kvGet(`edgetrack_${LEGACY_KEY_SUFFIX[pr]}`);
       }
-      if (!server && legacyMainData) {
-        server = legacyMainData[pr] || legacyMainData[LEGACY_KEY_SUFFIX[pr]] || null;
+      if (!server) {
+        const lm = await getLegacyMain();
+        if (lm) server = lm[pr] || lm[LEGACY_KEY_SUFFIX[pr]] || null;
       }
       if (!server) {
         server = { transactions: [], bank: 0, bankUpdatedAt: 0, bookies: {}, freeBets: [], casino: [] };
@@ -207,14 +199,6 @@ export default async function handler(req, res) {
       const deletedTxIds = new Set((incoming[pr].deletedIds || []).map(String));
       const deletedCasinoIds = new Set((incoming[pr].deletedCasinoIds || []).map(String));
 
-      // PERSISTENT TOMBSTONES: deletedIds sent in a single save request only
-      // protects THAT request's own merge — it was never remembered
-      // afterwards. So a second device that never knew about the deletion
-      // (still has the item in its local cache) would resurrect it on its
-      // next save, since nothing server-side recorded the delete. Fix:
-      // keep a running, ever-growing tombstone list on the server profile
-      // itself, union today's deletions into it, and filter every merge
-      // against the FULL history — not just this request's list.
       const persistedDeletedTxIds = new Set((server._deletedTxIds || []).map(String));
       const persistedDeletedCasinoIds = new Set((server._deletedCasinoIds || []).map(String));
       deletedTxIds.forEach(id => persistedDeletedTxIds.add(id));
@@ -229,13 +213,11 @@ export default async function handler(req, res) {
 
       const mergedBookies = dedupeBookies(mergeBookies(dedupeBookies(server.bookies || {}), incoming[pr].bookies || {}));
 
-      // Bank merges on a timestamp instead of unconditionally trusting
-      // whichever device saved last.
       const incomingBankTs = incoming[pr].bankUpdatedAt || 0;
       const serverBankTs = server.bankUpdatedAt || 0;
       const incomingBankWins =
         incoming[pr].bank !== undefined &&
-        (incomingBankTs === 0 || incomingBankTs >= serverBankTs); // no timestamp = trust explicit user edit
+        (incomingBankTs === 0 || incomingBankTs >= serverBankTs);
 
       const merged = {
         bank: incomingBankWins ? incoming[pr].bank : (server.bank || 0),
@@ -244,29 +226,46 @@ export default async function handler(req, res) {
         transactions: mergedTxs,
         freeBets: Array.from(fbMap.values()),
         casino: mergedCasinoSessions,
-        // Persisted so future saves — from ANY device — keep honouring
-        // deletions made here, even if that device never saw them happen.
         _deletedTxIds: Array.from(persistedDeletedTxIds),
         _deletedCasinoIds: Array.from(persistedDeletedCasinoIds)
       };
 
-      // Always write to the NEW key name. Old keys (edgetrack_me,
-      // edgetrack_wife) are never written to again — they stay frozen as
-      // a safety-net snapshot of pre-rename data.
-      await kvSet(`edgetrack_${pr}`, merged);
+      // Nothing changed (client re-sent data the server already has)? Skip
+      // the ~0.4-0.9 MB write. If key order differs we just fall through
+      // and write, so this can only ever err on the side of saving.
+      const unchanged = fromNewKey &&
+        JSON.stringify(stripBankTs(merged)) === JSON.stringify(stripBankTs(server));
+      if (!unchanged) {
+        await kvSet(`edgetrack_${pr}`, merged);
+        bump(pr);
+      }
       responseData[pr] = merged;
     }));
 
-    await kvSet('edgetrack_exchanges', incoming.exchanges || {});
+    // exchanges: skip the write when its content hash matches the last write.
+    const exchangesStr = JSON.stringify(incoming.exchanges || {});
+    const exchangesHash = md5(exchangesStr);
+    if (meta.h.exchanges !== exchangesHash) {
+      await kvSet('edgetrack_exchanges', incoming.exchanges || {});
+      meta.h.exchanges = exchangesHash;
+      bump('exchanges');
+    }
 
-    // Same protection as save-sports.js — never let a payload missing
-    // this field silently wipe out already-saved entries.
     if (Array.isArray(incoming.betBuilderLibrary)) {
-      await kvSet('edgetrack_bet_builder_library', incoming.betBuilderLibrary);
+      const libHash = md5(JSON.stringify(incoming.betBuilderLibrary));
+      if (meta.h.library !== libHash) {
+        await kvSet('edgetrack_bet_builder_library', incoming.betBuilderLibrary);
+        meta.h.library = libHash;
+        bump('library');
+      }
       responseData.betBuilderLibrary = incoming.betBuilderLibrary;
     } else {
       responseData.betBuilderLibrary = await kvGet('edgetrack_bet_builder_library') || [];
     }
+
+    // Meta is written LAST so a loader that sees the new ETag is guaranteed
+    // to see the new data too.
+    if (metaDirty) await kvSet('edgetrack_meta', meta);
 
     return res.status(200).json({ ok: true, data: responseData });
   } catch (e) {
