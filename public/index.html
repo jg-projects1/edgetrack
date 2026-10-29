@@ -139,6 +139,7 @@ body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg-page);mi
 .profile-btn.active-hg{background:#A78BFA;color:#fff;border-color:#A78BFA}
 .profile-btn.active-bp{background:#F0A500;color:#fff;border-color:#F0A500}
 .profile-btn.active-rq{background:#F472B6;color:#fff;border-color:#F472B6}
+.profile-btn.active-wa{background:#60A5FA;color:#fff;border-color:#60A5FA}
 .profile-btn.active-both{background:var(--bg-input);color:var(--text-primary);border-color:var(--text-muted)}
 .profile-btn.active-both{background:var(--bg-input);color:var(--text-primary);border-color:var(--border-col)}
 
@@ -167,7 +168,7 @@ body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg-page);mi
 .acct-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
 .acct-name{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:500;color:var(--text-primary)}
 .acct-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
-.dot-jg{background:#14B8A6}.dot-hg{background:#A78BFA}.dot-bp{background:#F0A500}.dot-rq{background:#F472B6}
+.dot-jg{background:#14B8A6}.dot-hg{background:#A78BFA}.dot-bp{background:#F0A500}.dot-rq{background:#F472B6}.dot-wa{background:#60A5FA}
 .acct-pnl{font-size:12px;font-weight:500}
 .acct-pnl.pos{color:var(--text-accent)}.acct-pnl.neg{color:#F87171}
 .acct-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-top:0.5px solid rgba(255,255,255,0.08)}
@@ -188,6 +189,7 @@ body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg-page);mi
 .pill-hg{background:#3C3489;color:#A78BFA;border-color:#534AB7}
 .pill-bp{background:#5C3800;color:#F0A500;border-color:#854F0B}
 .pill-rq{background:#831843;color:#F472B6;border-color:#BE185D}
+.pill-wa{background:#1E3A8A;color:#60A5FA;border-color:#2563EB}
 .pill-qualifier{background:#7A4F00;color:#F5C842}
 .pill-freebet{background:#14532D;color:#86EFAC}
 .pill-boost{background:#5C3800;color:#F0A500}
@@ -250,6 +252,7 @@ select option{background:var(--bg-input);color:var(--text-primary)}
 .acct-sel-btn.active-hg{background:#A78BFA;color:#fff;border-color:#A78BFA}
 .acct-sel-btn.active-bp{background:#F0A500;color:#fff;border-color:#F0A500}
 .acct-sel-btn.active-rq{background:#F472B6;color:#fff;border-color:#F472B6}
+.acct-sel-btn.active-wa{background:#60A5FA;color:#fff;border-color:#60A5FA}
 
 
 .btn{padding:11px 20px;border-radius:8px;font-family:system-ui,-apple-system,sans-serif;font-size:14px;font-weight:500;cursor:pointer;border:0.5px solid var(--border-col);background:var(--bg-input);color:var(--text-primary);transition:all .15s;display:inline-flex;align-items:center;justify-content:center;gap:6px}
@@ -341,6 +344,7 @@ select option{background:var(--bg-input);color:var(--text-primary)}
       <button class="profile-btn" id="pbtn-hg" onclick="switchProfile('hg')">HG</button>
       <button class="profile-btn" id="pbtn-bp" onclick="switchProfile('bp')">BP</button>
       <button class="profile-btn" id="pbtn-rq" onclick="switchProfile('rq')">RQ</button>
+      <button class="profile-btn" id="pbtn-wa" onclick="switchProfile('wa')">WA</button>
       <button class="profile-btn" id="pbtn-both" onclick="switchProfile('both')">All</button>
     </div>
   </div>
@@ -829,9 +833,9 @@ async function saveData(source='unknown'){
 function debouncedSave(source='unknown'){if(syncTimeout)clearTimeout(syncTimeout);setSyncStatus('syncing');syncTimeout=setTimeout(()=>saveData(source),1500);}
 function save(source='unknown'){debouncedSave(source);}
 
-const PROFILES=['jg','hg','bp','rq'];
-const PROFILE_LABELS={jg:'JG',hg:'HG',bp:'BP',rq:'RQ'};
-const PROFILE_COLORS={jg:'#14B8A6',hg:'#A78BFA',bp:'#F0A500',rq:'#F472B6'};
+const PROFILES=['jg','hg','bp','rq','wa'];
+const PROFILE_LABELS={jg:'JG',hg:'HG',bp:'BP',rq:'RQ',wa:'WA'};
+const PROFILE_COLORS={jg:'#14B8A6',hg:'#A78BFA',bp:'#F0A500',rq:'#F472B6',wa:'#60A5FA'};
 const BET_TYPES=['Qualifier','Free Bet','Boost','Mug','2Up','MBAL','Cash Back','Placement','Multiplier','Arb','Deposit','Withdrawal','Exchange Deposit','Exchange Withdrawal','Balance Amendment'];
 const BOOKIE_TRANSFER=['Deposit','Withdrawal'];
 const EXCHANGE_TRANSFER=['Exchange Deposit','Exchange Withdrawal'];
@@ -861,8 +865,8 @@ const DEFAULT_BOOKIES=[
 function makeProfile(){const b={};DEFAULT_BOOKIES.forEach(x=>b[x]={bal:0,status:'Not Signed Up',notes:''});return{bookies:b,bank:0,bankUpdatedAt:0,transactions:[],freeBets:[]};}
 function freshState(){const ex={};EXCHANGES.forEach(x=>ex[x]=0);const st={exchanges:ex};PROFILES.forEach(pr=>st[pr]=makeProfile());return st;}
 const state=freshState();
-let casinoDeletedIds={jg:[],hg:[],bp:[],rq:[]};
-let deletedTxIds={jg:[],hg:[],bp:[],rq:[]};
+let casinoDeletedIds={jg:[],hg:[],bp:[],rq:[],wa:[]};
+let deletedTxIds={jg:[],hg:[],bp:[],rq:[],wa:[]};
 let lastServerState=null; // tracks last confirmed server state to avoid stale reads
 // Per-profile fingerprint of the last payload the server confirmed, so a save
 // only sends profiles that actually changed. Order-insensitive for the two
@@ -874,8 +878,8 @@ function profileSig(p){
 }
 // Casino sessions created/edited locally that the server hasn't confirmed yet.
 // Only these (not the whole history) are sent on a casino save.
-const casinoDirty={jg:new Set(),hg:new Set(),bp:new Set(),rq:new Set()};
-const casinoSending={jg:new Set(),hg:new Set(),bp:new Set(),rq:new Set()};
+const casinoDirty={jg:new Set(),hg:new Set(),bp:new Set(),rq:new Set(),wa:new Set()};
+const casinoSending={jg:new Set(),hg:new Set(),bp:new Set(),rq:new Set(),wa:new Set()};
 // Keep unsynced local sessions when a fresh server list replaces state.casino.
 function mergeLoadedCasino(pr,serverList){
   const dirty=casinoDirty[pr];

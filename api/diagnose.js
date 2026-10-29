@@ -10,7 +10,7 @@ export default async function handler(req, res) {
   try {
     const kvUrl = process.env.KV_REST_API_URL;
     const kvToken = process.env.KV_REST_API_TOKEN;
-    const profiles = ['jg', 'hg', 'bp', 'rq'];
+    const profiles = ['jg', 'hg', 'bp', 'rq', 'wa'];
 
     const kvGet = async (key) => {
       try {
@@ -60,7 +60,7 @@ export default async function handler(req, res) {
     // internally (it predates the rename entirely), so we read it via
     // the OLD key names here specifically for this comparison.
     report.edgetrack_casino = {};
-    const LEGACY_PROFILE_KEYS = { jg: 'me', hg: 'wife', bp: 'bp', rq: 'rq' };
+    const LEGACY_PROFILE_KEYS = { jg: 'me', hg: 'wife', bp: 'bp', rq: 'rq', wa: 'wa' };
     profiles.forEach(pr => {
       const legacyKey = LEGACY_PROFILE_KEYS[pr];
       const sessions = casinoKey?.[legacyKey]?.casino || [];

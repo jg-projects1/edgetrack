@@ -26,7 +26,7 @@ export default async function handler(req, res) {
     const kvUrl = process.env.KV_REST_API_URL;
     const kvToken = process.env.KV_REST_API_TOKEN;
     const incoming = req.body || {};
-    const profiles = ['jg', 'hg', 'bp', 'rq'];
+    const profiles = ['jg', 'hg', 'bp', 'rq', 'wa'];
     const LEGACY_KEY_SUFFIX = { jg: 'me', hg: 'wife' };
 
     const kvGet = async (key) => {

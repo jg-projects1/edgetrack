@@ -21,7 +21,7 @@ export default async function handler(req, res) {
   try {
     const kvUrl = process.env.KV_REST_API_URL;
     const kvToken = process.env.KV_REST_API_TOKEN;
-    const profiles = ['jg', 'hg', 'bp', 'rq'];
+    const profiles = ['jg', 'hg', 'bp', 'rq', 'wa'];
     const LEGACY_KEY_SUFFIX = { jg: 'me', hg: 'wife' };
     const LEGACY_RECHECK_MS = 24 * 60 * 60 * 1000;
     const ETAG_BUCKET_MS = 15 * 60 * 1000;

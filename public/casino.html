@@ -48,6 +48,7 @@ body{font-family:system-ui,-apple-system,sans-serif;background:#343A40;min-heigh
 .pill-hg{background:#3C3489;color:#A78BFA;border-color:#534AB7}
 .pill-bp{background:#5C3800;color:#F0A500;border-color:#854F0B}
 .pill-rq{background:#831843;color:#F472B6;border-color:#BE185D}
+.pill-wa{background:#1E3A8A;color:#60A5FA;border-color:#2563EB}
 .form-label{font-size:10px;font-weight:500;color:#9A9590;letter-spacing:.3px;text-transform:uppercase;display:block;margin-bottom:5px}
 input[type=text],input[type=number],select{width:100%;background:#3D4349;border:0.5px solid rgba(255,255,255,0.10);border-radius:8px;padding:9px 11px;font-family:system-ui,-apple-system,sans-serif;font-size:13px;color:#F0EDE8;outline:none;-webkit-appearance:none;appearance:none;transition:border-color .15s}
 input:focus,select:focus{border-color:rgba(255,255,255,0.25);background:#575A65}
@@ -58,6 +59,7 @@ select option{background:#3D4349}
 .acct-sel-btn.active-hg{background:#3C3489;color:#A78BFA;border-color:#534AB7}
 .acct-sel-btn.active-bp{background:#5C3800;color:#F0A500;border-color:#854F0B}
 .acct-sel-btn.active-rq{background:#831843;color:#F472B6;border-color:#BE185D}
+.acct-sel-btn.active-wa{background:#1E3A8A;color:#60A5FA;border-color:#2563EB}
 .btn{padding:11px 20px;border-radius:8px;font-family:system-ui,-apple-system,sans-serif;font-size:14px;font-weight:500;cursor:pointer;border:0.5px solid rgba(255,255,255,0.09);background:#3D4349;color:#F0EDE8;transition:all .15s;display:inline-flex;align-items:center;justify-content:center;gap:6px}
 .btn-primary{background:#22C55E;color:#fff;border-color:#22C55E}
 .btn-full{width:100%;padding:13px}
@@ -108,9 +110,9 @@ select option{background:#3D4349}
 <div id="modal-root"></div>
 
 <script>
-const PROFILES=['jg','hg','bp','rq'];
-const PROFILE_LABELS={jg:'JG',hg:'HG',bp:'BP',rq:'RQ'};
-const PROFILE_COLORS={jg:'#14B8A6',hg:'#A78BFA',bp:'#F0A500',rq:'#F472B6'};
+const PROFILES=['jg','hg','bp','rq','wa'];
+const PROFILE_LABELS={jg:'JG',hg:'HG',bp:'BP',rq:'RQ',wa:'WA'};
+const PROFILE_COLORS={jg:'#14B8A6',hg:'#A78BFA',bp:'#F0A500',rq:'#F472B6',wa:'#60A5FA'};
 const CASINO_OFFER_TYPES=['Reload','Welcome','Free Spins','Cashback','Other'];
 
 let currentTab='log';
@@ -120,8 +122,8 @@ let hasDeposit=false;
 let operator='JP';
 let progressOp='JP'; // which operator's "My Progress" is being viewed on Summary — defaults to JP
 let syncTimeout=null;
-let fullState={jg:{casino:[]},hg:{casino:[]},bp:{casino:[]},rq:{casino:[]}};
-let deletedIds={jg:[],hg:[],bp:[],rq:[]};
+let fullState={jg:{casino:[]},hg:{casino:[]},bp:{casino:[]},rq:{casino:[]},wa:{casino:[]}};
+let deletedIds={jg:[],hg:[],bp:[],rq:[],wa:[]};
 
 function setSyncStatus(s){
   const dot=document.getElementById('sync-dot'),label=document.getElementById('sync-label');
@@ -167,8 +169,8 @@ async function loadData(){
 
 // Sessions created/edited here that the server hasn't confirmed yet. Only
 // these (not the whole history) are sent on a save.
-const dirtyIds={jg:new Set(),hg:new Set(),bp:new Set(),rq:new Set()};
-const sendingIds={jg:new Set(),hg:new Set(),bp:new Set(),rq:new Set()};
+const dirtyIds={jg:new Set(),hg:new Set(),bp:new Set(),rq:new Set(),wa:new Set()};
+const sendingIds={jg:new Set(),hg:new Set(),bp:new Set(),rq:new Set(),wa:new Set()};
 async function saveData(){
   // Save casino sessions only — never touches sports data. Sends just the
   // new sessions + pending deletions; the server unions them with what it
