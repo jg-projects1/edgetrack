@@ -437,6 +437,7 @@ async function loadData(){
         // Previously the first render used raw unmigrated cache data, so
         // old/duplicate bookie names flashed on screen until the background
         // fetchFromServer() finished and re-rendered.
+        bkSyncRestore();
         migrateLegacy();
 
       // Still fetch from server in background to pick up changes from other devices
@@ -445,6 +446,7 @@ async function loadData(){
       } // end cacheIsValid
     }
     // No cache — load from server directly
+    bkSyncRestore();
     await fetchFromServer();
   }catch(e){
     console.error('Load error:',e);
@@ -506,34 +508,9 @@ async function fetchFromServer(){
             }
             // else: local edit is newer, keep it — it'll be pushed on next save
           }
-          // Merge bookies — keep local balance if it differs from server
-          // (local is more recent, server may be stale replica)
-          const serverBk=saved[pr].bookies||{};
-          const localBk=state[pr].bookies||{};
-          // Timestamp-based merge — most recently updated balance wins
-          const mergedBk={...serverBk};
-          Object.keys(localBk).forEach(function(k){
-            if(!mergedBk[k]){
-              mergedBk[k]=localBk[k];
-            } else {
-              const localTs=localBk[k].balUpdatedAt||0;
-              const serverTs=mergedBk[k].balUpdatedAt||0;
-              const localWins=localTs>0&&localTs>serverTs;
-              mergedBk[k]=Object.assign({},mergedBk[k],{
-                bal:localWins?localBk[k].bal:mergedBk[k].bal,
-                status:localWins?(localBk[k].status||mergedBk[k].status):mergedBk[k].status,
-                notes:localWins?(localBk[k].notes!==undefined?localBk[k].notes:mergedBk[k].notes):mergedBk[k].notes,
-                verifiedAt:localBk[k].verifiedAt||mergedBk[k].verifiedAt||null,
-                balUpdatedAt:Math.max(localTs,serverTs)
-              });
-            }
-          });
-          // Preserve local verifiedAt — server doesn't track this
-          Object.keys(mergedBk).forEach(function(bk){
-            const loc=localBk[bk];
-            if(loc&&loc.verifiedAt)mergedBk[bk].verifiedAt=loc.verifiedAt;
-          });
-          state[pr].bookies=mergedBk;
+          // Bookies: server balances plus anything changed on this device
+          // and not yet confirmed (see bkAdopt).
+          bkAdopt(pr,saved[pr].bookies||{});
           state[pr].transactions=merged;
           state[pr].freeBets=saved[pr].freeBets||state[pr].freeBets||[];
           // Casino no longer comes from this endpoint — load-sports.js
@@ -552,6 +529,7 @@ async function fetchFromServer(){
 // Casino loaded from /api/load (split key)
     setSyncStatus('synced');
     migrateLegacy();
+    bkSyncPersist();
     _serverLoaded=true;
     render();
   }catch(e){
@@ -576,11 +554,11 @@ function restoreQueue(){
 }
 
 function queueSave(source){
-  // Merge with existing queue — don't stack duplicates, just update source
-  const existing=_saveQueue.findIndex(s=>s.source===source);
-  const entry={source,timestamp:Date.now(),state:buildSavePayload()};
-  if(existing>=0)_saveQueue[existing]=entry;
-  else _saveQueue.push(entry);
+  // A failed save only needs remembering - the retry runs a normal save,
+  // which re-sends every unconfirmed balance batch (each applied once
+  // server-side) and the current state. Re-posting an old snapshot of
+  // whole balances would undo other devices' changes.
+  _saveQueue=[{source,timestamp:Date.now()}];
   persistQueue();
   setSyncStatus('error');
   scheduleRetry();
@@ -595,21 +573,9 @@ async function drainQueue(){
   if(_retrying||_saveQueue.length===0)return;
   _retrying=true;
   setSyncStatus('syncing');
-  const entry=_saveQueue[0]; // try oldest first
   try{
-    const sportsRes=await fetch('/api/save-sports',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(entry.state.sports)});
-    if(!sportsRes.ok)throw new Error('Retry save failed: '+sportsRes.status);
-    _saveQueue.shift(); // remove successfully sent item
-    persistQueue();
-    if(_saveQueue.length>0){
-      setSyncStatus('syncing');
-      setTimeout(drainQueue,2000); // drain next item
-    }else{
-      setSyncStatus('synced');
-    }
-  }catch(e){
-    setSyncStatus('error');
-    scheduleRetry(); // try again in 15s
+    // saveData() clears the queue on success and re-queues on failure.
+    await saveData('retry');
   }finally{
     _retrying=false;
   }
@@ -695,7 +661,9 @@ async function saveData(source='unknown'){
     // actually went through (the first save of a session sends everything,
     // exactly as before). Saves the server a read+write per unchanged
     // profile and shrinks the request/response by the same factor.
-    const _sigsToRecord={};
+    const _sigsToRecord={},_batchesSent={};
+    PROFILES.forEach(pr=>bkFreeze(pr));
+    bkSyncPersist();
     PROFILES.forEach(pr=>{
       const candidate={
         bank:state[pr]?.bank||0,
@@ -706,7 +674,10 @@ async function saveData(source='unknown'){
         deletedIds:deletedTxIds[pr]||[]
       };
       const sig=profileSig(candidate);
-      if(_sentSig[pr]===sig)return; // unchanged since last confirmed save
+      const pendingBatches=(_bkBatches[pr]||[]).slice();
+      if(_sentSig[pr]===sig&&!pendingBatches.length)return; // unchanged since last confirmed save
+      candidate.batches=pendingBatches;
+      _batchesSent[pr]=new Set(pendingBatches.map(b=>b.id));
       sportsState[pr]=candidate;
       _sigsToRecord[pr]=sig;
     });
@@ -729,27 +700,10 @@ async function saveData(source='unknown'){
       PROFILES.forEach(pr=>{
         if(sportsJson.data[pr]){
           state[pr].bank=sportsJson.data[pr].bank;
-          // Timestamp-based merge on save response
-          const serverBk=sportsJson.data[pr].bookies||{};
-          const localBk=state[pr].bookies||{};
-          const mergedBk=Object.assign({},serverBk);
-          Object.keys(localBk).forEach(function(bk){
-            if(!mergedBk[bk]){
-              mergedBk[bk]=localBk[bk];
-            } else {
-              const localTs=localBk[bk].balUpdatedAt||0;
-              const serverTs=mergedBk[bk].balUpdatedAt||0;
-              const localWins=localTs>0&&localTs>serverTs;
-              mergedBk[bk]=Object.assign({},mergedBk[bk],{
-                bal:localWins?localBk[bk].bal:mergedBk[bk].bal,
-                status:localWins?(localBk[bk].status||mergedBk[bk].status):mergedBk[bk].status,
-                notes:localWins?(localBk[bk].notes!==undefined?localBk[bk].notes:mergedBk[bk].notes):mergedBk[bk].notes,
-                verifiedAt:localBk[bk].verifiedAt||mergedBk[bk].verifiedAt||null,
-                balUpdatedAt:Math.max(localTs,serverTs)
-              });
-            }
-          });
-          state[pr].bookies=mergedBk;
+          // The server has applied the batches we sent - drop them, then
+          // take its balances (plus anything changed here since).
+          if(_batchesSent[pr])_bkBatches[pr]=(_bkBatches[pr]||[]).filter(b=>!_batchesSent[pr].has(b.id));
+          bkAdopt(pr,sportsJson.data[pr].bookies||{});
           // Merge transactions — union of server + local, prefer settled over pending
           const serverTxs=sportsJson.data[pr].transactions||[];
           const localTxs=state[pr].transactions||[];
@@ -781,6 +735,7 @@ async function saveData(source='unknown'){
         if(!_inFlightOK[pr])return;
         _sentSig[pr]=profileSig({bank:state[pr]?.bank||0,bankUpdatedAt:state[pr]?.bankUpdatedAt||0,bookies:state[pr]?.bookies||{},transactions:state[pr]?.transactions||[],freeBets:state[pr]?.freeBets||[],deletedIds:deletedTxIds[pr]||[]});
       });
+      bkSyncPersist();
       if(sportsJson.data.exchanges)state.exchanges=sportsJson.data.exchanges;
       if(sportsJson.data.betBuilderLibrary)state.betBuilderLibrary=sportsJson.data.betBuilderLibrary;
       // Track confirmed server state so next save can skip stale KV read
@@ -830,7 +785,8 @@ async function saveData(source='unknown'){
     if(pendingSave){const nextSource=pendingSave;pendingSave=null;saveData(nextSource);}
   }
 }
-function debouncedSave(source='unknown'){if(syncTimeout)clearTimeout(syncTimeout);setSyncStatus('syncing');syncTimeout=setTimeout(()=>saveData(source),1500);}
+document.addEventListener('visibilitychange',()=>{if(document.hidden)bkSyncPersist();});
+function debouncedSave(source='unknown'){bkSyncPersist();if(syncTimeout)clearTimeout(syncTimeout);setSyncStatus('syncing');syncTimeout=setTimeout(()=>saveData(source),1500);}
 function save(source='unknown'){debouncedSave(source);}
 
 const PROFILES=['jg','hg','bp','rq','wa'];
@@ -868,6 +824,105 @@ const state=freshState();
 let casinoDeletedIds={jg:[],hg:[],bp:[],rq:[],wa:[]};
 let deletedTxIds={jg:[],hg:[],bp:[],rq:[],wa:[]};
 let lastServerState=null; // tracks last confirmed server state to avoid stale reads
+// ── BOOKIE BALANCE SYNC ─────────────────────────────────────────────────────
+// Bookie balances are synced as CHANGES, not as whole balances. For every
+// bookie this device remembers the last balance the server confirmed
+// ("base"). On save, the difference between what's on screen and base is
+// sent as an operation ({add:-5}); amendments/verifications are sent as
+// {set:value}. The server applies them to its own current figure, so an
+// out-of-date device can't overwrite someone else's update, and each batch
+// carries an id so a retried save is never applied twice. Kept in
+// localStorage so unsent changes survive a reload.
+let _bkSync={};     // pr -> bookie -> {base, bal, set:{v,at}|null}
+let _bkBatches={};  // pr -> [{id, ops}] frozen but not yet confirmed
+let _bkAdopted={};  // pr -> true once this session has matched up with the server
+const _r2=x=>Math.round((Number(x)||0)*100)/100;
+function bkMap(pr){return _bkSync[pr]||(_bkSync[pr]={});}
+function bkSyncPersist(){
+  try{
+    PROFILES.forEach(pr=>{const m=_bkSync[pr],bks=state[pr]?.bookies;if(!m||!bks)return;Object.keys(m).forEach(n=>{if(bks[n])m[n].bal=_r2(bks[n].bal);});});
+    localStorage.setItem('mbe_bksync',JSON.stringify({v:1,sync:_bkSync,batches:_bkBatches}));
+  }catch(e){}
+}
+function bkSyncRestore(){
+  try{
+    const raw=localStorage.getItem('mbe_bksync');if(!raw)return;
+    const j=JSON.parse(raw)||{};_bkSync=j.sync||{};_bkBatches=j.batches||{};
+    // The balances recorded here are the latest this device showed - they
+    // win over an older cached snapshot of state.
+    PROFILES.forEach(pr=>{const m=_bkSync[pr],bks=state[pr]?.bookies;if(!m||!bks)return;
+      Object.keys(m).forEach(n=>{if(bks[n]&&typeof m[n].bal==='number')bks[n].bal=m[n].bal;});});
+  }catch(e){_bkSync={};_bkBatches={};}
+}
+// Turn everything changed since the last confirmed save into one batch.
+function bkFreeze(pr){
+  const bks=state[pr]?.bookies||{},m=bkMap(pr),ops={};
+  Object.keys(bks).forEach(n=>{
+    const bal=_r2(bks[n].bal);let e=m[n];
+    // Unknown bookie: created after we last matched up with the server
+    // (starts from 0), or - before the first match-up - assume no change.
+    if(!e)e=m[n]={base:_bkAdopted[pr]?0:bal,bal,set:null};
+    if(e.set){ops[n]={set:_r2(e.set.v),setAt:e.set.at,add:_r2(bal-e.set.v)};}
+    else{const d=_r2(bal-e.base);if(Math.abs(d)>=0.005)ops[n]={add:d};}
+    e.base=bal;e.bal=bal;e.set=null;
+  });
+  if(Object.keys(ops).length){
+    (_bkBatches[pr]||(_bkBatches[pr]=[])).push({id:Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,8),ops});
+  }
+}
+// The user stated the real balance (amend / verify): send it as a set.
+function bkMarkSet(pr,name){
+  const b=state[pr]?.bookies?.[name];if(!b)return;
+  const m=bkMap(pr);const e=m[name]||(m[name]={base:_r2(b.bal),bal:_r2(b.bal),set:null});
+  e.set={v:_r2(b.bal),at:Date.now()};bkSyncPersist();
+}
+// A change the SERVER applies itself (casino sessions): show it here, but
+// don't send it again as a sports change.
+function bkLocalOnly(pr,name,delta){
+  const b=state[pr]?.bookies?.[name];if(!b)return;
+  const m=bkMap(pr);const e=m[name];
+  if(!e){m[name]={base:_r2(b.bal),bal:_r2(b.bal),set:null};}
+  else if(e.set){e.set.v=_r2(e.set.v+delta);}
+  else{e.base=_r2(e.base+delta);}
+  bkSyncPersist();
+}
+// Merge the server's bookies into this device: balances = server figure
+// plus anything changed here and not yet confirmed; status/notes still on
+// timestamp, as before.
+function bkAdopt(pr,serverBk){
+  const m=bkMap(pr),local=state[pr].bookies||{},merged={};
+  Object.keys(serverBk||{}).forEach(k=>{
+    const s=serverBk[k]||{},l=local[k];
+    const meta=Object.assign({},s);
+    if(l){
+      const lt=l.balUpdatedAt||0,st=s.balUpdatedAt||0,lw=lt>0&&lt>st;
+      meta.status=lw?(l.status||s.status):s.status;
+      meta.notes=lw?(l.notes!==undefined?l.notes:s.notes):s.notes;
+      meta.verifiedAt=l.verifiedAt||s.verifiedAt||null;
+      meta.balUpdatedAt=Math.max(lt,st);
+    }
+    const S=_r2(s.bal);let e=m[k],L;
+    if(e){
+      const Lloc=l?_r2(l.bal):_r2(e.bal);
+      L=e.set?Lloc:_r2(S+(Lloc-e.base));
+      e.base=S;e.bal=L;
+    }else{L=S;m[k]={base:S,bal:S,set:null};}
+    meta.bal=L;merged[k]=meta;
+  });
+  Object.keys(local).forEach(k=>{
+    if(!merged[k]){merged[k]=local[k];if(!m[k])m[k]={base:_r2(local[k].bal),bal:_r2(local[k].bal),set:null};}
+  });
+  state[pr].bookies=merged;_bkAdopted[pr]=true;
+}
+// Folding a bookie name variant into its canonical name: move its sync
+// figures too, so the merge itself is never sent as a change.
+function bkMergeKey(pr,from,to,fromBal){
+  const m=bkMap(pr),ef=m[from];let et=m[to];
+  const add=ef?(ef.set?ef.set.v:ef.base):_r2(fromBal);
+  if(!et)et=m[to]={base:_r2((state[pr]?.bookies?.[to]?.bal)||0),bal:0,set:null};
+  if(et.set)et.set.v=_r2(et.set.v+add);else et.base=_r2(et.base+add);
+  delete m[from];
+}
 // Per-profile fingerprint of the last payload the server confirmed, so a save
 // only sends profiles that actually changed. Order-insensitive for the two
 // arrays the server re-sorts, so a re-sorted-but-identical list doesn't count.
@@ -901,6 +956,7 @@ function migrateLegacy(){
         if(existing!==canonical&&existing.toLowerCase()===canonical.toLowerCase()){
           // Found a case variant — merge into canonical
           if(!bk[canonical])bk[canonical]={bal:0,status:'Not Signed Up',notes:''};
+          bkMergeKey(pr,existing,canonical,bk[existing].bal||0);
           bk[canonical].bal=(bk[canonical].bal||0)+(bk[existing].bal||0);
           if(bk[existing].status&&bk[existing].status!=='Not Signed Up')bk[canonical].status=bk[existing].status;
           if(bk[existing].notes)bk[canonical].notes=bk[existing].notes;
@@ -925,6 +981,7 @@ function migrateLegacy(){
     Object.entries(renames).forEach(([oldName,newName])=>{
       if(bk[oldName]){
         if(!bk[newName])bk[newName]={bal:0,status:'Not Signed Up',notes:''};
+        bkMergeKey(pr,oldName,newName,bk[oldName].bal||0);
         bk[newName].bal=(bk[newName].bal||0)+(bk[oldName].bal||0);
         if(bk[oldName].status&&bk[oldName].status!=='Not Signed Up')bk[newName].status=bk[oldName].status;
         if(bk[oldName].notes)bk[newName].notes=bk[oldName].notes;
@@ -1937,6 +1994,27 @@ function applyBalanceOnSettle(tx,p,result){
   }
 }
 
+// What logging + settling this bet did to its bookie and exchange balances,
+// worked out by replaying the same balance code on a scratch copy. Used to
+// reverse a deleted bet exactly (the old hand-written reversal missed the
+// stake on won bets and never restored a lock-in's exchange liability).
+function txBalanceEffect(tx){
+  const name=tx.bookie||'__none__';
+  const p={bookies:{[name]:{bal:0}},freeBets:[],transactions:[]};
+  const realEx=state.exchanges,realToast=showToast,ex={};
+  Object.keys(realEx||{}).forEach(k=>ex[k]=0);
+  state.exchanges=ex;showToast=function(){};
+  try{
+    const t=JSON.parse(JSON.stringify(tx));const fin=t.result;t.result='Pending';
+    applyBalanceAtLog(t,p);
+    if(fin==='Won'||fin==='Lost'){
+      if(t.type==='Multiplier'&&fin==='Won')p.bookies[name].bal+=(t.bodds||0)*(t.bstake||0);
+      else applyBalanceOnSettle(t,p,fin);
+    }
+  }finally{state.exchanges=realEx;showToast=realToast;}
+  return{bookie:_r2(p.bookies[name].bal),exchanges:ex};
+}
+
 function applyBalanceAtLog(tx,p){
   if(tx.result==='Pending'){
     // Only deduct stake for normal bets — free bets don't use your money
@@ -1945,9 +2023,14 @@ function applyBalanceAtLog(tx,p){
       p.bookies[tx.bookie].balUpdatedAt=Date.now();
     }
   }else{
-    // Logged as already settled — for normal bets deduct stake first, then apply result
-    if(!isFreeBet(tx.type)&&tx.result==='Lost'&&tx.bookie&&p.bookies[tx.bookie])
+    // Logged as already settled — for normal bets deduct stake first, then
+    // apply the result. (Previously the stake was only deducted for a Lost
+    // bet, but every "Won" branch adds back stake + winnings, so an
+    // already-won bet was over-credited by its stake.)
+    if(!isFreeBet(tx.type)&&tx.bookie&&p.bookies[tx.bookie]){
       p.bookies[tx.bookie].bal=(p.bookies[tx.bookie].bal||0)-(tx.bstake||0);
+      p.bookies[tx.bookie].balUpdatedAt=Date.now();
+    }
     applyBalanceOnSettle(tx,p,tx.result);
   }
 }
@@ -2782,7 +2865,7 @@ function submitTx(){
     const newVal=parseFloat(newValStr);if(isNaN(newVal))return;
     const p=state[formAccount];let oldVal,targetLabel;
     if(target==='bank'){oldVal=p.bank;p.bank=newVal;p.bankUpdatedAt=Date.now();targetLabel='Bank';}
-    else{const name=target.slice(7);oldVal=(p.bookies||{})[name]?.bal||0;p.bookies[name].bal=newVal;targetLabel=name;}
+    else{const name=target.slice(7);oldVal=(p.bookies||{})[name]?.bal||0;p.bookies[name].bal=newVal;p.bookies[name].balUpdatedAt=Date.now();bkMarkSet(formAccount,name);targetLabel=name;}
     const diff=newVal-oldVal;if(!p.transactions)p.transactions=[];
     p.transactions.push({id:Date.now(),date,type:'Balance Amendment',target:targetLabel,oldVal,newVal,diff,pnl:diff,notes:reason,result:'—',_acct:formAccount,txUpdatedAt:Date.now()});
     if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('balanceAmend');showToast(`${targetLabel} → ${fmt(newVal)}`);msg.textContent='';resetForm();setTimeout(render,100);return;
@@ -3023,32 +3106,21 @@ function deleteTx(acct,id){
   const bstake=tx.bstake||0,bodds=tx.bodds||0,pnl=tx.pnl||0;
   // Reverse the balance changes that were applied when this tx was logged/settled
   if(BET_ONLY.includes(tx.type)){
-    if(tx.result==='Pending'){
-      // Was deducted at log time — restore stake to bookie
-      if(!isFB&&tx.bookie&&p.bookies[tx.bookie])
-        p.bookies[tx.bookie].bal=(p.bookies[tx.bookie].bal||0)+bstake;
-    }else if(tx.result==='Won'){
-      // Return was added — reverse it
-      if(isFB){
-        if(tx.bookie&&p.bookies[tx.bookie])
-          p.bookies[tx.bookie].bal=(p.bookies[tx.bookie].bal||0)-((bodds-1)*bstake);
-      }else{
-        if(tx.bookie&&p.bookies[tx.bookie])
-          p.bookies[tx.bookie].bal=(p.bookies[tx.bookie].bal||0)-(bodds*bstake);
-      }
-    }else if(tx.result==='Lost'){
-      // Stake was deducted, lay profit went to exchange — reverse exchange
-      if(!isFB&&tx.bookie&&p.bookies[tx.bookie])
-        p.bookies[tx.bookie].bal=(p.bookies[tx.bookie].bal||0)+bstake;
-      if(tx.exchange&&state.exchanges[tx.exchange]!==undefined)
-        state.exchanges[tx.exchange]=(state.exchanges[tx.exchange]||0)-pnl;
+    // Undo exactly what logging/settling this bet did.
+    const eff=txBalanceEffect(tx);
+    if(tx.bookie&&p.bookies[tx.bookie]){
+      p.bookies[tx.bookie].bal=_r2((p.bookies[tx.bookie].bal||0)-eff.bookie);
+      p.bookies[tx.bookie].balUpdatedAt=Date.now();
     }
+    Object.keys(eff.exchanges).forEach(x=>{
+      if(eff.exchanges[x]&&state.exchanges[x]!==undefined)state.exchanges[x]=_r2((state.exchanges[x]||0)-eff.exchanges[x]);
+    });
   }else if(tx.type==='Deposit'){
     // Reverse: bookie −deposit, bank +deposit
-    if(tx.bookie&&p.bookies[tx.bookie])p.bookies[tx.bookie].bal=(p.bookies[tx.bookie].bal||0)-(tx.amount||0);
+    if(tx.bookie&&p.bookies[tx.bookie]){p.bookies[tx.bookie].bal=(p.bookies[tx.bookie].bal||0)-(tx.amount||0);p.bookies[tx.bookie].balUpdatedAt=Date.now();}
     p.bank+=(tx.amount||0);
   }else if(tx.type==='Withdrawal'){
-    if(tx.bookie&&p.bookies[tx.bookie])p.bookies[tx.bookie].bal=(p.bookies[tx.bookie].bal||0)+(tx.amount||0);
+    if(tx.bookie&&p.bookies[tx.bookie]){p.bookies[tx.bookie].bal=(p.bookies[tx.bookie].bal||0)+(tx.amount||0);p.bookies[tx.bookie].balUpdatedAt=Date.now();}
     p.bank-=(tx.amount||0);
   }else if(tx.type==='Exchange Deposit'){
     if(tx.exchange&&state.exchanges[tx.exchange]!==undefined)state.exchanges[tx.exchange]=(state.exchanges[tx.exchange]||0)-(tx.amount||0);
@@ -3061,7 +3133,7 @@ function deleteTx(acct,id){
   else if(tx.type==='Balance Amendment'){
     const target=tx.target;
     if(target==='Bank'){p.bank-=(tx.diff||0);}
-    else if(target&&p.bookies[target]){p.bookies[target].bal=(p.bookies[target].bal||0)-(tx.diff||0);}
+    else if(target&&p.bookies[target]){p.bookies[target].bal=(p.bookies[target].bal||0)-(tx.diff||0);p.bookies[target].balUpdatedAt=Date.now();}
   }
   state[acct].transactions=state[acct].transactions.filter(t=>t.id!==id);
   if(!deletedTxIds[acct])deletedTxIds[acct]=[];
@@ -3226,7 +3298,7 @@ function verifyBookie(acct,name){
     const date=todayStr();
     p.transactions=p.transactions||[];
     p.transactions.push({id:Date.now(),date,type:'Balance Amendment',target:name,oldVal:stored,newVal:entered,diff,pnl:diff,notes:'Balance verified',result:'—',_acct:acct,txUpdatedAt:Date.now()});
-    p.bookies[name].bal=entered;p.bookies[name].balUpdatedAt=Date.now();
+    p.bookies[name].bal=entered;p.bookies[name].balUpdatedAt=Date.now();bkMarkSet(acct,name);
     showToast(name+' updated by '+fmtS(diff));
   } else {
     // Balance unchanged, but a manual confirmation is still a genuine
@@ -3380,7 +3452,7 @@ function confirmBookieEdit(acct,name){
   const bk=state[acct].bookies[name],oldBal=bk.bal||0;bk.status=newStatus;bk.notes=newNotes;
   // Stamp balUpdatedAt on any change so merge logic preserves this device's changes
   bk.balUpdatedAt=Date.now();
-  if(!isNaN(newBal)&&newBal!==oldBal){const diff=newBal-oldBal;bk.bal=newBal;if(!state[acct].transactions)state[acct].transactions=[];state[acct].transactions.push({id:Date.now(),date:todayStr(),type:'Balance Amendment',target:name,oldVal:oldBal,newVal:newBal,diff,pnl:diff,notes:reason,result:'—',_acct:acct,txUpdatedAt:Date.now()});}
+  if(!isNaN(newBal)&&newBal!==oldBal){const diff=newBal-oldBal;bk.bal=newBal;bkMarkSet(acct,name);if(!state[acct].transactions)state[acct].transactions=[];state[acct].transactions.push({id:Date.now(),date:todayStr(),type:'Balance Amendment',target:name,oldVal:oldBal,newVal:newBal,diff,pnl:diff,notes:reason,result:'—',_acct:acct,txUpdatedAt:Date.now()});}
   if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveData('bookieEdit');closeModal();showToast(`${name} updated`);render();
 }
 
@@ -3406,7 +3478,7 @@ function showAmendModal(type,acct,name){
 function confirmAmend(type,acct,name){
   const newVal=parseFloat(document.getElementById('modal-val')?.value),reason=document.getElementById('modal-reason')?.value||'Manual amendment';if(isNaN(newVal))return;
   const p=state[acct];let oldVal,targetLabel;
-  if(type==='bank'){oldVal=p.bank;p.bank=newVal;p.bankUpdatedAt=Date.now();targetLabel='Bank';}else{oldVal=p.bookies[name]?.bal||0;p.bookies[name].bal=newVal;targetLabel=name;}
+  if(type==='bank'){oldVal=p.bank;p.bank=newVal;p.bankUpdatedAt=Date.now();targetLabel='Bank';}else{oldVal=p.bookies[name]?.bal||0;p.bookies[name].bal=newVal;p.bookies[name].balUpdatedAt=Date.now();bkMarkSet(acct,name);targetLabel=name;}
   const diff=newVal-oldVal;if(!p.transactions)p.transactions=[];
   p.transactions.push({id:Date.now(),date:todayStr(),type:'Balance Amendment',target:targetLabel,oldVal,newVal,diff,pnl:diff,notes:reason,result:'—',_acct:acct,txUpdatedAt:Date.now()});
   if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}
@@ -4906,7 +4978,13 @@ function saveCasinoSession(){
   const net=endBal-startBal;
   const p=state[casinoFormAcct];
   if(!p.bookies[casino])p.bookies[casino]={bal:0,status:'Active',notes:''};
-  p.bookies[casino].bal=(p.bookies[casino].bal||0)+net;p.bookies[casino].balUpdatedAt=Date.now();
+  // The session's end balance is the real balance (save-casino sets the
+  // same on the server). Shown here straight away, but not sent as a
+  // sports change - the server applies it itself.
+  {const _old=p.bookies[casino].bal||0;const _hasBals=!(startBal===0&&endBal===0);
+   const _new=_r2(_hasBals?endBal:_old+net);
+   p.bookies[casino].bal=_new;p.bookies[casino].balUpdatedAt=Date.now();
+   bkLocalOnly(casinoFormAcct,casino,_r2(_new-_old));}
   if(!p.casino)p.casino=[];
   const _newCsId=Date.now();
   casinoDirty[casinoFormAcct].add(String(_newCsId));
@@ -4951,10 +5029,10 @@ function deleteCasinoSession(acct,id){
     const p=state[realAcct];
     const casino=session.casino;
     const pnl=(session.startBal!==undefined&&session.endBal!==undefined&&(session.startBal!==0||session.endBal!==0))?session.endBal-session.startBal:(session.netProfit||0);
-    if(p.bookies&&p.bookies[casino]){
-      p.bookies[casino].bal=(p.bookies[casino].bal||0)-pnl;
-      p.bookies[casino].balUpdatedAt=Date.now();
-    }
+    // Deleting a session no longer changes the bookie balance (the server
+    // doesn't either). Subtracting it after the balance had been corrected
+    // is what produced the random negative balances. If the deleted
+    // session had wrong numbers, verify the bookie.
     state[realAcct].casino=(state[realAcct].casino||[]).filter(s=>String(s.id)!==String(id));
   }
   PROFILES.forEach(pr=>casinoDirty[pr].delete(String(id)));
@@ -4964,7 +5042,7 @@ function deleteCasinoSession(acct,id){
     casinoDeletedIds[pr].push(id);
   });
   if(syncTimeout){clearTimeout(syncTimeout);syncTimeout=null;}saveCasinoOnly('deleteCasino');
-  invalidateCasinoCache();showToast('Session deleted');
+  invalidateCasinoCache();showToast('Session deleted — bookie balance unchanged');
   // Smart update: remove just that row
   const casinoRow=document.querySelector('tr[data-csid="'+id+'"]');
   if(casinoRow){

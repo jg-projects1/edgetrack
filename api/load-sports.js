@@ -65,6 +65,29 @@ export default async function handler(req, res) {
 
     let anyWritten = false;
 
+    // Per-profile write lock (same scheme as the save endpoints).
+    const LOCK_TTL_MS = 8000;
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+    const acquireLock = async (key) => {
+      const token = Math.random().toString(36).slice(2);
+      for (let i = 0; i < 40; i++) {
+        try {
+          const r = await fetch(`${kvUrl}/set/${key}/${token}/NX/PX/${LOCK_TTL_MS}`, {
+            headers: { Authorization: `Bearer ${kvToken}` }
+          });
+          if (!r.ok) return null;
+          const d = await r.json();
+          if (d.result === 'OK') return key;
+        } catch (e) { return null; }
+        await sleep(100 + Math.random() * 150);
+      }
+      return null;
+    };
+    const releaseLock = async (key) => {
+      if (!key) return;
+      try { await fetch(`${kvUrl}/del/${key}`, { headers: { Authorization: `Bearer ${kvToken}` } }); } catch (e) {}
+    };
+
     const BOOKIE_RENAMES = {
       'hot streak casino': 'Hot Streak',
       'gala': 'Gala Casino',
@@ -146,12 +169,24 @@ export default async function handler(req, res) {
           return;
         }
         const { bookies, changed } = dedupeBookies(data.bookies || {});
-        const { casino, ...withoutCasino } = { ...data, bookies };
+        const { casino, _appliedBatches, ...withoutCasino } = { ...data, bookies };
         result[pr] = withoutCasino;
         if (changed) {
-          // Persist the cleanup against the FULL record (casino intact).
-          await kvSet(`edgetrack_${pr}`, { ...data, bookies });
-          anyWritten = true;
+          // Persist the cleanup against the FULL, freshly re-read record
+          // under the profile lock, so a save landing meanwhile survives.
+          const lock = await acquireLock(`edgetrack_lock_${pr}`);
+          try {
+            const fresh = await kvGet(`edgetrack_${pr}`);
+            if (fresh) {
+              const again = dedupeBookies(fresh.bookies || {});
+              if (again.changed) {
+                await kvSet(`edgetrack_${pr}`, { ...fresh, bookies: again.bookies });
+                anyWritten = true;
+              }
+            }
+          } finally {
+            await releaseLock(lock);
+          }
         }
       }));
       await finish();

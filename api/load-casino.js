@@ -1,3 +1,5 @@
+// v4 - the daily old-key check no longer brings back sessions you've
+// deleted, and any write it makes is locked and based on a fresh read.
 // v3 - bandwidth diet + safer reads. Reconciliation and name-normalisation
 // logic is unchanged from v2. What's different:
 //   * kvGet now THROWS on a failed request. v2 returned null, so a failed
@@ -97,59 +99,87 @@ export default async function handler(req, res) {
 
     let anyWritten = false;
 
+    // ---- Per-profile write lock (same scheme as save-sports/save-casino)
+    const LOCK_TTL_MS = 8000;
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+    const acquireLock = async (key) => {
+      const token = Math.random().toString(36).slice(2);
+      for (let i = 0; i < 40; i++) {
+        try {
+          const r = await fetch(`${kvUrl}/set/${key}/${token}/NX/PX/${LOCK_TTL_MS}`, {
+            headers: { Authorization: `Bearer ${kvToken}` }
+          });
+          if (!r.ok) return null;
+          const d = await r.json();
+          if (d.result === 'OK') return key;
+        } catch (e) { return null; }
+        await sleep(100 + Math.random() * 150);
+      }
+      return null;
+    };
+    const releaseLock = async (key) => {
+      if (!key) return;
+      try { await fetch(`${kvUrl}/del/${key}`, { headers: { Authorization: `Bearer ${kvToken}` } }); } catch (e) {}
+    };
+
+    // Works out what (if anything) needs writing for one profile. Pure:
+    // takes the stored record (+ legacy record) and returns the result.
+    const reconcile = (data, legacyData, useLegacy) => {
+      const newCasino = data?.casino || [];
+      if (!useLegacy) {
+        const { sessions: normalized, changed } = normalizeSessionNames(newCasino);
+        return { casino: normalized, bookieNames: Object.keys(data?.bookies || {}),
+          updated: changed ? { ...(data || { bank: 0, bookies: {}, transactions: [], freeBets: [] }), casino: normalized } : null };
+      }
+      const legacyCasino = legacyData?.casino || [];
+      const newIds = new Set(newCasino.map(s => String(s.id)));
+      // Sessions deleted since the rename must NOT come back from the
+      // frozen old key.
+      const tomb = new Set((data?._deletedIds || []).map(String));
+      const strayFromLegacy = legacyCasino.filter(s => !newIds.has(String(s.id)) && !tomb.has(String(s.id)));
+      if (strayFromLegacy.length === 0) {
+        const { sessions: normalized, changed } = normalizeSessionNames(newCasino);
+        return { casino: normalized, bookieNames: Object.keys(data?.bookies || {}),
+          updated: changed ? { ...data, casino: normalized } : null };
+      }
+      const reconciled = [...newCasino, ...strayFromLegacy];
+      const { sessions: normalizedReconciled } = normalizeSessionNames(reconciled);
+      const updatedProfile = { ...(data || { bank: 0, bookies: {}, transactions: [], freeBets: [] }), casino: normalizedReconciled };
+      updatedProfile.bookies = { ...(updatedProfile.bookies || {}) };
+      strayFromLegacy.forEach(s => {
+        const net = (s.startBal !== undefined && s.endBal !== undefined)
+          ? (s.endBal - s.startBal)
+          : (s.netProfit || 0);
+        const bookieKey = CASINO_NAME_RENAMES[(s.casino || '').toLowerCase()] || s.casino;
+        const prev = updatedProfile.bookies[bookieKey] || { bal: 0, status: 'Active', notes: '' };
+        updatedProfile.bookies[bookieKey] = { ...prev, bal: (prev.bal || 0) + net, balUpdatedAt: Date.now() };
+      });
+      return { casino: normalizedReconciled, bookieNames: Object.keys(updatedProfile.bookies), updated: updatedProfile };
+    };
+
     const profileData = await Promise.all(
       profiles.map(async pr => {
-        const data = await kvGet(`edgetrack_${pr}`);
         const legacySuffix = LEGACY_KEY_SUFFIX[pr];
-        const bookieNames = Object.keys(data?.bookies || {});
-
-        if (!legacySuffix || legacyFresh) {
-          // No legacy key to reconcile (bp/rq, or already reconciled today):
-          // just normalise session names.
-          const sessions = data?.casino || [];
-          const { sessions: normalized, changed } = normalizeSessionNames(sessions);
-          if (changed) {
-            await kvSet(`edgetrack_${pr}`, { ...(data || { bank: 0, bookies: {}, transactions: [], freeBets: [] }), casino: normalized });
+        const useLegacy = !!legacySuffix && !legacyFresh;
+        const data = await kvGet(`edgetrack_${pr}`);
+        const legacyData = useLegacy ? await kvGet(`edgetrack_${legacySuffix}`) : null;
+        let out = reconcile(data, legacyData, useLegacy);
+        if (!out.updated) return { pr, casino: out.casino, bookieNames: out.bookieNames };
+        // Something needs writing: lock, re-read the latest copy, redo the
+        // work on that, then write - so a save that landed meanwhile isn't
+        // overwritten.
+        const lock = await acquireLock(`edgetrack_lock_${pr}`);
+        try {
+          const fresh = await kvGet(`edgetrack_${pr}`);
+          out = reconcile(fresh, legacyData, useLegacy);
+          if (out.updated) {
+            await kvSet(`edgetrack_${pr}`, out.updated);
             anyWritten = true;
           }
-          return { pr, casino: normalized, bookieNames };
+        } finally {
+          await releaseLock(lock);
         }
-
-        const legacyData = await kvGet(`edgetrack_${legacySuffix}`);
-        const newCasino = data?.casino || [];
-        const legacyCasino = legacyData?.casino || [];
-
-        const newIds = new Set(newCasino.map(s => String(s.id)));
-        const strayFromLegacy = legacyCasino.filter(s => !newIds.has(String(s.id)));
-
-        if (strayFromLegacy.length === 0) {
-          const { sessions: normalized, changed } = normalizeSessionNames(newCasino);
-          if (changed) {
-            await kvSet(`edgetrack_${pr}`, { ...data, casino: normalized });
-            anyWritten = true;
-          }
-          return { pr, casino: normalized, bookieNames };
-        }
-
-        // Sessions that only exist under the old key: fold them in, along
-        // with the bookie balance delta they represent.
-        const reconciled = [...newCasino, ...strayFromLegacy];
-        const { sessions: normalizedReconciled } = normalizeSessionNames(reconciled);
-        const updatedProfile = { ...(data || { bank: 0, bookies: {}, transactions: [], freeBets: [] }), casino: normalizedReconciled };
-        if (!updatedProfile.bookies) updatedProfile.bookies = {};
-        strayFromLegacy.forEach(s => {
-          const net = (s.startBal !== undefined && s.endBal !== undefined)
-            ? (s.endBal - s.startBal)
-            : (s.netProfit || 0);
-          const bookieKey = CASINO_NAME_RENAMES[(s.casino || '').toLowerCase()] || s.casino;
-          if (!updatedProfile.bookies[bookieKey]) updatedProfile.bookies[bookieKey] = { bal: 0, status: 'Active', notes: '' };
-          updatedProfile.bookies[bookieKey].bal = (updatedProfile.bookies[bookieKey].bal || 0) + net;
-          updatedProfile.bookies[bookieKey].balUpdatedAt = Date.now();
-        });
-        await kvSet(`edgetrack_${pr}`, updatedProfile);
-        anyWritten = true;
-
-        return { pr, casino: normalizedReconciled, bookieNames: Object.keys(updatedProfile.bookies) };
+        return { pr, casino: out.casino, bookieNames: out.bookieNames };
       })
     );
 

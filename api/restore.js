@@ -39,6 +39,26 @@ export default async function handler(req, res) {
       if (!r.ok) throw new Error(`KV set error on ${key}: ${r.status}`);
     };
 
+    const LOCK_TTL_MS = 8000;
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+    const acquireLock = async (key) => {
+      const token = Math.random().toString(36).slice(2);
+      for (let i = 0; i < 40; i++) {
+        try {
+          const r = await fetch(`${kvUrl}/set/${key}/${token}/NX/PX/${LOCK_TTL_MS}`, { headers: { Authorization: `Bearer ${kvToken}` } });
+          if (!r.ok) return null;
+          const d = await r.json();
+          if (d.result === 'OK') return key;
+        } catch (e) { return null; }
+        await sleep(100 + Math.random() * 150);
+      }
+      return null;
+    };
+    const releaseLock = async (key) => {
+      if (!key) return;
+      try { await fetch(`${kvUrl}/del/${key}`, { headers: { Authorization: `Bearer ${kvToken}` } }); } catch (e) {}
+    };
+
     const report = {};
     let anyWritten = false;
 
@@ -49,7 +69,9 @@ export default async function handler(req, res) {
         return;
       }
 
-      // Load existing split key
+      // Load existing split key (locked so a save can't land in between)
+      const lock = await acquireLock(`edgetrack_lock_${pr}`);
+      try {
       const existing = await kvGet(`edgetrack_${pr}`);
       if (!existing) {
         report[pr] = { status: 'error', reason: 'no existing split key' };
@@ -86,6 +108,7 @@ export default async function handler(req, res) {
         gained,
         pnl: Math.round(pnl * 100) / 100
       };
+      } finally { await releaseLock(lock); }
     }));
 
     // Tell load-sports / load-casino their cached copies are out of date.

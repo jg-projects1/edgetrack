@@ -1,3 +1,17 @@
+// save-sports.js v4 - balance changes, not balances.
+//   * Bookie balances are no longer overwritten with whatever balance a
+//     device happens to hold. Current clients send "batches" of balance
+//     operations ({add: -5} for a stake, {set: 123.45, setAt} for a
+//     verified/amended balance) and the server applies them to its own
+//     current figure, so a device with an out-of-date copy can no longer
+//     wipe out someone else's update (e.g. Operator A's casino sessions).
+//     Each batch has an id and is applied at most once, so a retried save
+//     can't double-count. Requests without batches (an old copy of the
+//     page still open somewhere) fall back to the previous timestamp merge.
+//   * Each profile is locked while it's read-modified-written, so a casino
+//     save and a sports save landing at the same moment can't overwrite
+//     each other.
+// v3 notes:
 // save-sports.js v3 - bandwidth diet. Merge logic (bank / bookies /
 // transactions / freeBets / tombstones) is unchanged from the previous
 // version. What's different:
@@ -56,6 +70,30 @@ export default async function handler(req, res) {
         body: JSON.stringify(n)
       });
       if (!r.ok) throw new Error(`KV set error on ${key}: ${r.status}`);
+    };
+
+    // ---- Per-profile write lock (Upstash SET NX PX) ----------------------
+    const LOCK_TTL_MS = 8000;
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+    const acquireLock = async (key) => {
+      const token = Math.random().toString(36).slice(2);
+      for (let i = 0; i < 40; i++) {
+        try {
+          const r = await fetch(`${kvUrl}/set/${key}/${token}/NX/PX/${LOCK_TTL_MS}`, {
+            headers: { Authorization: `Bearer ${kvToken}` }
+          });
+          if (!r.ok) return null;            // can't lock: carry on unlocked
+          const d = await r.json();
+          if (d.result === 'OK') return key;
+        } catch (e) { return null; }
+        await sleep(100 + Math.random() * 150);
+      }
+      console.warn('lock wait timed out', key);
+      return null;
+    };
+    const releaseLock = async (key) => {
+      if (!key) return;
+      try { await fetch(`${kvUrl}/del/${key}`, { headers: { Authorization: `Bearer ${kvToken}` } }); } catch (e) {}
     };
 
     const BOOKIE_RENAMES = {
@@ -142,8 +180,67 @@ export default async function handler(req, res) {
       return merged;
     };
 
+    // ---- Batched balance operations (current clients) ---------------------
+    const r2 = (x) => Math.round((Number(x) || 0) * 100) / 100;
+    const MAX_APPLIED = 300;
+    const resolveName = (bk, name) => {
+      if (bk[name]) return name;
+      const canonical = BOOKIE_RENAMES[String(name).toLowerCase()];
+      if (canonical && bk[canonical]) return canonical;
+      const lower = String(name).toLowerCase();
+      const hit = Object.keys(bk).find(k => k.toLowerCase() === lower);
+      return hit || canonical || name;
+    };
+    const mergeBookieMeta = (serverBk, incomingBk) => {
+      // Status / notes / verifiedAt still merge on timestamp; the balance
+      // itself is NEVER taken from the incoming copy on this path.
+      const merged = { ...serverBk };
+      Object.keys(incomingBk || {}).forEach(k => {
+        const inc = incomingBk[k] || {};
+        if (!merged[k]) {
+          merged[k] = { bal: 0, status: inc.status || 'Not Signed Up', notes: inc.notes || '', verifiedAt: inc.verifiedAt || null, balUpdatedAt: inc.balUpdatedAt || 0 };
+          return;
+        }
+        const localTs = inc.balUpdatedAt || 0;
+        const serverTs = merged[k].balUpdatedAt || 0;
+        const localWins = localTs > 0 && localTs > serverTs;
+        merged[k] = Object.assign({}, merged[k], {
+          status: localWins ? (inc.status || merged[k].status) : merged[k].status,
+          notes: localWins ? (inc.notes !== undefined ? inc.notes : merged[k].notes) : merged[k].notes,
+          verifiedAt: inc.verifiedAt || merged[k].verifiedAt || null,
+          balUpdatedAt: Math.max(localTs, serverTs)
+        });
+      });
+      return merged;
+    };
+    const applyBatches = (bk, batches, appliedIds) => {
+      const seen = new Set(appliedIds);
+      const now = Date.now();
+      (batches || []).forEach(batch => {
+        if (!batch || !batch.id || seen.has(batch.id)) return;
+        Object.entries(batch.ops || {}).forEach(([rawName, op]) => {
+          if (!op) return;
+          const name = resolveName(bk, rawName);
+          if (!bk[name]) bk[name] = { bal: 0, status: 'Active', notes: '' };
+          const b = bk[name];
+          if (typeof op.set === 'number' && isFinite(op.set) && (op.setAt || 0) >= (b.setAt || 0)) {
+            b.bal = r2(op.set);
+            b.setAt = op.setAt || now;
+          }
+          if (typeof op.add === 'number' && isFinite(op.add)) b.bal = r2((b.bal || 0) + op.add);
+          b.balUpdatedAt = now;
+        });
+        seen.add(batch.id);
+        appliedIds.push(batch.id);
+      });
+      while (appliedIds.length > MAX_APPLIED) appliedIds.shift();
+    };
+
     // Only read what this request actually touches.
     const sentProfiles = profiles.filter(pr => incoming[pr]);
+    const locks = [];
+    try {
+    for (const pr of [...sentProfiles].sort()) locks.push(await acquireLock(`edgetrack_lock_${pr}`));
     const existing = {};
     await Promise.all(sentProfiles.map(async pr => {
       existing[pr] = await kvGet(`edgetrack_${pr}`);
@@ -186,7 +283,17 @@ export default async function handler(req, res) {
       (server.freeBets || []).forEach(fb => fbMap.set(String(fb.id), fb));
       (incoming[pr].freeBets || []).forEach(fb => fbMap.set(String(fb.id), fb));
 
-      const mergedBookies = dedupeBookies(mergeBookies(dedupeBookies(server.bookies || {}), incoming[pr].bookies || {}));
+      const usesOps = Array.isArray(incoming[pr].batches);
+      const appliedIds = Array.isArray(server._appliedBatches) ? [...server._appliedBatches] : [];
+      let mergedBookies;
+      if (usesOps) {
+        const bk = mergeBookieMeta(dedupeBookies(server.bookies || {}), incoming[pr].bookies || {});
+        applyBatches(bk, incoming[pr].batches, appliedIds);
+        mergedBookies = dedupeBookies(bk);
+      } else {
+        // Old copy of the page: previous timestamp merge.
+        mergedBookies = dedupeBookies(mergeBookies(dedupeBookies(server.bookies || {}), incoming[pr].bookies || {}));
+      }
 
       const incomingBankTs = incoming[pr].bankUpdatedAt || 0;
       const serverBankTs = server.bankUpdatedAt || 0;
@@ -206,7 +313,8 @@ export default async function handler(req, res) {
         freeBets: Array.from(fbMap.values()),
         casino: server.casino || [],
         _deletedTxIds: Array.from(persistedDeletedTxIds),
-        _deletedCasinoIds: server._deletedCasinoIds || []
+        _deletedCasinoIds: server._deletedCasinoIds || [],
+        _appliedBatches: appliedIds
       };
 
       // Skip the write when nothing changed (and the record already lives
@@ -218,7 +326,7 @@ export default async function handler(req, res) {
       }
 
       // Response deliberately omits casino-side fields.
-      const { casino, _deletedCasinoIds, _deletedIds, ...sportsOnly } = merged;
+      const { casino, _deletedCasinoIds, _deletedIds, _appliedBatches, ...sportsOnly } = merged;
       responseData[pr] = sportsOnly;
     }));
 
@@ -247,6 +355,9 @@ export default async function handler(req, res) {
     if (anyWritten) await kvSetNumber('edgetrack_rev_sports', Date.now());
 
     return res.status(200).json({ ok: true, data: responseData });
+    } finally {
+      await Promise.all(locks.map(releaseLock));
+    }
   } catch (e) {
     console.error('Save-sports error:', e);
     return res.status(500).json({ ok: false, error: e.message });

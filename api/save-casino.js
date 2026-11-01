@@ -1,3 +1,18 @@
+// v4 - balance fixes.
+//   * A new session with start/end balances now SETS the bookie balance to
+//     its end balance (the real figure the operator read off the site),
+//     provided nothing newer has touched that bookie. Previously only the
+//     difference (end - start) was added, so any existing error carried on
+//     forever. Sessions without balances still add their net result.
+//   * Deleting a session no longer changes the bookie balance. Subtracting
+//     it after the balance had been corrected is what produced the
+//     "random -£200" style negatives. Verify the bookie if a deleted
+//     session had wrong numbers.
+//   * A session that was already deleted and gets re-sent by another
+//     device is ignored completely (it used to add its result again).
+//   * Each profile is locked while being read-modified-written, so this and
+//     a sports save landing together can't overwrite each other.
+// v3 notes:
 // v3 - bandwidth diet + safer reads. Merge, tombstone and bookie-balance
 // logic is unchanged from v2. What's different:
 //   * kvGet now THROWS on a failed request. v2 returned null, which this
@@ -64,6 +79,31 @@ export default async function handler(req, res) {
       if (!r.ok) throw new Error(`KV set error on ${key}: ${r.status}`);
     };
 
+    // ---- Per-profile write lock (Upstash SET NX PX) ----------------------
+    const LOCK_TTL_MS = 8000;
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+    const acquireLock = async (key) => {
+      const token = Math.random().toString(36).slice(2);
+      for (let i = 0; i < 40; i++) {
+        try {
+          const r = await fetch(`${kvUrl}/set/${key}/${token}/NX/PX/${LOCK_TTL_MS}`, {
+            headers: { Authorization: `Bearer ${kvToken}` }
+          });
+          if (!r.ok) return null;
+          const d = await r.json();
+          if (d.result === 'OK') return key;
+        } catch (e) { return null; }
+        await sleep(100 + Math.random() * 150);
+      }
+      console.warn('lock wait timed out', key);
+      return null;
+    };
+    const releaseLock = async (key) => {
+      if (!key) return;
+      try { await fetch(`${kvUrl}/del/${key}`, { headers: { Authorization: `Bearer ${kvToken}` } }); } catch (e) {}
+    };
+    const r2 = (x) => Math.round((Number(x) || 0) * 100) / 100;
+
     const CASINO_NAME_RENAMES = {
       'hot streak casino': 'Hot Streak',
       'gala': 'Gala Casino',
@@ -91,6 +131,8 @@ export default async function handler(req, res) {
 
     await Promise.all(work.map(async pr => {
       const sportKey = `edgetrack_${pr}`;
+      const lock = await acquireLock(`edgetrack_lock_${pr}`);
+      try {
       const existing = await kvGet(sportKey);
       let sportsData = existing || { bank: 0, bookies: {}, transactions: [], freeBets: [], casino: [] };
       if (!sportsData.bookies) sportsData.bookies = {};
@@ -105,7 +147,8 @@ export default async function handler(req, res) {
         const legacyData = await kvGet(`edgetrack_${legacySuffix}`);
         const legacyCasino = legacyData?.casino || [];
         const knownIds = new Set((sportsData.casino || []).map(s => String(s.id)));
-        const strayFromLegacy = legacyCasino.filter(s => !knownIds.has(String(s.id))).map(normalizeCasinoField);
+        const tomb = new Set((sportsData._deletedIds || []).map(String));
+        const strayFromLegacy = legacyCasino.filter(s => !knownIds.has(String(s.id)) && !tomb.has(String(s.id))).map(normalizeCasinoField);
         if (strayFromLegacy.length > 0) {
           sportsData.casino = [...(sportsData.casino || []), ...strayFromLegacy];
           strayFromLegacy.forEach(s => {
@@ -128,28 +171,35 @@ export default async function handler(req, res) {
       requestDeletedIds.forEach(id => persistedDeletedIds.add(id));
 
       const serverIds = new Set(serverSessions.map(s => String(s.id)));
-      const newSessions = incomingSessions.filter(s => !serverIds.has(String(s.id)));
-      const deletedSessions = serverSessions.filter(s => requestDeletedIds.has(String(s.id)));
+      // Ignore anything already deleted (a stale device re-sending it).
+      const newSessions = incomingSessions
+        .filter(s => !serverIds.has(String(s.id)) && !persistedDeletedIds.has(String(s.id)))
+        .sort((a, b) => (Number(a.id) || 0) - (Number(b.id) || 0));
 
+      const findBookie = (name) => {
+        if (sportsData.bookies[name]) return name;
+        const lower = String(name || '').toLowerCase();
+        return Object.keys(sportsData.bookies).find(k => k.toLowerCase() === lower) || name;
+      };
       newSessions.forEach(s => {
-        const casino = s.casino;
-        const net = (s.startBal !== undefined && s.endBal !== undefined)
-          ? (s.endBal - s.startBal)
-          : (s.netProfit || 0);
-        if (!sportsData.bookies[casino]) sportsData.bookies[casino] = { bal: 0, status: 'Active', notes: '' };
-        sportsData.bookies[casino].bal = (sportsData.bookies[casino].bal || 0) + net;
-        sportsData.bookies[casino].balUpdatedAt = Date.now();
+        const key = findBookie(s.casino);
+        if (!sportsData.bookies[key]) sportsData.bookies[key] = { bal: 0, status: 'Active', notes: '' };
+        const b = sportsData.bookies[key];
+        const hasBalances = typeof s.startBal === 'number' && typeof s.endBal === 'number' &&
+          isFinite(s.startBal) && isFinite(s.endBal) && !(s.startBal === 0 && s.endBal === 0);
+        const net = hasBalances ? (s.endBal - s.startBal) : (s.netProfit || 0);
+        const sid = Number(s.id) || 0;
+        if (hasBalances && sid >= (b.balUpdatedAt || 0) && sid >= (b.setAt || 0)) {
+          // Nothing newer has touched this bookie: the session's end
+          // balance is the real balance.
+          b.bal = r2(s.endBal);
+          b.setAt = sid;
+        } else {
+          b.bal = r2((b.bal || 0) + net);
+        }
+        b.balUpdatedAt = Date.now();
       });
-
-      deletedSessions.forEach(s => {
-        const casino = s.casino;
-        const net = (s.startBal !== undefined && s.endBal !== undefined)
-          ? (s.endBal - s.startBal)
-          : (s.netProfit || 0);
-        if (!sportsData.bookies[casino]) sportsData.bookies[casino] = { bal: 0, status: 'Active', notes: '' };
-        sportsData.bookies[casino].bal = (sportsData.bookies[casino].bal || 0) - net;
-        sportsData.bookies[casino].balUpdatedAt = Date.now();
-      });
+      // Deleted sessions: removed from the list below, balance untouched.
 
       const serverMap = new Map(serverSessions.map(s => [String(s.id), s]));
       const incomingMap = new Map(incomingSessions.map(s => [String(s.id), s]));
@@ -175,6 +225,9 @@ export default async function handler(req, res) {
       if (JSON.stringify(sportsData) !== original) {
         await kvSet(sportKey, sportsData);
         anyWritten = true;
+      }
+      } finally {
+        await releaseLock(lock);
       }
     }));
 
